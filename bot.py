@@ -3,6 +3,20 @@ import json
 import discord
 import google.generativeai as genai
 from dotenv import load_dotenv
+from flask import Flask
+from threading import Thread
+
+# ── Keep-alive server so Render / UptimeRobot can ping us ──────────────────
+_flask_app = Flask(__name__)
+
+@_flask_app.route('/')
+def _home():
+    return "✅ Discord bot is alive!"
+
+def keep_alive():
+    t = Thread(target=lambda: _flask_app.run(host='0.0.0.0', port=8080), daemon=True)
+    t.start()
+# ───────────────────────────────────────────────────────────────────────────
 
 # Load environment variables from .env
 load_dotenv()
@@ -234,4 +248,5 @@ if __name__ == "__main__":
         print("Error: GEMINI_API_KEY is not set in .env file.")
     else:
         print("Starting Discord bot...")
+        keep_alive()   # Start the HTTP ping server
         client.run(DISCORD_TOKEN)
