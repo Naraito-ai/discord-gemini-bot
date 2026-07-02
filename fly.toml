@@ -1,0 +1,14 @@
+app = "discord-gemini-bot"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+
+[[services]]
+
+[metrics]
+  port = 9091
+  path = "/metrics"
