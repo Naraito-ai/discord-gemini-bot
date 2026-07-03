@@ -367,6 +367,10 @@ async def on_message(message):
 
         status_message = await message.reply("✨ Generating server plan with Gemini AI... Please wait.")
 
+        if not GEMINI_API_KEY or not gemini_client:
+            await status_message.edit(content="❌ **Missing `GEMINI_API_KEY` on Render!**\nPlease go to your **Render Dashboard** → Select this service → **Environment** tab → Add Environment Variable:\n• **Key**: `GEMINI_API_KEY`\n• **Value**: *(Your API key starting with `AIzaSy...` from https://aistudio.google.com/app/apikey)*")
+            return
+
         try:
             response = gemini_client.models.generate_content(
                 model="gemini-2.0-flash",
@@ -386,7 +390,7 @@ async def on_message(message):
 
         except Exception as e:
             print(f"Gemini API error: {e}")
-            await status_message.edit(content="❌ Failed to connect to Gemini API. Please verify your GEMINI_API_KEY.")
+            await status_message.edit(content=f"❌ **Gemini API Connection Failed:** `{e}`\n\n💡 *Tip: If you see `401 UNAUTHENTICATED`, make sure your `GEMINI_API_KEY` in Render starts with `AIzaSy...` (get a free key at https://aistudio.google.com/app/apikey).*")
             return
 
         try:
