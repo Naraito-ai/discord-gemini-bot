@@ -590,7 +590,12 @@ async def on_message(message):
                         resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
                         result = resp.text.strip().upper() if resp and resp.text else "SAFE"
                         if "TOXIC" in result:
-                            await message.delete()
+                            try:
+                                await message.delete()
+                            except Exception as del_err:
+                                await message.channel.send(f"❌ **Auto-Mod Alert:** I detected a toxic message but **failed to delete it** due to a Discord API error: `{del_err}`.\n\n*Please make sure my bot role has the **Manage Messages** permission!*")
+                                return
+
                             warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini AI Auto-Mod** for violating community safety rules.")
                             await asyncio.sleep(5)
                             await warn_msg.delete()
@@ -606,6 +611,7 @@ async def on_message(message):
                             return
                 except Exception as e:
                     logger.error(f"Auto-Mod Gemini evaluation error: {e}")
+                    await message.channel.send(f"⚠️ **Auto-Mod Gemini API Error:** `{e}`")
 
 
     try:
