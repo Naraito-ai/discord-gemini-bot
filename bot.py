@@ -578,7 +578,7 @@ async def on_message(message):
 
     # ── Auto-Mod Check ─────────────────────────────────────────────────────
     if not message.author.bot:
-        automod_enabled = resource_manager.get_config(message.guild.id, "automod", False)
+        automod_enabled = resource_manager.get_config(message.guild.id, "automod", True)
         if automod_enabled:
             content = message.content.strip()
             if content and not content.startswith("!"):
@@ -633,7 +633,7 @@ async def on_message(message):
                 resource_manager.set_config(message.guild.id, "automod", False)
                 await message.reply("🛡️ **Auto-Mod disabled.**")
             else:
-                status = "ON" if resource_manager.get_config(message.guild.id, "automod", False) else "OFF"
+                status = "ON" if resource_manager.get_config(message.guild.id, "automod", True) else "OFF"
                 await message.reply(f"ℹ️ **Auto-Mod Status:** `{status}`\nUsage: `!automod on` or `!automod off`")
             return
 
