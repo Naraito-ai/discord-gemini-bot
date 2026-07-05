@@ -413,7 +413,7 @@ async def on_message(message):
             try:
                 dynamic_client = genai.Client(api_key=live_api_key)
                 response = dynamic_client.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model="gemini-2.5-flash",
                     contents=description,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_PROMPT,
