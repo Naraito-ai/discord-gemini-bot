@@ -436,7 +436,7 @@ async def build_server_structure(guild, data, response_channel):
     # Helper to generate permission overrides
     def get_overrides(private_roles_list):
         if not private_roles_list:
-            return None
+            return {}
         overrides = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False, connect=False)
         }
