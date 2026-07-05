@@ -181,6 +181,68 @@ intents.message_content = True
 intents.members = True
 client = discord.Client(intents=intents)
 
+
+def call_ai_generation(prompt, system_instruction, json_mode=False):
+    # Detect which API key is available
+    groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+    
+    # If GEMINI_API_KEY is actually a Groq key (starts with gsk_)
+    if gemini_key.startswith("gsk_"):
+        groq_key = gemini_key
+        gemini_key = ""
+        
+    if groq_key:
+        logger.info(f"Using Groq API for content generation (JSON Mode: {json_mode})")
+        import requests
+        headers = {
+            "Authorization": f"Bearer {groq_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+            
+        r = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30)
+        r.raise_for_status()
+        res_data = r.json()
+        return res_data["choices"][0]["message"]["content"]
+        
+    elif gemini_key:
+        logger.info(f"Using Gemini API for content generation (JSON Mode: {json_mode})")
+        c = genai.Client(api_key=gemini_key)
+        if json_mode:
+            resp = c.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    response_mime_type="application/json",
+                    temperature=0.3
+                ),
+            )
+        else:
+            resp = c.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.3
+                ),
+            )
+        return resp.text
+        
+    else:
+        raise ValueError("No valid GROQ_API_KEY or GEMINI_API_KEY found in environment variables.")
+
+
 # Gemini system prompt with Emoji, Topics, and Private Channel support
 SYSTEM_PROMPT = """You are an expert Discord server structure generator and community architect. 
 The user will describe a Discord server layout they want. 
@@ -557,14 +619,10 @@ async def on_member_join(member):
         return
 
     try:
-        live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-        if not live_api_key:
-            return
-        c = genai.Client(api_key=live_api_key)
         prompt = f"Write a short, warm, and exciting 2-sentence welcome greeting for user '{member.display_name}' joining our Discord community '{guild.name}'. Write it in the personality/style of: '{style}'. Use emojis and format nicely!"
-        resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        if resp and resp.text:
-            embed = discord.Embed(title=f"👋 Welcome to {guild.name}!", description=f"{member.mention}\n\n{resp.text.strip()}", color=discord.Color.gold())
+        text = call_ai_generation(prompt, "You are a professional, friendly Discord welcome greeter.")
+        if text:
+            embed = discord.Embed(title=f"👋 Welcome to {guild.name}!", description=f"{member.mention}\n\n{text.strip()}", color=discord.Color.gold())
             embed.set_thumbnail(url=member.display_avatar.url)
             await welcome_chan.send(content=member.mention, embed=embed)
     except Exception as e:
@@ -636,13 +694,10 @@ async def on_message(message):
                 automod_mode = resource_manager.get_config(message.guild.id, "automod_mode", "local")
                 if automod_mode == "ai":
                     try:
-                        live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-                        if live_api_key:
-                            c = genai.Client(api_key=live_api_key)
-                            prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{content}'. Respond with ONLY the word 'SAFE' or 'TOXIC'. Do not add any other text."
-                            resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                            result = resp.text.strip().upper() if resp and resp.text else "SAFE"
-                            if "TOXIC" in result:
+                        prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{content}'."
+                        text = call_ai_generation(prompt, "You are an expert content moderator. Respond with ONLY the word SAFE or TOXIC. Do not add any other text.")
+                        result = text.strip().upper()
+                        if "TOXIC" in result:
                                 try:
                                     await message.delete()
                                     warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini AI Auto-Mod** for violating community safety rules.")
@@ -717,11 +772,9 @@ async def on_message(message):
                 return
             status_msg = await message.reply("🔍 Evaluating text with Gemini Auto-Mod AI...")
             try:
-                live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-                c = genai.Client(api_key=live_api_key)
-                prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{test_text}'. Respond with ONLY the word 'SAFE' or 'TOXIC'. Do not add any other text."
-                resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                result = resp.text.strip().upper() if resp and resp.text else "UNKNOWN"
+                prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{test_text}'."
+                text = call_ai_generation(prompt, "You are an expert content moderator. Respond with ONLY the word SAFE or TOXIC. Do not add any other text.")
+                result = text.strip().upper()
                 if "TOXIC" in result:
                     await status_msg.edit(content=f"🚨 **Gemini Auto-Mod Result:** `TOXIC`\n\n*If sent by a regular member, this message would have been **deleted**, and logged in `#mod-logs`!*")
                 else:
@@ -755,13 +808,11 @@ async def on_message(message):
                 return
             status_msg = await message.reply("📢 Crafting announcement with Gemini AI...")
             try:
-                live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-                c = genai.Client(api_key=live_api_key)
                 prompt = f"Write an exciting, professional Discord server announcement about: '{topic}'. Format with emojis, bold headers, bullet points, and make it highly engaging! Return ONLY the announcement text."
-                resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                if resp and resp.text:
-                    embed = discord.Embed(title="📢 Official Announcement", description=resp.text.strip(), color=discord.Color.brand_red())
-                    embed.set_footer(text=f"Announced by {message.author.display_name} • Powered by Gemini AI", icon_url=message.author.display_avatar.url)
+                text = call_ai_generation(prompt, "You are a professional Discord community manager.")
+                if text:
+                    embed = discord.Embed(title="📢 Official Announcement", description=text.strip(), color=discord.Color.brand_red())
+                    embed.set_footer(text=f"Announced by {message.author.display_name} • Powered by AI", icon_url=message.author.display_avatar.url)
                     await status_msg.delete()
                     await message.channel.send(content="@everyone", embed=embed)
                     await message.delete()
@@ -880,13 +931,11 @@ async def on_message(message):
             if not desc:
                 await message.reply("❌ Please describe the category.\nExample: `!addcategory VIP anime watch party lounge with 4k stream rooms`")
                 return
-            status_msg = await message.reply(f"✨ Designing category `{desc}` with Gemini AI...")
+            status_msg = await message.reply(f"✨ Designing category `{desc}` with AI...")
             try:
-                live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-                c = genai.Client(api_key=live_api_key)
-                prompt = f"The user wants to create a single Discord category: '{desc}'. Return ONLY a raw JSON object with this structure: {{\"categories\": [{{\"name\": \"Category Name\", \"private_for\": [], \"channels\": [{{\"name\": \"chan-name\", \"type\": \"text\", \"topic\": \"chan topic\"}}, {{\"name\": \"voice-chan\", \"type\": \"voice\"}}]}}]}}. Do not include markdown or code blocks. Just JSON."
-                resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
-                data = json.loads(resp.text.strip())
+                sys_inst = f"The user wants to create a single Discord category: '{desc}'. Return ONLY a raw JSON object with this structure: {{\"categories\": [{{\"name\": \"Category Name\", \"private_for\": [], \"channels\": [{{\"name\": \"chan-name\", \"type\": \"text\", \"topic\": \"chan topic\"}}, {{\"name\": \"voice-chan\", \"type\": \"voice\"}}]}}]}}. Do not include markdown or code blocks. Just JSON."
+                text = call_ai_generation(desc, sys_inst, json_mode=True)
+                data = json.loads(text.strip())
                 await status_msg.edit(content="⚙️ **Building new category and channels...**")
                 await build_server_structure(message.guild, data, message.channel)
                 await status_msg.delete()
@@ -949,41 +998,19 @@ async def on_message(message):
                 await message.reply("❌ Please provide a description.\nExample: `!setup community server for anime lovers with art showcase and VIP lounge`")
                 return
 
-            status_message = await message.reply("✨ Generating server plan with Gemini AI (including channel topics & roles)... Please wait.")
-
-            live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-            if not live_api_key:
-                logger.error("GEMINI_API_KEY missing in environment variables.")
-                await status_message.edit(content="❌ **Missing `GEMINI_API_KEY` on Render!**\nPlease go to your **Render Dashboard** → Select this service → **Environment** tab → Add Environment Variable:\n• **Key**: `GEMINI_API_KEY`\n• **Value**: *(Your API key starting with `AIzaSy...` or `AQ.` from https://aistudio.google.com/app/apikey)*")
-                return
-
-            if not (live_api_key.startswith("AIza") or live_api_key.startswith("AQ.")):
-                masked_key = live_api_key[:8] + "..." if len(live_api_key) >= 8 else live_api_key
-                logger.error(f"Invalid GEMINI_API_KEY format: starts with {masked_key}")
-                await status_message.edit(content=f"❌ **Invalid API Key Format on Render!**\nRender is currently using a key starting with `{masked_key}`.\nGoogle Gemini API keys typically start with `AIzaSy...` or `AQ.`.\n\n⚠️ *If you just changed your key in Render, please go to your Render Dashboard and click **Manual Deploy → Clear Build Cache & Deploy** (or Restart Service) so your bot picks up the new key!*")
-                return
-
+            status_message = await message.reply("✨ Generating server plan with AI (including channel topics & roles)... Please wait.")
             try:
-                dynamic_client = genai.Client(api_key=live_api_key)
-                response = dynamic_client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=description,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT,
-                        response_mime_type="application/json",
-                    ),
-                )
-                raw_response = response.text.strip()
+                raw_response = call_ai_generation(description, SYSTEM_PROMPT, json_mode=True)
+                raw_response = raw_response.strip()
 
                 if raw_response.startswith("```"):
                     lines = raw_response.splitlines()
                     lines = lines[1:] if lines[0].startswith("```") else lines
                     lines = lines[:-1] if lines and lines[-1].startswith("```") else lines
                     raw_response = "\n".join(lines).strip()
-
             except Exception as e:
-                logger.error(f"Gemini API error during setup: {e}")
-                await status_message.edit(content=f"❌ **Gemini API Connection Failed:** `{e}`\n\n💡 *Make sure your `GEMINI_API_KEY` is a valid API key from https://aistudio.google.com/app/apikey.*")
+                logger.error(f"AI API error during setup: {e}")
+                await status_message.edit(content=f"❌ **AI API Connection Failed:** `{e}`\n\n💡 *Make sure your API key in Render environment variables is valid!*")
                 return
 
             try:
