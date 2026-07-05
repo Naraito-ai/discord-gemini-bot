@@ -582,36 +582,89 @@ async def on_message(message):
         if automod_enabled:
             content = message.content.strip()
             if content and not content.startswith("!"):
-                try:
-                    live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-                    if live_api_key:
-                        c = genai.Client(api_key=live_api_key)
-                        prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{content}'. Respond with ONLY the word 'SAFE' or 'TOXIC'. Do not add any other text."
-                        resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                        result = resp.text.strip().upper() if resp and resp.text else "SAFE"
-                        if "TOXIC" in result:
-                            try:
-                                await message.delete()
-                            except Exception as del_err:
-                                await message.channel.send(f"❌ **Auto-Mod Alert:** I detected a toxic message but **failed to delete it** due to a Discord API error: `{del_err}`.\n\n*Please make sure my bot role has the **Manage Messages** permission!*")
-                                return
-
-                            warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini AI Auto-Mod** for violating community safety rules.")
-                            await asyncio.sleep(5)
-                            await warn_msg.delete()
+                # 1. Instant Local Filter (Free and uses ZERO Gemini API quota)
+                import re
+                profanities = [
+                    "fuck", "bastard", "asshole", "bitch", "cunt", "motherfucker", "mother fucker", 
+                    "nigger", "faggot", "retard", "kys", "kill yourself", "dickhead", "pussy", 
+                    "whore", "slut", "crap", "bullshit", "jackass"
+                ]
+                scams = [
+                    "discord-gift", "free nitro", "steamcommunity-free", "free robux", 
+                    "airdrop claim", "crypto giveaway", "@everyone click here"
+                ]
+                
+                is_toxic_local = False
+                matched_reason = ""
+                content_lower = content.lower()
+                
+                for word in profanities:
+                    pattern = rf"\b{re.escape(word)}\b"
+                    if re.search(pattern, content_lower):
+                        is_toxic_local = True
+                        matched_reason = "Flagged as Prohibited Language (Profanity/Abuse)"
+                        break
+                        
+                if not is_toxic_local:
+                    for scam in scams:
+                        if scam in content_lower:
+                            is_toxic_local = True
+                            matched_reason = "Flagged as Prohibited Content (Spam/Scam/Phishing link)"
+                            break
                             
-                            mod_log = discord.utils.get(message.guild.text_channels, name="🚨-mod-logs") or discord.utils.get(message.guild.text_channels, name="mod-logs") or discord.utils.get(message.guild.text_channels, name="🚨-admin-chat")
-                            if mod_log:
-                                log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message", color=discord.Color.red())
-                                log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
-                                log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
-                                log_embed.add_field(name="Deleted Content", value=content[:1000], inline=False)
-                                log_embed.add_field(name="Reason", value="Flagged as TOXIC by Gemini AI", inline=True)
-                                await mod_log.send(embed=log_embed)
-                            return
-                except Exception as e:
-                    logger.error(f"Auto-Mod Gemini evaluation error: {e}")
-                    await message.channel.send(f"⚠️ **Auto-Mod Gemini API Error:** `{e}`")
+                if is_toxic_local:
+                    try:
+                        await message.delete()
+                        warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini Auto-Mod (Local Shield)** for violating community safety rules.")
+                        await asyncio.sleep(5)
+                        await warn_msg.delete()
+                        
+                        mod_log = discord.utils.get(message.guild.text_channels, name="🚨-mod-logs") or discord.utils.get(message.guild.text_channels, name="mod-logs") or discord.utils.get(message.guild.text_channels, name="🚨-admin-chat")
+                        if mod_log:
+                            log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message", color=discord.Color.red())
+                            log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
+                            log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
+                            log_embed.add_field(name="Deleted Content", value=content[:1000], inline=False)
+                            log_embed.add_field(name="Reason", value=matched_reason, inline=True)
+                            await mod_log.send(embed=log_embed)
+                        return
+                    except Exception as del_err:
+                        logger.error(f"Auto-Mod local delete failed: {del_err}")
+                        return
+
+                # 2. Optional AI Fallback Filter (Requires automod_mode set to 'ai')
+                automod_mode = resource_manager.get_config(message.guild.id, "automod_mode", "local")
+                if automod_mode == "ai":
+                    try:
+                        live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+                        if live_api_key:
+                            c = genai.Client(api_key=live_api_key)
+                            prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{content}'. Respond with ONLY the word 'SAFE' or 'TOXIC'. Do not add any other text."
+                            resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+                            result = resp.text.strip().upper() if resp and resp.text else "SAFE"
+                            if "TOXIC" in result:
+                                try:
+                                    await message.delete()
+                                    warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini AI Auto-Mod** for violating community safety rules.")
+                                    await asyncio.sleep(5)
+                                    await warn_msg.delete()
+                                    
+                                    mod_log = discord.utils.get(message.guild.text_channels, name="🚨-mod-logs") or discord.utils.get(message.guild.text_channels, name="mod-logs") or discord.utils.get(message.guild.text_channels, name="🚨-admin-chat")
+                                    if mod_log:
+                                        log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message", color=discord.Color.red())
+                                        log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
+                                        log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
+                                        log_embed.add_field(name="Deleted Content", value=content[:1000], inline=False)
+                                        log_embed.add_field(name="Reason", value="Flagged as TOXIC by Gemini AI", inline=True)
+                                        await mod_log.send(embed=log_embed)
+                                    return
+                                except Exception as del_err:
+                                    logger.error(f"Auto-Mod AI delete failed: {del_err}")
+                                    return
+                    except Exception as e:
+                        # Log error but don't spam the chat with 429 quota exceptions!
+                        logger.error(f"Auto-Mod Gemini evaluation error: {e}")
+
 
 
     try:
@@ -634,13 +687,23 @@ async def on_message(message):
             arg = message.content[len("!automod"):].strip().lower()
             if arg in ("on", "true", "enable"):
                 resource_manager.set_config(message.guild.id, "automod", True)
-                await message.reply("🧠 **Gemini AI Auto-Mod is now ON!**\nScanning real-time chat for extreme toxicity, hate speech, and scam/phishing links.")
+                resource_manager.set_config(message.guild.id, "automod_mode", "local")
+                await message.reply("🧠 **Auto-Mod is now ON (Local Shield)!**\nScanning real-time chat instantly for curse words, slurs, and spam links without using API key quota.")
+            elif arg == "ai":
+                resource_manager.set_config(message.guild.id, "automod", True)
+                resource_manager.set_config(message.guild.id, "automod_mode", "ai")
+                await message.reply("🧠 **Auto-Mod set to AI Mode!**\nReal-time messages will be scanned using Google Gemini AI. *(Note: This uses your Gemini API key quota!)*")
+            elif arg == "local":
+                resource_manager.set_config(message.guild.id, "automod", True)
+                resource_manager.set_config(message.guild.id, "automod_mode", "local")
+                await message.reply("🛡️ **Auto-Mod set to Local Mode.**\nUsing instant local filter to save API quota.")
             elif arg in ("off", "false", "disable"):
                 resource_manager.set_config(message.guild.id, "automod", False)
                 await message.reply("🛡️ **Auto-Mod disabled.**")
             else:
-                status = "ON" if resource_manager.get_config(message.guild.id, "automod", True) else "OFF"
-                await message.reply(f"ℹ️ **Auto-Mod Status:** `{status}`\nUsage: `!automod on` or `!automod off`")
+                enabled = "ON" if resource_manager.get_config(message.guild.id, "automod", True) else "OFF"
+                mode = resource_manager.get_config(message.guild.id, "automod_mode", "local").upper()
+                await message.reply(f"ℹ️ **Auto-Mod Status:** `{enabled}` (Mode: `{mode}`)\n\nUsage:\n• `!automod on` / `!automod off` — Enable/Disable Auto-Mod\n• `!automod local` — Use free local filter (instant)\n• `!automod ai` — Use advanced Gemini AI toxicity scanner")
             return
 
         # Command: !testautomod <text>
