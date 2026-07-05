@@ -287,7 +287,7 @@ async def build_server_structure(guild, data, response_channel):
             if category is None:
                 category = await guild.create_category(
                     name=cat_name,
-                    overrides=cat_overrides,
+                    overwrites=cat_overrides,
                     reason="Gemini Discord Bot Setup"
                 )
                 categories_created.append(category.name)
@@ -314,7 +314,7 @@ async def build_server_structure(guild, data, response_channel):
                     new_chan = await guild.create_text_channel(
                         name=chan_name,
                         category=category,
-                        overrides=chan_overrides,
+                        overwrites=chan_overrides,
                         topic=chan_topic or None,
                         reason="Gemini Discord Bot Setup"
                     )
@@ -325,7 +325,7 @@ async def build_server_structure(guild, data, response_channel):
                     new_chan = await guild.create_voice_channel(
                         name=chan_name,
                         category=category,
-                        overrides=chan_overrides,
+                        overwrites=chan_overrides,
                         reason="Gemini Discord Bot Setup"
                     )
                     channels_created.append(f"🔊 {new_chan.name}")
