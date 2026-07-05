@@ -1061,8 +1061,8 @@ async def on_message(message):
 if __name__ == "__main__":
     if not DISCORD_TOKEN or DISCORD_TOKEN == "your_token_here":
         print("Error: DISCORD_TOKEN is not set in .env file.")
-    elif not GEMINI_API_KEY or GEMINI_API_KEY == "your_key_here":
-        print("Error: GEMINI_API_KEY is not set in .env file.")
+    elif not GEMINI_API_KEY and not os.getenv("GROQ_API_KEY"):
+        print("Error: Neither GEMINI_API_KEY nor GROQ_API_KEY is set in environment variables.")
     else:
         print("Starting Discord bot...")
         keep_alive()
