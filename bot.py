@@ -580,27 +580,33 @@ async def on_message(message):
     if not message.author.bot and not message.author.guild_permissions.manage_messages:
         automod_enabled = resource_manager.get_config(message.guild.id, "automod", False)
         if automod_enabled:
-            content_lower = message.content.lower()
-            scam_keywords = ["discord-gift", "free nitro", "steamcommunity-free", "free robux", "airdrop claim", "crypto giveaway", "@everyone click here"]
-            hate_keywords = ["nigger", "faggot", "retard", "kill yourself", "kys", "genocide"]
-            
-            if any(w in content_lower for w in scam_keywords + hate_keywords):
+            content = message.content.strip()
+            if content and not content.startswith("!"):
                 try:
-                    await message.delete()
-                    warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini AI Auto-Mod** for violating community safety rules.")
-                    await asyncio.sleep(5)
-                    await warn_msg.delete()
-                    
-                    mod_log = discord.utils.get(message.guild.text_channels, name="🚨-mod-logs") or discord.utils.get(message.guild.text_channels, name="mod-logs") or discord.utils.get(message.guild.text_channels, name="🚨-admin-chat")
-                    if mod_log:
-                        log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message", color=discord.Color.red())
-                        log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
-                        log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
-                        log_embed.add_field(name="Deleted Content", value=message.content[:1000], inline=False)
-                        await mod_log.send(embed=log_embed)
-                    return
+                    live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+                    if live_api_key:
+                        c = genai.Client(api_key=live_api_key)
+                        prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{content}'. Respond with ONLY the word 'SAFE' or 'TOXIC'. Do not add any other text."
+                        resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+                        result = resp.text.strip().upper() if resp and resp.text else "SAFE"
+                        if "TOXIC" in result:
+                            await message.delete()
+                            warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini AI Auto-Mod** for violating community safety rules.")
+                            await asyncio.sleep(5)
+                            await warn_msg.delete()
+                            
+                            mod_log = discord.utils.get(message.guild.text_channels, name="🚨-mod-logs") or discord.utils.get(message.guild.text_channels, name="mod-logs") or discord.utils.get(message.guild.text_channels, name="🚨-admin-chat")
+                            if mod_log:
+                                log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message", color=discord.Color.red())
+                                log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
+                                log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
+                                log_embed.add_field(name="Deleted Content", value=content[:1000], inline=False)
+                                log_embed.add_field(name="Reason", value="Flagged as TOXIC by Gemini AI", inline=True)
+                                await mod_log.send(embed=log_embed)
+                            return
                 except Exception as e:
-                    logger.error(f"Auto-Mod deletion error: {e}")
+                    logger.error(f"Auto-Mod Gemini evaluation error: {e}")
+
 
     try:
         # Command: !help
@@ -629,6 +635,30 @@ async def on_message(message):
             else:
                 status = "ON" if resource_manager.get_config(message.guild.id, "automod", False) else "OFF"
                 await message.reply(f"ℹ️ **Auto-Mod Status:** `{status}`\nUsage: `!automod on` or `!automod off`")
+            return
+
+        # Command: !testautomod <text>
+        if message.content.strip().lower().startswith("!testautomod"):
+            if not message.author.guild_permissions.manage_guild:
+                await message.reply("❌ You need **Manage Server** permissions to test Auto-Mod.")
+                return
+            test_text = message.content[len("!testautomod"):].strip()
+            if not test_text:
+                await message.reply("❌ Please provide the text to test.\nExample: `!testautomod you are a stupid idiot`")
+                return
+            status_msg = await message.reply("🔍 Evaluating text with Gemini Auto-Mod AI...")
+            try:
+                live_api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+                c = genai.Client(api_key=live_api_key)
+                prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{test_text}'. Respond with ONLY the word 'SAFE' or 'TOXIC'. Do not add any other text."
+                resp = c.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+                result = resp.text.strip().upper() if resp and resp.text else "UNKNOWN"
+                if "TOXIC" in result:
+                    await status_msg.edit(content=f"🚨 **Gemini Auto-Mod Result:** `TOXIC`\n\n*If sent by a regular member, this message would have been **deleted**, and logged in `#mod-logs`!*")
+                else:
+                    await status_msg.edit(content=f"✅ **Gemini Auto-Mod Result:** `SAFE`\n\n*This message would be allowed in chat.*")
+            except Exception as e:
+                await status_msg.edit(content=f"❌ Evaluation failed: {e}")
             return
 
         # Command: !welcome <style>
