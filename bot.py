@@ -395,6 +395,7 @@ async def build_server_structure(guild, data, response_channel):
     roles_created = []
     categories_created = []
     channels_created = []
+    errors_encountered = []
     role_objects = {}
 
     # 1. Create Roles (with individual error resilience)
@@ -428,6 +429,7 @@ async def build_server_structure(guild, data, response_channel):
             logger.info(f"Created role: {new_role.name}")
         except Exception as e:
             logger.error(f"Failed to create role '{role_name}': {e}")
+            errors_encountered.append(f"Role '{role_name}': {e}")
 
     # Helper to generate permission overrides
     def get_overrides(private_roles_list):
@@ -465,6 +467,7 @@ async def build_server_structure(guild, data, response_channel):
                 categories_created.append(f"{category.name} (reused)")
         except Exception as e:
             logger.error(f"Failed to create category '{cat_name}': {e}")
+            errors_encountered.append(f"Category '{cat_name}': {e}")
             continue
 
         for chan_data in cat_data.get("channels", []):
@@ -506,6 +509,7 @@ async def build_server_structure(guild, data, response_channel):
                     logger.info(f"Created voice channel: 🔊 {new_chan.name}")
             except Exception as e:
                 logger.error(f"Failed to create channel '{chan_name}' in '{cat_name}': {e}")
+                errors_encountered.append(f"Channel '{chan_name}' in '{cat_name}': {e}")
 
     logger.info(f"Server structure build completed for {guild.name}")
 
@@ -514,6 +518,11 @@ async def build_server_structure(guild, data, response_channel):
     embed.add_field(name="Roles Created / Verified",      value=", ".join(dict.fromkeys(roles_created))                          or "None", inline=False)
     embed.add_field(name="Categories Created / Verified", value=", ".join(dict.fromkeys(categories_created))      or "None", inline=False)
     embed.add_field(name="Channels Created / Verified",   value=", ".join(channels_created[:20]) + ("..." if len(channels_created) > 20 else "") or "None", inline=False)
+    
+    if errors_encountered:
+        errors_str = "\n".join(errors_encountered[:5]) + ("\n..." if len(errors_encountered) > 5 else "")
+        embed.add_field(name="⚠️ Errors Encountered", value=f"```\n{errors_str}\n```", inline=False)
+
     embed.set_footer(text="Powered by Gemini • Use !teardown to reset AI-created items")
 
     await response_channel.send(embed=embed)
