@@ -407,6 +407,7 @@ async def build_server_structure(guild, data, response_channel):
             existing_role = discord.utils.get(guild.roles, name=role_name)
             if existing_role:
                 role_objects[role_name] = existing_role
+                roles_created.append(f"{role_name} (reused)")
                 continue
 
             color_hex = role_data.get("color", "#FFFFFF")
@@ -460,6 +461,8 @@ async def build_server_structure(guild, data, response_channel):
                 categories_created.append(category.name)
                 resource_manager.add_resource(guild.id, "categories", category.id)
                 logger.info(f"Created category: {category.name}")
+            else:
+                categories_created.append(f"{category.name} (reused)")
         except Exception as e:
             logger.error(f"Failed to create category '{cat_name}': {e}")
             continue
@@ -472,7 +475,10 @@ async def build_server_structure(guild, data, response_channel):
                 continue
             
             try:
-                if discord.utils.get(category.channels, name=chan_name):
+                existing_chan = discord.utils.get(category.channels, name=chan_name)
+                if existing_chan:
+                    prefix = "🔊 " if isinstance(existing_chan, discord.VoiceChannel) else "#"
+                    channels_created.append(f"{prefix}{chan_name} (reused)")
                     continue
 
                 chan_overrides = get_overrides(chan_data.get("private_for")) or cat_overrides
@@ -505,9 +511,9 @@ async def build_server_structure(guild, data, response_channel):
 
     # Send confirmation embed
     embed = discord.Embed(title="✅ Server Setup Complete", color=discord.Color.green())
-    embed.add_field(name="Roles Created",      value=", ".join(roles_created)                          or "None", inline=False)
-    embed.add_field(name="Categories Created", value=", ".join(dict.fromkeys(categories_created))      or "None", inline=False)
-    embed.add_field(name="Channels Created",   value=", ".join(channels_created[:20]) + ("..." if len(channels_created) > 20 else "") or "None", inline=False)
+    embed.add_field(name="Roles Created / Verified",      value=", ".join(dict.fromkeys(roles_created))                          or "None", inline=False)
+    embed.add_field(name="Categories Created / Verified", value=", ".join(dict.fromkeys(categories_created))      or "None", inline=False)
+    embed.add_field(name="Channels Created / Verified",   value=", ".join(channels_created[:20]) + ("..." if len(channels_created) > 20 else "") or "None", inline=False)
     embed.set_footer(text="Powered by Gemini • Use !teardown to reset AI-created items")
 
     await response_channel.send(embed=embed)
