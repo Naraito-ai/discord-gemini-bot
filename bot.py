@@ -113,6 +113,51 @@ class ResourceManager:
         self._save()
         return stats
 
+    async def nuke_guild(self, guild):
+        gid = str(guild.id)
+        stats = {"roles": 0, "categories": 0, "channels": 0}
+        logger.info(f"Starting TOTAL NUKE for guild {guild.name} ({gid})...")
+
+        # Create a clean default channel so server isn't 100% empty
+        clean_channel = None
+        try:
+            clean_channel = await guild.create_text_channel(
+                name="💥-server-nuked",
+                topic="Server wiped clean by Gemini Bot !nuke command. Ready for !setup!",
+                reason="Gemini Bot Complete Nuke"
+            )
+        except Exception as e:
+            logger.error(f"Could not create clean channel during nuke: {e}")
+
+        # 1. Delete all channels and categories (except clean_channel)
+        for channel in list(guild.channels):
+            if clean_channel and channel.id == clean_channel.id:
+                continue
+            try:
+                await channel.delete(reason="Gemini Bot Complete Nuke")
+                if isinstance(channel, discord.CategoryChannel):
+                    stats["categories"] += 1
+                else:
+                    stats["channels"] += 1
+            except Exception as e:
+                logger.warning(f"Could not delete channel/category {channel.name}: {e}")
+
+        # 2. Delete all roles (except default, managed, and higher than bot)
+        for role in list(guild.roles):
+            if role == guild.default_role or role.managed:
+                continue
+            if guild.me.top_role <= role:
+                continue
+            try:
+                await role.delete(reason="Gemini Bot Complete Nuke")
+                stats["roles"] += 1
+            except Exception as e:
+                logger.warning(f"Could not delete role {role.name}: {e}")
+
+        self.data[gid] = {"roles": [], "categories": [], "channels": []}
+        self._save()
+        return stats, clean_channel
+
 resource_manager = ResourceManager(RESOURCE_FILE)
 
 # Configure Discord Client
@@ -219,6 +264,46 @@ class TeardownConfirmView(discord.ui.View):
         for b in self.children:
             b.disabled = True
         await interaction.response.edit_message(content="🚫 **Teardown cancelled.**", embed=None, view=self)
+        self.stop()
+# ───────────────────────────────────────────────────────────────────────────
+
+
+class NukeConfirmView(discord.ui.View):
+    def __init__(self, author, guild):
+        super().__init__(timeout=60.0)
+        self.author = author
+        self.guild = guild
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("❌ Only the command author can perform server nuke.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="💥 YES, NUKE ENTIRE SERVER", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def nuke_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for b in self.children:
+            b.disabled = True
+        await interaction.response.edit_message(content="💥 **NUKING ENTIRE SERVER... Deleting all channels, categories, and roles!**", embed=None, view=self)
+        
+        stats, clean_channel = await resource_manager.nuke_guild(self.guild)
+        
+        embed = discord.Embed(title="💥 Server Completely Nuked", description="All old channels, categories, and roles have been wiped clean!", color=discord.Color.red())
+        embed.add_field(name="Channels Deleted", value=str(stats['channels']), inline=True)
+        embed.add_field(name="Categories Deleted", value=str(stats['categories']), inline=True)
+        embed.add_field(name="Roles Deleted", value=str(stats['roles']), inline=True)
+        embed.add_field(name="Next Step", value="Type `!setup <description>` right here to build your new server on a 100% clean slate!", inline=False)
+        embed.set_footer(text="Powered by Gemini")
+        
+        if clean_channel:
+            await clean_channel.send(embed=embed)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for b in self.children:
+            b.disabled = True
+        await interaction.response.edit_message(content="🚫 **Server nuke cancelled.**", embed=None, view=self)
         self.stop()
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -363,7 +448,8 @@ async def on_message(message):
             logger.info(f"Help command triggered by {message.author} in {message.guild.name}")
             embed = discord.Embed(title="🤖 Discord Gemini Server Builder", description="Generate and manage your Discord server layout using AI!", color=discord.Color.blurple())
             embed.add_field(name="✨ `!setup <description>`", value="Generate a server structure preview from text. Includes emojis, channel topics, roles, and private channels.\n*Example:* `!setup gaming guild with clips, lfg, welcome lounge, and private staff channels`", inline=False)
-            embed.add_field(name="🗑️ `!teardown` or `!cleanup`", value="Delete all roles, categories, and channels created by this bot in this server.", inline=False)
+            embed.add_field(name="🗑️ `!teardown` or `!cleanup`", value="Delete only the roles, categories, and channels created by this bot.", inline=False)
+            embed.add_field(name="💥 `!nuke` or `!cleanall`", value="**⚠️ DANGER:** Wipes **ALL** channels, categories, and roles in the entire server for a complete reset!", inline=False)
             embed.set_footer(text="Requires Manage Server permissions")
             await message.reply(embed=embed)
             return
@@ -381,6 +467,22 @@ async def on_message(message):
                 color=discord.Color.orange()
             )
             view = TeardownConfirmView(message.author, message.guild)
+            await message.reply(embed=embed, view=view)
+            return
+
+        # Command: !nuke or !cleanall
+        if message.content.strip().lower() in ("!nuke", "!cleanall", "!resetserver"):
+            logger.info(f"Nuke command triggered by {message.author} in {message.guild.name}")
+            if not message.author.guild_permissions.administrator:
+                await message.reply("❌ You need **Administrator** permissions to use the complete server nuke command.")
+                return
+
+            embed = discord.Embed(
+                title="⚠️ DANGER: COMPLETE SERVER NUKE ⚠️",
+                description="Are you sure you want to delete **EVERY SINGLE CHANNEL, CATEGORY, AND ROLE** in this entire server?\n\nThis will wipe all existing rooms and create a fresh `#💥-server-nuked` channel so you can run `!setup` on a 100% clean slate.\n\n**THIS CANNOT BE UNDONE!**",
+                color=discord.Color.red()
+            )
+            view = NukeConfirmView(message.author, message.guild)
             await message.reply(embed=embed, view=view)
             return
 
