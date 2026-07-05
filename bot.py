@@ -187,7 +187,7 @@ The user will describe a Discord server layout they want.
 Return ONLY a raw JSON object with no explanation, no markdown code fences, no backticks. 
 Just the raw JSON and nothing else.
 
-The JSON must follow this exact structure:
+The JSON must follow this schema structure (which must represent the ENTIRE requested server layout with all categories and channels generated in the arrays):
 {
   "roles": [
     {"name": "string", "color": "#HEXCODE", "hoist": true}
@@ -204,6 +204,8 @@ The JSON must follow this exact structure:
 }
 
 Rules:
+- Generate ALL categories and channels requested by the user. Do NOT truncate, summarize, or only return a subset. If the user wants 6 categories, you MUST generate all 6 categories in the "categories" array.
+- Generate multiple text and voice channels for each category as requested by the user.
 - color must always be a valid hex code like #FF5733, #5865F2, #2ECC71, never a color name.
 - channel names for text channels must be lowercase with hyphens instead of spaces. Include fitting emojis at the beginning (e.g., "📣-announcements", "💬-general-chat", "🎮-lfg", "👋-welcome").
 - category names should be uppercase or well-formatted, preferably preceded by an emoji (e.g., "📌 INFORMATION", "💬 TEXT CHANNELS", "🔒 ADMIN ONLY").
