@@ -577,7 +577,7 @@ async def on_message(message):
         return
 
     # ── Auto-Mod Check ─────────────────────────────────────────────────────
-    if not message.author.bot and not message.author.guild_permissions.manage_messages:
+    if not message.author.bot:
         automod_enabled = resource_manager.get_config(message.guild.id, "automod", False)
         if automod_enabled:
             content = message.content.strip()
