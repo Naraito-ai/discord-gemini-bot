@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import io
+import datetime
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -738,6 +739,7 @@ class GeminiBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
+        intents.voice_states = True  # Required for Join-to-Create dynamic voice
         super().__init__(command_prefix="!", intents=intents)
         
     async def setup_hook(self):
@@ -764,8 +766,8 @@ async def help_command(interaction: discord.Interaction):
         description="An all-in-one AI Architect, Auto-Mod, and Community Restorer Bot powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
-    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner", inline=False)
+    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
 
@@ -1025,6 +1027,29 @@ async def restore_command(interaction: discord.Interaction, file: discord.Attach
     await interaction.followup.send(embed=embed, view=view)
 
 
+@bot.tree.command(name="dynamicvoice", description="Set up a dynamic Join-to-Create voice channel system")
+@app_commands.default_permissions(manage_guild=True)
+async def dynamicvoice_command(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+    guild = interaction.guild
+    
+    try:
+        category = await guild.create_category("🔊 DYNAMIC VOICE", reason="Dynamic Voice Setup")
+        generator_channel = await guild.create_voice_channel(
+            name="➕ Join to Create",
+            category=category,
+            reason="Dynamic Voice Setup"
+        )
+        
+        await db.add_resource(guild.id, "categories", category.id)
+        await db.add_resource(guild.id, "channels", generator_channel.id)
+        await db.set_config(guild.id, "voice_generator_id", generator_channel.id)
+        
+        await interaction.followup.send(f"✅ **Dynamic Voice System set up successfully!**\nMembers joining {generator_channel.mention} will automatically get their own temporary voice rooms.")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Failed to set up dynamic voice system: {e}")
+
+
 @bot.tree.command(name="automod", description="Configure the Auto-Mod security and scam shield")
 @app_commands.describe(
     status="Enable or disable Auto-Mod",
@@ -1163,7 +1188,180 @@ async def nuke_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 
+# ── Administration & Moderation Commands ────────────────────────────────────
+
+@bot.tree.command(name="kick", description="Kick a member from the server")
+@app_commands.describe(member="The member to kick", reason="The reason for kicking")
+@app_commands.default_permissions(kick_members=True)
+async def kick_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot kick this member because they have a higher or equal role than you.", ephemeral=True)
+        return
+    if member.top_role >= interaction.guild.me.top_role:
+        await interaction.response.send_message("❌ I cannot kick this member because they have a higher or equal role than me.", ephemeral=True)
+        return
+        
+    try:
+        await member.kick(reason=reason)
+        await interaction.response.send_message(f"✅ **{member.display_name}** has been kicked from the server. (Reason: {reason})")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to kick member: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="ban", description="Ban a user from the server")
+@app_commands.describe(
+    member="The member/user to ban", 
+    reason="The reason for the ban", 
+    delete_message_days="Number of days of messages to delete (0-7)"
+)
+@app_commands.choices(
+    delete_message_days=[
+        app_commands.Choice(name="Don't delete any", value=0),
+        app_commands.Choice(name="Previous 24 hours", value=1),
+        app_commands.Choice(name="Previous 7 days", value=7)
+    ]
+)
+@app_commands.default_permissions(ban_members=True)
+async def ban_command(interaction: discord.Interaction, member: discord.User, reason: str = "No reason provided", delete_message_days: int = 0):
+    guild_member = interaction.guild.get_member(member.id)
+    if guild_member:
+        if guild_member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+            await interaction.response.send_message("❌ You cannot ban this member because they have a higher or equal role than you.", ephemeral=True)
+            return
+        if guild_member.top_role >= interaction.guild.me.top_role:
+            await interaction.response.send_message("❌ I cannot ban this member because they have a higher or equal role than me.", ephemeral=True)
+            return
+            
+    try:
+        seconds = delete_message_days * 86400
+        await interaction.guild.ban(member, reason=reason, delete_message_seconds=seconds)
+        await interaction.response.send_message(f"✅ **{member.display_name}** has been banned from the server. (Reason: {reason})")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to ban user: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="unban", description="Unban a user from the server")
+@app_commands.describe(user_id="The Discord ID of the user to unban", reason="The reason for unbanning")
+@app_commands.default_permissions(ban_members=True)
+async def unban_command(interaction: discord.Interaction, user_id: str, reason: str = "No reason provided"):
+    try:
+        uid = int(user_id)
+        user = await bot.fetch_user(uid)
+        await interaction.guild.unban(user, reason=reason)
+        await interaction.response.send_message(f"✅ **{user.display_name}** (ID: {user_id}) has been unbanned. (Reason: {reason})")
+    except ValueError:
+        await interaction.response.send_message("❌ Please provide a valid numerical User ID.", ephemeral=True)
+    except discord.NotFound:
+        await interaction.response.send_message("❌ That user was not found or is not banned.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to unban user: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="mute", description="Timeout (mute) a member in the server")
+@app_commands.describe(
+    member="The member to mute", 
+    duration_minutes="Mute duration in minutes (max 40320 - 28 days)", 
+    reason="The reason for muting"
+)
+@app_commands.default_permissions(moderate_members=True)
+async def mute_command(interaction: discord.Interaction, member: discord.Member, duration_minutes: int, reason: str = "No reason provided"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot mute this member because they have a higher or equal role than you.", ephemeral=True)
+        return
+    if member.top_role >= interaction.guild.me.top_role:
+        await interaction.response.send_message("❌ I cannot mute this member because they have a higher or equal role than me.", ephemeral=True)
+        return
+        
+    duration = datetime.timedelta(minutes=duration_minutes)
+    try:
+        await member.timeout(duration, reason=reason)
+        await interaction.response.send_message(f"✅ **{member.display_name}** has been timed out for `{duration_minutes}` minutes. (Reason: {reason})")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to mute member: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="unmute", description="Remove timeout (unmute) from a member in the server")
+@app_commands.describe(member="The member to unmute", reason="The reason for unmuting")
+@app_commands.default_permissions(moderate_members=True)
+async def unmute_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if not member.is_timed_out():
+        await interaction.response.send_message(f"ℹ️ **{member.display_name}** is not timed out.", ephemeral=True)
+        return
+        
+    try:
+        await member.timeout(None, reason=reason)
+        await interaction.response.send_message(f"✅ **{member.display_name}** is no longer timed out. (Reason: {reason})")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to unmute member: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="deafen", description="Deafen a member in a voice channel")
+@app_commands.describe(member="The member to deafen", reason="The reason for deafening")
+@app_commands.default_permissions(deafen_members=True)
+async def deafen_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if not member.voice or not member.voice.channel:
+        await interaction.response.send_message(f"❌ **{member.display_name}** is not in a voice channel.", ephemeral=True)
+        return
+        
+    try:
+        await member.edit(deafen=True, reason=reason)
+        await interaction.response.send_message(f"✅ **{member.display_name}** has been voice deafened. (Reason: {reason})")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to deafen member: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="undeafen", description="Undeafen a member in a voice channel")
+@app_commands.describe(member="The member to undeafen", reason="The reason for undeafening")
+@app_commands.default_permissions(deafen_members=True)
+async def undeafen_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if not member.voice or not member.voice.channel:
+        await interaction.response.send_message(f"❌ **{member.display_name}** is not in a voice channel.", ephemeral=True)
+        return
+        
+    try:
+        await member.edit(deafen=False, reason=reason)
+        await interaction.response.send_message(f"✅ **{member.display_name}** has been voice undeafened. (Reason: {reason})")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to undeafen member: {e}", ephemeral=True)
+
+
 # ── Discord Event Listeners ─────────────────────────────────────────────────
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    """Event listener to handle Join-to-Create dynamic voice channels."""
+    guild = member.guild
+    generator_id = await db.get_config(guild.id, "voice_generator_id")
+    
+    # 1. User joins the generator channel
+    if after.channel and after.channel.id == generator_id:
+        category = after.channel.category
+        temp_channel_name = f"🔊 {member.display_name}'s Room"
+        
+        try:
+            temp_channel = await guild.create_voice_channel(
+                name=temp_channel_name,
+                category=category,
+                reason=f"Temporary room for {member.display_name}"
+            )
+            await db.add_resource(guild.id, "temp_voice_channels", temp_channel.id)
+            await member.move_to(temp_channel)
+        except Exception as e:
+            logger.error(f"Error creating temp voice channel: {e}")
+            
+    # 2. User leaves a temporary voice channel
+    if before.channel:
+        temp_channels = await db.get_resources(guild.id, "temp_voice_channels")
+        temp_ids = [r["resource_id"] for r in temp_channels]
+        
+        if before.channel.id in temp_ids:
+            if len(before.channel.members) == 0:
+                try:
+                    await before.channel.delete(reason="Temporary voice channel empty")
+                    await db.execute("DELETE FROM guild_resources WHERE guild_id = ? AND resource_id = ?", str(guild.id), before.channel.id)
+                except Exception as e:
+                    logger.error(f"Error deleting empty temp channel: {e}")
+
 
 @bot.event
 async def on_message(message):
