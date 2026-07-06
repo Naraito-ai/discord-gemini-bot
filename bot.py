@@ -1513,6 +1513,30 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    # Owner-only force sync check (copies global tree to guild for instant updates!)
+    if message.content.strip() == "!sync":
+        try:
+            is_owner = False
+            try:
+                is_owner = await bot.is_owner(message.author)
+            except Exception:
+                pass
+                
+            if is_owner or (message.guild and message.author.id == message.guild.owner_id):
+                if message.guild:
+                    bot.tree.copy_global_to(guild=message.guild)
+                    await bot.tree.sync(guild=message.guild)
+                await bot.tree.sync()  # Global sync
+                await message.reply("⚡ **Commands synced instantly to this guild, and queued globally!**\nRestart your Discord app (Ctrl+R) if they don't appear.")
+                return
+        except Exception as e:
+            try:
+                await message.reply(f"❌ Failed to sync: {e}")
+            except Exception:
+                pass
+            return
+
+    # Auto-Mod checks
     if not message.author.bot and message.guild:
         automod_enabled = await db.get_config(message.guild.id, "automod", True)
         if automod_enabled:
