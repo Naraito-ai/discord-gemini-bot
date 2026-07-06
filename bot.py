@@ -769,6 +769,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
+    embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
 
@@ -1453,6 +1454,77 @@ async def roleallremove_command(interaction: discord.Interaction, role: discord.
             fail += 1
             
     await interaction.followup.send(f"✅ **Bulk Role Removal Complete!**\nRemoved **{role.name}** from `{success}` members. (Failed: `{fail}`)")
+
+
+# ── Premium Feature Commands ────────────────────────────────────────────────
+
+@bot.tree.command(name="embed", description="Create a highly professional colored Embed message (custom or AI-written)")
+@app_commands.describe(
+    title="The title of the embed",
+    description="The main text body OR a prompt for the AI to write a rules/announcement page",
+    color="Hex code color (e.g. #ff0000 or #5865F2)",
+    channel="The channel to send the embed to (defaults to current channel)",
+    use_ai="If True, AI will rewrite your description into a professional format"
+)
+@app_commands.choices(
+    color=[
+        app_commands.Choice(name="Blurple", value="#5865F2"),
+        app_commands.Choice(name="Green", value="#2ECC71"),
+        app_commands.Choice(name="Red", value="#E74C3C"),
+        app_commands.Choice(name="Gold", value="#F1C40F"),
+        app_commands.Choice(name="Dark Grey", value="#2F3136")
+    ]
+)
+@app_commands.default_permissions(manage_messages=True)
+async def embed_command(
+    interaction: discord.Interaction, 
+    title: str, 
+    description: str, 
+    color: str = "#5865F2", 
+    channel: discord.TextChannel = None, 
+    use_ai: bool = False
+):
+    target_channel = channel or interaction.channel
+    
+    # Check permissions
+    permissions = target_channel.permissions_for(interaction.guild.me)
+    if not permissions.send_messages or not permissions.embed_links:
+        await interaction.response.send_message(f"❌ I don't have permission to send embeds in {target_channel.mention}!", ephemeral=True)
+        return
+        
+    await interaction.response.defer(thinking=True)
+    
+    content = description
+    
+    if use_ai:
+        try:
+            sys_inst = "You are a professional server designer. The user wants to write an announcement, rule list, or description for their Discord server. Take their description and turn it into a highly aesthetic, professional, and well-structured layout using markdown, bold headers, list formatting, and emojis. Do not output anything other than the formatted text. Do not wrap it in quotes."
+            content = await call_ai_generation(description, sys_inst)
+        except Exception as e:
+            logger.error(f"AI Generation failed for embed: {e}")
+            await interaction.followup.send(f"⚠️ AI Generation failed: `{e}`. Using raw description instead.")
+            content = description
+
+    # Parse color
+    try:
+        color_hex = color.strip("#")
+        color_int = int(color_hex, 16)
+        color_obj = discord.Color(color_int)
+    except Exception:
+        color_obj = discord.Color.blurple()
+        
+    embed = discord.Embed(title=title, description=content, color=color_obj)
+    if bot.user.avatar:
+        embed.set_footer(text=f"Sent via {bot.user.name}", icon_url=bot.user.avatar.url)
+    else:
+        embed.set_footer(text=f"Sent via {bot.user.name}")
+    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+    
+    try:
+        await target_channel.send(embed=embed)
+        await interaction.followup.send(f"✅ Embed successfully sent to {target_channel.mention}!")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Failed to send embed: {e}")
 
 
 # ── Discord Event Listeners ─────────────────────────────────────────────────
