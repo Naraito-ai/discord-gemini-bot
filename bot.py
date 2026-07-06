@@ -589,72 +589,6 @@ class NukeConfirmView(discord.ui.View):
             b.disabled = True
         await interaction.response.edit_message(content="🚫 **Server nuke cancelled.**", embed=None, view=self)
         self.stop()
-
-
-class TicketCloseView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="gemini_bot:close_ticket")
-    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🔒 **Closing and deleting ticket room in 3 seconds...**")
-        await asyncio.sleep(3)
-        try:
-            await interaction.channel.delete(reason="Ticket Closed")
-        except Exception as e:
-            logger.error(f"Failed to delete ticket channel: {e}")
-
-
-class TicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="🎟️ Open Support Ticket", style=discord.ButtonStyle.primary, emoji="🎟️", custom_id="gemini_bot:open_ticket")
-    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        user = interaction.user
-        
-        category = discord.utils.get(guild.categories, name="🎟️ SUPPORT TICKETS")
-        if not category:
-            try:
-                category = await guild.create_category("🎟️ SUPPORT TICKETS", reason="Ticket System Category")
-            except Exception as e:
-                await interaction.followup.send(f"❌ Failed to create ticket category: {e}", ephemeral=True)
-                return
-
-        chan_name = f"ticket-{user.name.lower()}".replace(" ", "-").replace("#", "")
-        if discord.utils.get(category.text_channels, name=chan_name):
-            await interaction.followup.send("❌ You already have an open support ticket!", ephemeral=True)
-            return
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
-        }
-        for r in guild.roles:
-            if any(w in r.name.lower() for w in ["admin", "mod", "staff", "officer", "guild master"]):
-                overwrites[r] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-
-        try:
-            ticket_chan = await guild.create_text_channel(
-                name=chan_name,
-                category=category,
-                overwrites=overwrites,
-                topic=f"Support ticket for {user.display_name} (ID: {user.id})",
-                reason="User opened support ticket"
-            )
-            embed = discord.Embed(
-                title=f"🎟️ Support Ticket — {user.display_name}",
-                description=f"Hello {user.mention}!\nThank you for reaching out. A staff member or moderator will be with you shortly.\n\nTo close this ticket when your issue is resolved, click the **🔒 Close Ticket** button below.",
-                color=discord.Color.green()
-            )
-            await ticket_chan.send(content=f"{user.mention} | Staff Notification", embed=embed, view=TicketCloseView())
-            await interaction.followup.send(f"✅ Your support ticket has been opened: {ticket_chan.mention}", ephemeral=True)
-        except Exception as e:
-            logger.error(f"Error creating ticket: {e}")
-            await interaction.followup.send(f"❌ Could not create ticket room: {e}", ephemeral=True)
 # ───────────────────────────────────────────────────────────────────────────
 
 
@@ -807,12 +741,8 @@ class GeminiBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
         
     async def setup_hook(self):
-        # 1. Connect database & create tables
+        # Connect database & create tables
         await db.initialize()
-        
-        # 2. Register persistent views
-        self.add_view(TicketView())
-        self.add_view(TicketCloseView())
         
     async def on_ready(self):
         logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
@@ -830,13 +760,12 @@ bot = GeminiBot()
 @bot.tree.command(name="help", description="Show all available commands and help options")
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="🤖 Discord Gemini Server Builder & Community Shield", 
-        description="An all-in-one AI Architect, Auto-Mod, and Community Management Bot powered by Gemini 2.5 Flash / Groq!", 
+        title="🤖 Discord Gemini Server Builder & Shield", 
+        description="An all-in-one AI Architect, Auto-Mod, and Community Restorer Bot powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner", inline=False)
-    embed.add_field(name="💬 **Community & Engagement**", value="• `/welcome <style>` — AI Dynamic Join Greeter\n• `/announce <topic>` — AI Announcement Writer\n• `/ticket` — Create interactive Support Ticket button\n• `/suggest <idea>` — Interactive suggestion box\n• `/poll <question> <options>` — Reaction poll", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
 
@@ -947,7 +876,6 @@ async def stylechannels_command(interaction: discord.Interaction, style: str):
     for channel in interaction.guild.text_channels:
         old_name = channel.name
         
-        # Regex extracts starting emoji prefix if present, styles the rest
         match = re.match(r"^([\u2000-\u32ff\ud83c-\udbff\udf00-\udfff]+[-#|]*)?(.*)$", old_name)
         if match:
             emoji_prefix = match.group(1) or ""
@@ -965,7 +893,7 @@ async def stylechannels_command(interaction: discord.Interaction, style: str):
         try:
             await channel.edit(name=new_name, reason="Style Channels Command")
             success_count += 1
-            await asyncio.sleep(0.5)  # Avoid rate limits
+            await asyncio.sleep(0.5)
         except Exception as e:
             logger.warning(f"Failed to style channel {old_name}: {e}")
             fail_count += 1
@@ -1001,7 +929,6 @@ async def backup_command(interaction: discord.Interaction):
             "channels": []
         }
         
-        # Check if category has private role overwrites
         default_overwrite = cat.overwrites_for(guild.default_role)
         if default_overwrite.read_messages is False or default_overwrite.connect is False:
             for target, overwrite in cat.overwrites:
@@ -1020,7 +947,6 @@ async def backup_command(interaction: discord.Interaction):
                 "topic": chan_topic or ""
             }
             
-            # Check for channel-specific overrides
             chan_default_overwrite = chan.overwrites_for(guild.default_role)
             if chan_default_overwrite.read_messages is False or chan_default_overwrite.connect is False:
                 chan_data["private_for"] = []
@@ -1038,7 +964,6 @@ async def backup_command(interaction: discord.Interaction):
         "categories": categories_list
     }
     
-    # Convert to JSON file in memory
     json_bytes = io.BytesIO(json.dumps(backup_data, indent=2, ensure_ascii=False).encode('utf-8'))
     discord_file = discord.File(json_bytes, filename=f"backup_{guild.name.replace(' ', '_')}.json")
     
@@ -1146,35 +1071,6 @@ async def testautomod_command(interaction: discord.Interaction, text: str):
         await interaction.followup.send(f"❌ Evaluation failed: {e}")
 
 
-@bot.tree.command(name="welcome", description="Configure the AI welcome message style for new members")
-@app_commands.describe(style="The personality/style of the greeting (e.g. 'anime', 'funny', 'gamer', 'off' to disable)")
-@app_commands.default_permissions(manage_guild=True)
-async def welcome_command(interaction: discord.Interaction, style: str):
-    if style.lower() in ("off", "disable", "false"):
-        await db.set_config(interaction.guild_id, "welcome", "off")
-        await interaction.response.send_message("👋 **AI Welcome Greeter disabled.**")
-    else:
-        await db.set_config(interaction.guild_id, "welcome", style)
-        await interaction.response.send_message(f"👋 **AI Welcome Greeter Enabled!**\nPersonality/Style set to: **`{style}`**.\nWhen new members join, AI will dynamically generate a unique greeting in your welcome/general channel!")
-
-
-@bot.tree.command(name="announce", description="Generate an engaging server announcement using AI")
-@app_commands.describe(topic="The subject of the announcement (e.g., 'weekend Valorant tournament')")
-@app_commands.default_permissions(manage_messages=True)
-async def announce_command(interaction: discord.Interaction, topic: str):
-    await interaction.response.defer(thinking=True)
-    try:
-        prompt = f"Write an exciting, professional Discord server announcement about: '{topic}'. Format with emojis, bold headers, bullet points, and make it highly engaging! Return ONLY the announcement text."
-        text = await call_ai_generation(prompt, "You are a professional Discord community manager.")
-        if text:
-            embed = discord.Embed(title="📢 Official Announcement", description=text.strip(), color=discord.Color.brand_red())
-            embed.set_footer(text=f"Announced by {interaction.user.display_name} • Powered by AI", icon_url=interaction.user.display_avatar.url)
-            await interaction.channel.send(content="@everyone", embed=embed)
-            await interaction.followup.send("✅ Announcement posted!", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Failed to generate announcement: {e}")
-
-
 @bot.tree.command(name="lockdown", description="Freeze or unfreeze public chat channels in an emergency")
 @app_commands.describe(status="Lock or unlock the channels")
 @app_commands.choices(
@@ -1218,72 +1114,6 @@ async def purge_command(interaction: discord.Interaction, amount: int):
         await interaction.followup.send(f"🧹 Successfully purged `{len(deleted)}` messages.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Purge failed: {e}", ephemeral=True)
-
-
-@bot.tree.command(name="ticket", description="Send the interactive Support Ticket panel into this channel")
-@app_commands.default_permissions(manage_guild=True)
-async def ticket_command(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="🎟️ Support & Help Desk",
-        description="Need assistance from our moderators or staff team?\n\nClick the **🎟️ Open Support Ticket** button below to create a private, secure chat room with our team!",
-        color=discord.Color.blurple()
-    )
-    embed.set_footer(text="Private 1-on-1 Support • Powered by AI")
-    await interaction.channel.send(embed=embed, view=TicketView())
-    await interaction.response.send_message("✅ Support ticket panel posted!", ephemeral=True)
-
-
-@bot.tree.command(name="suggest", description="Submit a suggestion to the community suggestion box")
-@app_commands.describe(idea="Your suggestion or idea for the server")
-async def suggest_command(interaction: discord.Interaction, idea: str):
-    guild = interaction.guild
-    sug_chan = discord.utils.get(guild.text_channels, name="💡-suggestions") or discord.utils.get(guild.text_channels, name="suggestions") or discord.utils.get(guild.text_channels, name="server-suggestions") or interaction.channel
-    
-    embed = discord.Embed(title="💡 Community Suggestion", description=f"**{idea}**", color=discord.Color.gold())
-    embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-    embed.set_footer(text="Status: [UNDER REVIEW] • Vote with 👍 or 👎 below!")
-    
-    try:
-        sug_msg = await sug_chan.send(embed=embed)
-        await sug_msg.add_reaction("👍")
-        await sug_msg.add_reaction("👎")
-        if sug_chan.id != interaction.channel_id:
-            await interaction.response.send_message(f"✅ Your suggestion was posted in {sug_chan.mention}!", ephemeral=True)
-        else:
-            await interaction.response.send_message("✅ Suggestion posted!", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to post suggestion: {e}", ephemeral=True)
-
-
-@bot.tree.command(name="poll", description="Create a public poll with up to 10 options")
-@app_commands.describe(
-    question="The question for the poll",
-    options="The choices, separated by | or comma (e.g. 'Yes | No' or 'Blue, Red, Green')"
-)
-async def poll_command(interaction: discord.Interaction, question: str, options: str):
-    if "|" in options:
-        parts = [p.strip() for p in options.split("|") if p.strip()]
-    else:
-        parts = [p.strip() for p in options.split(",") if p.strip()]
-        
-    if len(parts) < 2:
-        await interaction.response.send_message("❌ Please provide at least 2 options!", ephemeral=True)
-        return
-        
-    options_list = parts[:10]
-    emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-    desc_lines = [f"{emojis[i]} **{opt}**" for i, opt in enumerate(options_list)]
-    
-    embed = discord.Embed(title=f"📊 {question}", description="\n\n".join(desc_lines), color=discord.Color.teal())
-    embed.set_footer(text=f"Poll created by {interaction.user.display_name} • React to vote!", icon_url=interaction.user.display_avatar.url)
-    
-    try:
-        poll_msg = await interaction.channel.send(embed=embed)
-        await interaction.response.send_message("✅ Poll created!", ephemeral=True)
-        for i in range(len(options_list)):
-            await poll_msg.add_reaction(emojis[i])
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to create poll: {e}", ephemeral=True)
 
 
 @bot.tree.command(name="addcategory", description="Ask AI to design and add a single category with custom channels")
@@ -1334,37 +1164,6 @@ async def nuke_command(interaction: discord.Interaction):
 
 
 # ── Discord Event Listeners ─────────────────────────────────────────────────
-
-@bot.event
-async def on_member_join(member):
-    guild = member.guild
-    style = await db.get_config(guild.id, "welcome", "off")
-    if not style or style.lower() == "off":
-        return
-
-    logger.info(f"New member {member.name} joined {guild.name}. Welcome style: {style}")
-    
-    welcome_chan = (
-        discord.utils.get(guild.text_channels, name="👋-welcome") or
-        discord.utils.get(guild.text_channels, name="welcome") or
-        discord.utils.get(guild.text_channels, name="💬-general-chat") or
-        discord.utils.get(guild.text_channels, name="general") or
-        guild.system_channel or
-        (guild.text_channels[0] if guild.text_channels else None)
-    )
-    if not welcome_chan:
-        return
-
-    try:
-        prompt = f"Write a short, warm, and exciting 2-sentence welcome greeting for user '{member.display_name}' joining our Discord community '{guild.name}'. Write it in the personality/style of: '{style}'. Use emojis and format nicely!"
-        text = await call_ai_generation(prompt, "You are a professional, friendly Discord welcome greeter.")
-        if text:
-            embed = discord.Embed(title=f"👋 Welcome to {guild.name}!", description=f"{member.mention}\n\n{text.strip()}", color=discord.Color.gold())
-            embed.set_thumbnail(url=member.display_avatar.url)
-            await welcome_chan.send(content=member.mention, embed=embed)
-    except Exception as e:
-        logger.error(f"Error sending welcome message: {e}")
-
 
 @bot.event
 async def on_message(message):
