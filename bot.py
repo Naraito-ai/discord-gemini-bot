@@ -768,6 +768,7 @@ async def help_command(interaction: discord.Interaction):
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
 
@@ -1325,7 +1326,151 @@ async def undeafen_command(interaction: discord.Interaction, member: discord.Mem
         await interaction.response.send_message(f"❌ Failed to undeafen member: {e}", ephemeral=True)
 
 
+# ── Role Setup & Management Commands ────────────────────────────────────────
+
+@bot.tree.command(name="autorole", description="Configure a role to be automatically assigned to new members on join")
+@app_commands.describe(
+    status="Enable or disable auto-role",
+    role="The role to assign (required when enabling)"
+)
+@app_commands.choices(
+    status=[
+        app_commands.Choice(name="Enable", value="on"),
+        app_commands.Choice(name="Disable", value="off")
+    ]
+)
+@app_commands.default_permissions(manage_roles=True)
+async def autorole_command(interaction: discord.Interaction, status: str, role: discord.Role = None):
+    if status == "on":
+        if not role:
+            await interaction.response.send_message("❌ Please specify the `role` you want to assign automatically.", ephemeral=True)
+            return
+            
+        if role.position >= interaction.guild.me.top_role.position:
+            await interaction.response.send_message("❌ I cannot assign this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
+            return
+            
+        await db.set_config(interaction.guild_id, "auto_role_id", role.id)
+        await interaction.response.send_message(f"✅ **Auto-Role enabled!** New members will automatically be assigned the **{role.name}** role.")
+    else:
+        await db.set_config(interaction.guild_id, "auto_role_id", None)
+        await interaction.response.send_message("⚙️ **Auto-Role disabled.**")
+
+
+@bot.tree.command(name="addrole", description="Assign a role to a member")
+@app_commands.describe(member="The member to assign the role to", role="The role to assign")
+@app_commands.default_permissions(manage_roles=True)
+async def addrole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+    if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
+        return
+    if role.position >= interaction.guild.me.top_role.position:
+        await interaction.response.send_message("❌ I cannot assign this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
+        return
+        
+    try:
+        await member.add_roles(role, reason=f"Assigned by {interaction.user.display_name}")
+        await interaction.response.send_message(f"✅ Successfully added role **{role.name}** to **{member.display_name}**.")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to assign role: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="removerole", description="Remove a role from a member")
+@app_commands.describe(member="The member to remove the role from", role="The role to remove")
+@app_commands.default_permissions(manage_roles=True)
+async def removerole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+    if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
+        return
+    if role.position >= interaction.guild.me.top_role.position:
+        await interaction.response.send_message("❌ I cannot remove this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
+        return
+        
+    try:
+        await member.remove_roles(role, reason=f"Removed by {interaction.user.display_name}")
+        await interaction.response.send_message(f"✅ Successfully removed role **{role.name}** from **{member.display_name}**.")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to remove role: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="roleall", description="Assign a role to every member in the server")
+@app_commands.describe(role="The role to assign to everyone")
+@app_commands.default_permissions(administrator=True)
+async def roleall_command(interaction: discord.Interaction, role: discord.Role):
+    if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
+        return
+    if role.position >= interaction.guild.me.top_role.position:
+        await interaction.response.send_message("❌ I cannot assign this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True)
+    success = 0
+    fail = 0
+    
+    for member in interaction.guild.members:
+        if member.bot:
+            continue
+        if role in member.roles:
+            continue
+            
+        try:
+            await member.add_roles(role, reason=f"Bulk assignment by {interaction.user.display_name}")
+            success += 1
+            await asyncio.sleep(0.1)
+        except Exception:
+            fail += 1
+            
+    await interaction.followup.send(f"✅ **Bulk Role Assignment Complete!**\nAdded **{role.name}** to `{success}` members. (Failed: `{fail}`)")
+
+
+@bot.tree.command(name="roleallremove", description="Remove a role from every member in the server")
+@app_commands.describe(role="The role to remove from everyone")
+@app_commands.default_permissions(administrator=True)
+async def roleallremove_command(interaction: discord.Interaction, role: discord.Role):
+    if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
+        return
+    if role.position >= interaction.guild.me.top_role.position:
+        await interaction.response.send_message("❌ I cannot remove this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True)
+    success = 0
+    fail = 0
+    
+    for member in interaction.guild.members:
+        if member.bot:
+            continue
+        if role not in member.roles:
+            continue
+            
+        try:
+            await member.remove_roles(role, reason=f"Bulk removal by {interaction.user.display_name}")
+            success += 1
+            await asyncio.sleep(0.1)
+        except Exception:
+            fail += 1
+            
+    await interaction.followup.send(f"✅ **Bulk Role Removal Complete!**\nRemoved **{role.name}** from `{success}` members. (Failed: `{fail}`)")
+
+
 # ── Discord Event Listeners ─────────────────────────────────────────────────
+
+@bot.event
+async def on_member_join(member):
+    """Event listener to assign default roles automatically when a new member joins."""
+    guild = member.guild
+    role_id = await db.get_config(guild.id, "auto_role_id")
+    if role_id:
+        role = guild.get_role(role_id)
+        if role:
+            try:
+                await member.add_roles(role, reason="Auto-Role on Join")
+                logger.info(f"Assigned auto-role '{role.name}' to '{member.name}' in guild '{guild.name}'")
+            except Exception as e:
+                logger.error(f"Failed to assign auto-role to {member.name}: {e}")
+
 
 @bot.event
 async def on_voice_state_update(member, before, after):
