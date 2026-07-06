@@ -1,70 +1,94 @@
-# 🤖 Discord Gemini Server Builder Bot
+# 🤖 Discord Gemini Bot
 
-A Discord bot that uses **Google Gemini AI** to automatically generate and set up an entire Discord server structure (roles, categories, channels) from a simple text description.
+An enterprise-ready, high-performance Discord bot powered by **Google Gemini 2.5 Flash** (and **Groq**) that automatically designs, sets up, and secures Discord servers using AI.
 
-## ✨ Features
+---
 
-- **Interactive Setup Preview (`!setup <description>`)**: AI generates a complete server layout preview embed with **Confirm (✅)** and **Cancel (❌)** buttons before creating any channels.
-- **AI-Powered via Gemini 2.0 (`gemini-2.0-flash`)**: Automatically structures roles, categories, and channels.
-- **Emoji & Formatting Support**: Generates aesthetic channel names with fitting emojis (e.g., `📣-announcements`, `🎮-lfg`).
-- **Private Channels & Permission Overrides**: Can create restricted categories or channels (e.g., staff-only rooms restricted to `Admin` or `Moderator` roles).
-- **Safe & Reversible (`!teardown`)**: Tracks AI-created resources so you can easily reset or delete generated roles and channels with `!teardown` or `!cleanup`.
-- **Built-in Help Command (`!help`)**: View available commands and usage instructions inside Discord.
+## ✨ Premium Features
 
-## 🚀 Usage
+*   **⚡ Slash Commands (`/`)**: Native application commands with autocomplete, validation, and Discord permission controls.
+*   **🏗️ AI Server Architect (`/setup <description>`)**: AI generates a complete server layout preview embed with **Confirm (✅)** and **Cancel (❌)** buttons before creating any roles or channels. Includes:
+    *   **Emoji-rich text & voice channels** (e.g. `📣-announcements`, `💬-general-chat`).
+    *   **Engaging channel topics** written dynamically by AI.
+    *   **Role creation** with custom permissions and colors.
+    *   **Private channels** (e.g. staff-only categories restricted to custom Admin/Moderator roles).
+*   **🛡️ Multi-Tier Auto-Mod (`/automod <status> <mode>`)**:
+    *   **Local Shield (Free & Instant)**: Uses zero API key quota, scanning chat in real-time for slurs, insults, and scam links.
+    *   **AI Scanner (Advanced)**: Dynamically evaluates questionable posts using the AI content safety filter.
+*   **🎟️ Persistent Support Tickets (`/ticket`)**: Spawns an interactive button panel. Clicking the button creates a private staff-support channel that remains functional even after bot restarts.
+*   **👋 AI Join Welcome Greetings (`/welcome <style>`)**: AI dynamically crafts unique welcome greetings for new members.
+*   **🗑️ Safe Reversibility (`/teardown` & `/nuke`)**:
+    *   `/teardown`: Cleanly deletes *only* roles, categories, and channels built by the bot, leaving user-created channels intact.
+    *   `/nuke`: Full server wipe for developers starting with a clean slate.
 
-### 1. Preview & Build Server Structure
-```
-!setup community gaming server with esports news, lfg, voice lounges, and private staff channels
-```
-*Review the generated layout in Discord, then click **Confirm & Build**.*
+---
 
-### 2. Teardown / Reset AI-Created Channels
-```
-!teardown
-```
-*Asks for confirmation before cleanly removing roles, categories, and channels created by the bot.*
+## 🛠️ Installation & Setup
 
-### 3. Help
-```
-!help
-```
+### Local Run
 
-Only users with **Manage Server** permission can use these commands.
+1.  **Clone the repository**.
+2.  **Create a `.env` file** (copy from `.env.example`):
+    ```env
+    DISCORD_TOKEN=your_discord_bot_token
+    GEMINI_API_KEY=your_gemini_api_key
+    # Optional: If you prefer using Groq
+    GROQ_API_KEY=your_groq_api_key
+    # Optional: PostgreSQL Database URL for production persistence
+    DATABASE_URL=postgresql://user:pass@host:port/dbname
+    ```
+3.  **Install dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+4.  **Launch the bot**:
+    ```bash
+    python bot.py
+    ```
 
-## 🛠️ Setup
+---
 
-### Local
+## 💾 Database Persistence (SQLite & PostgreSQL)
 
-1. Clone the repo
-2. Copy `.env.example` to `.env` and fill in your keys
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Run:
-   ```bash
-   python bot.py
-   ```
+The bot supports a dual-storage model:
+*   **SQLite (Default)**: Automatically used if no `DATABASE_URL` env variable is set. Stores guild settings in a local `bot_data.db` file.
+*   **PostgreSQL (Recommended for Render/Production)**: If `DATABASE_URL` is configured, the bot connects to PostgreSQL (e.g., Supabase or Render DB). **This prevents data loss on Render free tier restarts.**
 
-### Environment Variables
+---
 
-| Variable | Description |
-|----------|-------------|
-| `DISCORD_TOKEN` | Your Discord bot token |
-| `GEMINI_API_KEY` | Your Google Gemini API key |
+## 🚀 Deploying to Render (24/7 Hosting)
 
-## ☁️ Deploy to Railway (24/7)
+Since Render free plans restart frequently and have ephemeral storage, configure PostgreSQL to save state.
 
-1. Push this repo to GitHub
-2. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub
-3. Select this repo
-4. Add environment variables in Railway dashboard
-5. Done — bot runs forever!
+1.  **Create a Web Service** on Render.
+2.  **Link your GitHub repository**.
+3.  **Use the following configurations**:
+    *   **Runtime**: Python
+    *   **Build Command**: `pip install -r requirements.txt`
+    *   **Start Command**: `python bot.py`
+4.  **Add environment variables** under the **Environment** tab:
+    *   `DISCORD_TOKEN`
+    *   `GROQ_API_KEY` or `GEMINI_API_KEY`
+    *   `DATABASE_URL` (Retrieve from a free Supabase PostgreSQL database or a Render PostgreSQL database).
+5.  *(Optional)* Use a ping service (like UptimeRobot) to ping the Render URL (port `8080`) to keep the service awake.
 
-## 📋 Requirements
+---
 
-- Python 3.10+
-- `discord.py`
-- `google-generativeai`
-- `python-dotenv`
+## 📋 Slash Commands Reference
+
+| Command | Permission Required | Description |
+|---------|---------------------|-------------|
+| `/help` | Everyone | View bot guide and commands. |
+| `/setup <description>` | Manage Server | Generate and preview a server layout, then build it. |
+| `/addcategory <description>` | Manage Server | AI designs and creates a single category and channels. |
+| `/teardown` | Manage Server | Delete only roles/channels created by this bot. |
+| `/nuke` | Administrator | **DANGER:** Wipe entire server clean. |
+| `/automod <on/off> <local/ai>` | Manage Server | Toggle chat protection filter. |
+| `/testautomod <text>` | Manage Server | Run a test string through the toxic/scam filter. |
+| `/welcome <style/off>` | Manage Server | Enable/disable dynamic AI welcome messages. |
+| `/announce <topic>` | Manage Messages | Drafts and posts an AI official server announcement. |
+| `/lockdown <on/off>` | Manage Channels | Lock/unlock text channels in an emergency. |
+| `/purge <amount>` | Manage Messages | Delete up to 100 recent messages. |
+| `/ticket` | Manage Server | Setup the support ticket button panel. |
+| `/suggest <idea>` | Everyone | Submit a suggestion to the suggestions channel. |
+| `/poll <question> <options>` | Everyone | Create a poll (options separated by `,` or `\|`). |

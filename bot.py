@@ -2,12 +2,16 @@ import os
 import json
 import asyncio
 import logging
+import re
 import discord
+from discord.ext import commands
+from discord import app_commands
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
+from database import db
 
 # ── Logging Setup ──────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -34,156 +38,8 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Configure Google Gemini client
-gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-
-# Resource Manager for tracking AI-created entities (enables clean !teardown)
-RESOURCE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "guild_resources.json")
-
-class ResourceManager:
-    def __init__(self, filepath):
-        self.filepath = filepath
-        self.data = self._load()
-
-    def _load(self):
-        if os.path.exists(self.filepath):
-            try:
-                with open(self.filepath, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                return {}
-        return {}
-
-    def _save(self):
-        try:
-            with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving resource file: {e}")
-
-    def add_resource(self, guild_id, res_type, res_id):
-        gid = str(guild_id)
-        if gid not in self.data:
-            self.data[gid] = {"roles": [], "categories": [], "channels": [], "config": {}}
-        if res_id not in self.data[gid][res_type]:
-            self.data[gid][res_type].append(res_id)
-        self._save()
-
-    def get_config(self, guild_id, key, default=None):
-        gid = str(guild_id)
-        if gid not in self.data or "config" not in self.data[gid]:
-            return default
-        return self.data[gid]["config"].get(key, default)
-
-    def set_config(self, guild_id, key, value):
-        gid = str(guild_id)
-        if gid not in self.data:
-            self.data[gid] = {"roles": [], "categories": [], "channels": [], "config": {}}
-        if "config" not in self.data[gid]:
-            self.data[gid]["config"] = {}
-        self.data[gid]["config"][key] = value
-        self._save()
-
-    async def teardown_guild(self, guild):
-        gid = str(guild.id)
-        stats = {"roles": 0, "categories": 0, "channels": 0}
-        if gid not in self.data:
-            return stats
-
-        logger.info(f"Starting teardown for guild {guild.name} ({gid})...")
-
-        # 1. Delete channels first
-        for cid in self.data[gid].get("channels", []):
-            channel = guild.get_channel(cid)
-            if channel:
-                try:
-                    await channel.delete(reason="Gemini Bot Teardown")
-                    stats["channels"] += 1
-                except Exception as e:
-                    logger.warning(f"Failed to delete channel {cid}: {e}")
-
-        # 2. Delete categories
-        for cid in self.data[gid].get("categories", []):
-            cat = guild.get_channel(cid)
-            if cat:
-                try:
-                    await cat.delete(reason="Gemini Bot Teardown")
-                    stats["categories"] += 1
-                except Exception as e:
-                    logger.warning(f"Failed to delete category {cid}: {e}")
-
-        # 3. Delete roles
-        for rid in self.data[gid].get("roles", []):
-            role = guild.get_role(rid)
-            if role and role != guild.default_role:
-                try:
-                    await role.delete(reason="Gemini Bot Teardown")
-                    stats["roles"] += 1
-                except Exception as e:
-                    logger.warning(f"Failed to delete role {rid}: {e}")
-
-        logger.info(f"Teardown completed for {guild.name}: {stats}")
-
-        self.data[gid] = {"roles": [], "categories": [], "channels": []}
-        self._save()
-        return stats
-
-    async def nuke_guild(self, guild):
-        gid = str(guild.id)
-        stats = {"roles": 0, "categories": 0, "channels": 0}
-        logger.info(f"Starting TOTAL NUKE for guild {guild.name} ({gid})...")
-
-        # Create a clean default channel so server isn't 100% empty
-        clean_channel = None
-        try:
-            clean_channel = await guild.create_text_channel(
-                name="💥-server-nuked",
-                topic="Server wiped clean by Gemini Bot !nuke command. Ready for !setup!",
-                reason="Gemini Bot Complete Nuke"
-            )
-        except Exception as e:
-            logger.error(f"Could not create clean channel during nuke: {e}")
-
-        # 1. Delete all channels and categories (except clean_channel)
-        for channel in list(guild.channels):
-            if clean_channel and channel.id == clean_channel.id:
-                continue
-            try:
-                await channel.delete(reason="Gemini Bot Complete Nuke")
-                if isinstance(channel, discord.CategoryChannel):
-                    stats["categories"] += 1
-                else:
-                    stats["channels"] += 1
-            except Exception as e:
-                logger.warning(f"Could not delete channel/category {channel.name}: {e}")
-
-        # 2. Delete all roles (except default, managed, and higher than bot)
-        for role in list(guild.roles):
-            if role == guild.default_role or role.managed:
-                continue
-            if guild.me.top_role <= role:
-                continue
-            try:
-                await role.delete(reason="Gemini Bot Complete Nuke")
-                stats["roles"] += 1
-            except Exception as e:
-                logger.warning(f"Could not delete role {role.name}: {e}")
-
-        self.data[gid] = {"roles": [], "categories": [], "channels": []}
-        self._save()
-        return stats, clean_channel
-
-resource_manager = ResourceManager(RESOURCE_FILE)
-
-# Configure Discord Client
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-client = discord.Client(intents=intents)
-
-
-def call_ai_generation(prompt, system_instruction, json_mode=False):
-    # Detect which API key is available
+async def call_ai_generation(prompt, system_instruction, json_mode=False):
+    """Generates content asynchronously using Groq (via aiohttp) or Gemini (via google-genai async)."""
     groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
     
@@ -194,7 +50,7 @@ def call_ai_generation(prompt, system_instruction, json_mode=False):
         
     if groq_key:
         logger.info(f"Using Groq API for content generation (JSON Mode: {json_mode})")
-        import requests
+        import aiohttp
         headers = {
             "Authorization": f"Bearer {groq_key}",
             "Content-Type": "application/json"
@@ -210,38 +66,35 @@ def call_ai_generation(prompt, system_instruction, json_mode=False):
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
             
-        r = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30)
-        r.raise_for_status()
-        res_data = r.json()
-        return res_data["choices"][0]["message"]["content"]
+        async with aiohttp.ClientSession() as session:
+            async with session.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30) as r:
+                r.raise_for_status()
+                res_data = await r.json()
+                return res_data["choices"][0]["message"]["content"]
         
     elif gemini_key:
         logger.info(f"Using Gemini API for content generation (JSON Mode: {json_mode})")
         c = genai.Client(api_key=gemini_key)
+        
+        config_args = {
+            "system_instruction": system_instruction,
+            "temperature": 0.3
+        }
         if json_mode:
-            resp = c.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    response_mime_type="application/json",
-                    temperature=0.3
-                ),
-            )
-        else:
-            resp = c.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.3
-                ),
-            )
+            config_args["response_mime_type"] = "application/json"
+            
+        config = types.GenerateContentConfig(**config_args)
+        
+        # Use client.aio for non-blocking async execution
+        resp = await c.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=config
+        )
         return resp.text
         
     else:
         raise ValueError("No valid GROQ_API_KEY or GEMINI_API_KEY found in environment variables.")
-
 
 # Gemini system prompt with Emoji, Topics, and Private Channel support
 SYSTEM_PROMPT = """You are an expert Discord server structure generator and community architect. 
@@ -278,15 +131,109 @@ Rules:
 - topic is an optional but highly recommended string (max 1024 chars) describing the purpose of text channels. For example: "👋 Welcome new members! Please check out the rules." or "💬 General discussion about gaming and life." Always include engaging topics for text channels!
 """
 
+# ── Teardown & Nuke Handlers ───────────────────────────────────────────────
+
+async def teardown_guild(guild):
+    """Deletes only the roles, categories, and channels created by this bot in the guild."""
+    stats = {"roles": 0, "categories": 0, "channels": 0}
+    logger.info(f"Starting teardown for guild {guild.name} ({guild.id})...")
+
+    resources = await db.get_resources(guild.id)
+    if not resources:
+        logger.info(f"No tracked resources found for guild {guild.name}.")
+        return stats
+
+    channels = [r["resource_id"] for r in resources if r["resource_type"] == "channels"]
+    categories = [r["resource_id"] for r in resources if r["resource_type"] == "categories"]
+    roles = [r["resource_id"] for r in resources if r["resource_type"] == "roles"]
+
+    # 1. Delete channels first
+    for cid in channels:
+        channel = guild.get_channel(cid)
+        if channel:
+            try:
+                await channel.delete(reason="Gemini Bot Teardown")
+                stats["channels"] += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete channel {cid}: {e}")
+
+    # 2. Delete categories
+    for cid in categories:
+        cat = guild.get_channel(cid)
+        if cat:
+            try:
+                await cat.delete(reason="Gemini Bot Teardown")
+                stats["categories"] += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete category {cid}: {e}")
+
+    # 3. Delete roles
+    for rid in roles:
+        role = guild.get_role(rid)
+        if role and role != guild.default_role:
+            try:
+                await role.delete(reason="Gemini Bot Teardown")
+                stats["roles"] += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete role {rid}: {e}")
+
+    logger.info(f"Teardown completed for {guild.name}: {stats}")
+    await db.clear_resources(guild.id)
+    return stats
+
+async def nuke_guild(guild):
+    """Deletes ALL roles, categories, and channels in the guild to start completely fresh."""
+    stats = {"roles": 0, "categories": 0, "channels": 0}
+    logger.info(f"Starting TOTAL NUKE for guild {guild.name} ({guild.id})...")
+
+    # Create a clean default channel so server isn't 100% empty
+    clean_channel = None
+    try:
+        clean_channel = await guild.create_text_channel(
+            name="💥-server-nuked",
+            topic="Server wiped clean by Gemini Bot. Ready for /setup!",
+            reason="Gemini Bot Complete Nuke"
+        )
+    except Exception as e:
+        logger.error(f"Could not create clean channel during nuke: {e}")
+
+    # 1. Delete all channels and categories (except clean_channel)
+    for channel in list(guild.channels):
+        if clean_channel and channel.id == clean_channel.id:
+            continue
+        try:
+            await channel.delete(reason="Gemini Bot Complete Nuke")
+            if isinstance(channel, discord.CategoryChannel):
+                stats["categories"] += 1
+            else:
+                stats["channels"] += 1
+        except Exception as e:
+            logger.warning(f"Could not delete channel/category {channel.name}: {e}")
+
+    # 2. Delete all roles (except default, managed, and higher than bot)
+    for role in list(guild.roles):
+        if role == guild.default_role or role.managed:
+            continue
+        if guild.me.top_role <= role:
+            continue
+        try:
+            await role.delete(reason="Gemini Bot Complete Nuke")
+            stats["roles"] += 1
+        except Exception as e:
+            logger.warning(f"Could not delete role {role.name}: {e}")
+
+    await db.clear_resources(guild.id)
+    return stats, clean_channel
 
 # ── Interactive UI Views ───────────────────────────────────────────────────
+
 class SetupConfirmView(discord.ui.View):
-    def __init__(self, author, guild, plan_data, original_message):
+    def __init__(self, author, guild, plan_data, original_interaction):
         super().__init__(timeout=180.0)
         self.author = author
         self.guild = guild
         self.plan_data = plan_data
-        self.original_message = original_message
+        self.original_interaction = original_interaction
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
@@ -328,13 +275,13 @@ class TeardownConfirmView(discord.ui.View):
             b.disabled = True
         await interaction.response.edit_message(content="🗑️ **Deleting AI-created roles, categories, and channels...**", embed=None, view=self)
         
-        stats = await resource_manager.teardown_guild(self.guild)
+        stats = await teardown_guild(self.guild)
         
         embed = discord.Embed(title="🗑️ Teardown Complete", color=discord.Color.red())
         embed.add_field(name="Channels Deleted", value=str(stats['channels']), inline=True)
         embed.add_field(name="Categories Deleted", value=str(stats['categories']), inline=True)
         embed.add_field(name="Roles Deleted", value=str(stats['roles']), inline=True)
-        embed.set_footer(text="Powered by Gemini")
+        embed.set_footer(text="Powered by AI")
         
         await interaction.channel.send(embed=embed)
         self.stop()
@@ -345,7 +292,6 @@ class TeardownConfirmView(discord.ui.View):
             b.disabled = True
         await interaction.response.edit_message(content="🚫 **Teardown cancelled.**", embed=None, view=self)
         self.stop()
-# ───────────────────────────────────────────────────────────────────────────
 
 
 class NukeConfirmView(discord.ui.View):
@@ -366,14 +312,14 @@ class NukeConfirmView(discord.ui.View):
             b.disabled = True
         await interaction.response.edit_message(content="💥 **NUKING ENTIRE SERVER... Deleting all channels, categories, and roles!**", embed=None, view=self)
         
-        stats, clean_channel = await resource_manager.nuke_guild(self.guild)
+        stats, clean_channel = await nuke_guild(self.guild)
         
         embed = discord.Embed(title="💥 Server Completely Nuked", description="All old channels, categories, and roles have been wiped clean!", color=discord.Color.red())
         embed.add_field(name="Channels Deleted", value=str(stats['channels']), inline=True)
         embed.add_field(name="Categories Deleted", value=str(stats['categories']), inline=True)
         embed.add_field(name="Roles Deleted", value=str(stats['roles']), inline=True)
-        embed.add_field(name="Next Step", value="Type `!setup <description>` right here to build your new server on a 100% clean slate!", inline=False)
-        embed.set_footer(text="Powered by Gemini")
+        embed.add_field(name="Next Step", value="Use `/setup <description>` right here to build your new server layout on a clean slate!", inline=False)
+        embed.set_footer(text="Powered by AI")
         
         if clean_channel:
             await clean_channel.send(embed=embed)
@@ -385,14 +331,13 @@ class NukeConfirmView(discord.ui.View):
             b.disabled = True
         await interaction.response.edit_message(content="🚫 **Server nuke cancelled.**", embed=None, view=self)
         self.stop()
-# ───────────────────────────────────────────────────────────────────────────
 
 
 class TicketCloseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.danger, emoji="🔒")
+    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="gemini_bot:close_ticket")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🔒 **Closing and deleting ticket room in 3 seconds...**")
         await asyncio.sleep(3)
@@ -406,8 +351,10 @@ class TicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🎟️ Open Support Ticket", style=discord.ButtonStyle.primary, emoji="🎟️")
+    @discord.ui.button(label="🎟️ Open Support Ticket", style=discord.ButtonStyle.primary, emoji="🎟️", custom_id="gemini_bot:open_ticket")
     async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Support ticket operations can take some time, so we defer first
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         user = interaction.user
         
@@ -416,12 +363,12 @@ class TicketView(discord.ui.View):
             try:
                 category = await guild.create_category("🎟️ SUPPORT TICKETS", reason="Ticket System Category")
             except Exception as e:
-                await interaction.response.send_message(f"❌ Failed to create ticket category: {e}", ephemeral=True)
+                await interaction.followup.send(f"❌ Failed to create ticket category: {e}", ephemeral=True)
                 return
 
-        chan_name = f"ticket-{user.name.lower()}"
+        chan_name = f"ticket-{user.name.lower()}".replace(" ", "-").replace("#", "")
         if discord.utils.get(category.text_channels, name=chan_name):
-            await interaction.response.send_message("❌ You already have an open support ticket!", ephemeral=True)
+            await interaction.followup.send("❌ You already have an open support ticket!", ephemeral=True)
             return
 
         overwrites = {
@@ -447,14 +394,15 @@ class TicketView(discord.ui.View):
                 color=discord.Color.green()
             )
             await ticket_chan.send(content=f"{user.mention} | Staff Notification", embed=embed, view=TicketCloseView())
-            await interaction.response.send_message(f"✅ Your support ticket has been opened: {ticket_chan.mention}", ephemeral=True)
+            await interaction.followup.send(f"✅ Your support ticket has been opened: {ticket_chan.mention}", ephemeral=True)
         except Exception as e:
             logger.error(f"Error creating ticket: {e}")
-            await interaction.response.send_message(f"❌ Could not create ticket room: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ Could not create ticket room: {e}", ephemeral=True)
 # ───────────────────────────────────────────────────────────────────────────
 
 
 async def build_server_structure(guild, data, response_channel):
+    """Parses structural plan data and creates corresponding roles, categories, and channels."""
     logger.info(f"Starting AI server build for guild: {guild.name} ({guild.id})")
     roles_created = []
     categories_created = []
@@ -489,7 +437,7 @@ async def build_server_structure(guild, data, response_channel):
             )
             roles_created.append(new_role.name)
             role_objects[role_name] = new_role
-            resource_manager.add_resource(guild.id, "roles", new_role.id)
+            await db.add_resource(guild.id, "roles", new_role.id)
             logger.info(f"Created role: {new_role.name}")
         except Exception as e:
             logger.error(f"Failed to create role '{role_name}': {e}")
@@ -525,7 +473,7 @@ async def build_server_structure(guild, data, response_channel):
                     reason="Gemini Discord Bot Setup"
                 )
                 categories_created.append(category.name)
-                resource_manager.add_resource(guild.id, "categories", category.id)
+                await db.add_resource(guild.id, "categories", category.id)
                 logger.info(f"Created category: {category.name}")
             else:
                 categories_created.append(f"{category.name} (reused)")
@@ -559,7 +507,7 @@ async def build_server_structure(guild, data, response_channel):
                         reason="Gemini Discord Bot Setup"
                     )
                     channels_created.append(f"#{new_chan.name}")
-                    resource_manager.add_resource(guild.id, "channels", new_chan.id)
+                    await db.add_resource(guild.id, "channels", new_chan.id)
                     logger.info(f"Created text channel: #{new_chan.name} (Topic: {chan_topic})")
                 elif chan_type == "voice":
                     new_chan = await guild.create_voice_channel(
@@ -569,7 +517,7 @@ async def build_server_structure(guild, data, response_channel):
                         reason="Gemini Discord Bot Setup"
                     )
                     channels_created.append(f"🔊 {new_chan.name}")
-                    resource_manager.add_resource(guild.id, "channels", new_chan.id)
+                    await db.add_resource(guild.id, "channels", new_chan.id)
                     logger.info(f"Created voice channel: 🔊 {new_chan.name}")
             except Exception as e:
                 logger.error(f"Failed to create channel '{chan_name}' in '{cat_name}': {e}")
@@ -587,21 +535,349 @@ async def build_server_structure(guild, data, response_channel):
         errors_str = "\n".join(errors_encountered[:5]) + ("\n..." if len(errors_encountered) > 5 else "")
         embed.add_field(name="⚠️ Errors Encountered", value=f"```\n{errors_str}\n```", inline=False)
 
-    embed.set_footer(text="Powered by Gemini • Use !teardown to reset AI-created items")
+    embed.set_footer(text="Powered by AI • Use /teardown to reset AI-created items")
 
     await response_channel.send(embed=embed)
 
 
-@client.event
-async def on_ready():
-    logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
-    logger.info("------")
+# ── Bot Client Initialization ───────────────────────────────────────────────
+
+class GeminiBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.members = True
+        super().__init__(command_prefix="!", intents=intents)
+        
+    async def setup_hook(self):
+        # 1. Connect database & create tables
+        await db.initialize()
+        
+        # 2. Register persistent views
+        self.add_view(TicketView())
+        self.add_view(TicketCloseView())
+        
+    async def on_ready(self):
+        logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
+        # Sync slash commands globally
+        try:
+            synced = await self.tree.sync()
+            logger.info(f"Synced {len(synced)} slash commands globally.")
+        except Exception as e:
+            logger.error(f"Failed to sync slash commands: {e}")
+
+bot = GeminiBot()
 
 
-@client.event
+# ── App Slash Commands ──────────────────────────────────────────────────────
+
+@bot.tree.command(name="help", description="Show all available commands and help options")
+async def help_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🤖 Discord Gemini Server Builder & Community Shield", 
+        description="An all-in-one AI Architect, Auto-Mod, and Community Management Bot powered by Gemini 2.5 Flash / Groq!", 
+        color=discord.Color.blurple()
+    )
+    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup <desc>` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner", inline=False)
+    embed.add_field(name="💬 **Community & Engagement**", value="• `/welcome <style>` — AI Dynamic Join Greeter\n• `/announce <topic>` — AI Announcement Writer\n• `/ticket` — Create interactive Support Ticket button\n• `/suggest <idea>` — Interactive suggestion box\n• `/poll <question> <options>` — Reaction poll", inline=False)
+    embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="automod", description="Configure the Auto-Mod security and scam shield")
+@app_commands.describe(
+    status="Enable or disable Auto-Mod",
+    mode="Choose between Local mode (free/instant) and AI mode (requires API key)"
+)
+@app_commands.choices(
+    status=[
+        app_commands.Choice(name="On", value="on"),
+        app_commands.Choice(name="Off", value="off")
+    ],
+    mode=[
+        app_commands.Choice(name="Local Shield (Free)", value="local"),
+        app_commands.Choice(name="AI Scanner (Advanced)", value="ai")
+    ]
+)
+@app_commands.default_permissions(manage_guild=True)
+async def automod_command(interaction: discord.Interaction, status: str, mode: str = "local"):
+    if status == "on":
+        await db.set_config(interaction.guild_id, "automod", True)
+        await db.set_config(interaction.guild_id, "automod_mode", mode)
+        if mode == "local":
+            await interaction.response.send_message("🧠 **Auto-Mod is now ON (Local Shield)!**\nScanning real-time chat instantly for curse words, slurs, and spam links without using API key quota.")
+        else:
+            await interaction.response.send_message("🧠 **Auto-Mod is now ON (AI Scanner)!**\nReal-time messages will be scanned using AI. *(Note: This uses your API key quota!)*")
+    else:
+        await db.set_config(interaction.guild_id, "automod", False)
+        await interaction.response.send_message("🛡️ **Auto-Mod disabled.**")
+
+
+@bot.tree.command(name="testautomod", description="Test how the AI Auto-Mod rates a specific text block")
+@app_commands.describe(text="The message content to test")
+@app_commands.default_permissions(manage_guild=True)
+async def testautomod_command(interaction: discord.Interaction, text: str):
+    await interaction.response.defer(thinking=True)
+    try:
+        prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{text}'."
+        res = await call_ai_generation(prompt, "You are an expert content moderator. Respond with ONLY the word SAFE or TOXIC. Do not add any other text.")
+        result = res.strip().upper()
+        if "TOXIC" in result:
+            await interaction.followup.send(f"🚨 **Auto-Mod Result:** `TOXIC`\n\n*If sent by a member, this message would have been deleted and logged.*")
+        else:
+            await interaction.followup.send(f"✅ **Auto-Mod Result:** `SAFE`\n\n*This message would be allowed in chat.*")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Evaluation failed: {e}")
+
+
+@bot.tree.command(name="welcome", description="Configure the AI welcome message style for new members")
+@app_commands.describe(style="The personality/style of the greeting (e.g. 'anime', 'funny', 'gamer', 'off' to disable)")
+@app_commands.default_permissions(manage_guild=True)
+async def welcome_command(interaction: discord.Interaction, style: str):
+    if style.lower() in ("off", "disable", "false"):
+        await db.set_config(interaction.guild_id, "welcome", "off")
+        await interaction.response.send_message("👋 **AI Welcome Greeter disabled.**")
+    else:
+        await db.set_config(interaction.guild_id, "welcome", style)
+        await interaction.response.send_message(f"👋 **AI Welcome Greeter Enabled!**\nPersonality/Style set to: **`{style}`**.\nWhen new members join, AI will dynamically generate a unique greeting in your welcome/general channel!")
+
+
+@bot.tree.command(name="announce", description="Generate an engaging server announcement using AI")
+@app_commands.describe(topic="The subject of the announcement (e.g., 'weekend Valorant tournament')")
+@app_commands.default_permissions(manage_messages=True)
+async def announce_command(interaction: discord.Interaction, topic: str):
+    await interaction.response.defer(thinking=True)
+    try:
+        prompt = f"Write an exciting, professional Discord server announcement about: '{topic}'. Format with emojis, bold headers, bullet points, and make it highly engaging! Return ONLY the announcement text."
+        text = await call_ai_generation(prompt, "You are a professional Discord community manager.")
+        if text:
+            embed = discord.Embed(title="📢 Official Announcement", description=text.strip(), color=discord.Color.brand_red())
+            embed.set_footer(text=f"Announced by {interaction.user.display_name} • Powered by AI", icon_url=interaction.user.display_avatar.url)
+            await interaction.channel.send(content="@everyone", embed=embed)
+            await interaction.followup.send("✅ Announcement posted!", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Failed to generate announcement: {e}")
+
+
+@bot.tree.command(name="lockdown", description="Freeze or unfreeze public chat channels in an emergency")
+@app_commands.describe(status="Lock or unlock the channels")
+@app_commands.choices(
+    status=[
+        app_commands.Choice(name="Lock (Freeze)", value="on"),
+        app_commands.Choice(name="Unlock (Unfreeze)", value="off")
+    ]
+)
+@app_commands.default_permissions(manage_channels=True)
+async def lockdown_command(interaction: discord.Interaction, status: str):
+    await interaction.response.defer(thinking=True)
+    guild = interaction.guild
+    if status == "on":
+        locked = 0
+        for chan in guild.text_channels:
+            try:
+                await chan.set_permissions(guild.default_role, send_messages=False, reason="Emergency Lockdown")
+                locked += 1
+            except Exception:
+                pass
+        await interaction.followup.send(f"🚨 **EMERGENCY LOCKDOWN INITIATED!** 🚨\nLocked `{locked}` public text channels. Regular members cannot type until unlocked.")
+    else:
+        unlocked = 0
+        for chan in guild.text_channels:
+            try:
+                await chan.set_permissions(guild.default_role, send_messages=None, reason="Lockdown Lifted")
+                unlocked += 1
+            except Exception:
+                pass
+        await interaction.followup.send(f"🔓 **LOCKDOWN LIFTED!** Unlocked `{unlocked}` channels. Public chat is reopened.")
+
+
+@bot.tree.command(name="purge", description="Quickly delete a specified number of messages from this channel")
+@app_commands.describe(amount="Number of messages to delete (max 100)")
+@app_commands.default_permissions(manage_messages=True)
+async def purge_command(interaction: discord.Interaction, amount: int):
+    amount = max(1, min(amount, 100))
+    await interaction.response.defer(ephemeral=True)
+    try:
+        deleted = await interaction.channel.purge(limit=amount)
+        await interaction.followup.send(f"🧹 Successfully purged `{len(deleted)}` messages.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Purge failed: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="ticket", description="Send the interactive Support Ticket panel into this channel")
+@app_commands.default_permissions(manage_guild=True)
+async def ticket_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎟️ Support & Help Desk",
+        description="Need assistance from our moderators or staff team?\n\nClick the **🎟️ Open Support Ticket** button below to create a private, secure chat room with our team!",
+        color=discord.Color.blurple()
+    )
+    embed.set_footer(text="Private 1-on-1 Support • Powered by AI")
+    await interaction.channel.send(embed=embed, view=TicketView())
+    await interaction.response.send_message("✅ Support ticket panel posted!", ephemeral=True)
+
+
+@bot.tree.command(name="suggest", description="Submit a suggestion to the community suggestion box")
+@app_commands.describe(idea="Your suggestion or idea for the server")
+async def suggest_command(interaction: discord.Interaction, idea: str):
+    guild = interaction.guild
+    sug_chan = discord.utils.get(guild.text_channels, name="💡-suggestions") or discord.utils.get(guild.text_channels, name="suggestions") or discord.utils.get(guild.text_channels, name="server-suggestions") or interaction.channel
+    
+    embed = discord.Embed(title="💡 Community Suggestion", description=f"**{idea}**", color=discord.Color.gold())
+    embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+    embed.set_footer(text="Status: [UNDER REVIEW] • Vote with 👍 or 👎 below!")
+    
+    try:
+        sug_msg = await sug_chan.send(embed=embed)
+        await sug_msg.add_reaction("👍")
+        await sug_msg.add_reaction("👎")
+        if sug_chan.id != interaction.channel_id:
+            await interaction.response.send_message(f"✅ Your suggestion was posted in {sug_chan.mention}!", ephemeral=True)
+        else:
+            await interaction.response.send_message("✅ Suggestion posted!", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to post suggestion: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="poll", description="Create a public poll with up to 10 options")
+@app_commands.describe(
+    question="The question for the poll",
+    options="The choices, separated by | or comma (e.g. 'Yes | No' or 'Blue, Red, Green')"
+)
+async def poll_command(interaction: discord.Interaction, question: str, options: str):
+    if "|" in options:
+        parts = [p.strip() for p in options.split("|") if p.strip()]
+    else:
+        parts = [p.strip() for p in options.split(",") if p.strip()]
+        
+    if len(parts) < 2:
+        await interaction.response.send_message("❌ Please provide at least 2 options!", ephemeral=True)
+        return
+        
+    options_list = parts[:10]
+    emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    desc_lines = [f"{emojis[i]} **{opt}**" for i, opt in enumerate(options_list)]
+    
+    embed = discord.Embed(title=f"📊 {question}", description="\n\n".join(desc_lines), color=discord.Color.teal())
+    embed.set_footer(text=f"Poll created by {interaction.user.display_name} • React to vote!", icon_url=interaction.user.display_avatar.url)
+    
+    try:
+        poll_msg = await interaction.channel.send(embed=embed)
+        await interaction.response.send_message("✅ Poll created!", ephemeral=True)
+        for i in range(len(options_list)):
+            await poll_msg.add_reaction(emojis[i])
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to create poll: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="addcategory", description="Ask AI to design and add a single category with custom channels")
+@app_commands.describe(description="Description of the category (e.g. 'VIP anime lounge with 4k stream rooms')")
+@app_commands.default_permissions(manage_guild=True)
+async def addcategory_command(interaction: discord.Interaction, description: str):
+    await interaction.response.defer(thinking=True)
+    try:
+        sys_inst = f"The user wants to create a single Discord category: '{description}'. Return ONLY a raw JSON object with this structure: {{\"categories\": [{{\"name\": \"Category Name\", \"private_for\": [], \"channels\": [{{\"name\": \"chan-name\", \"type\": \"text\", \"topic\": \"chan topic\"}}, {{\"name\": \"voice-chan\", \"type\": \"voice\"}}]}}]}}. Do not include markdown or code blocks. Just JSON."
+        text = await call_ai_generation(description, sys_inst, json_mode=True)
+        
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            lines = lines[1:] if lines[0].startswith("```") else lines
+            lines = lines[:-1] if lines and lines[-1].startswith("```") else lines
+            text = "\n".join(lines).strip()
+            
+        data = json.loads(text)
+        await interaction.edit_original_response(content="⚙️ **Building new category and channels...**")
+        await build_server_structure(interaction.guild, data, interaction.channel)
+    except Exception as e:
+        await interaction.edit_original_response(content=f"❌ Failed to build category: {e}")
+
+
+@bot.tree.command(name="teardown", description="Delete only the roles, categories, and channels created by this bot")
+@app_commands.default_permissions(manage_guild=True)
+async def teardown_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="⚠️ Confirm Teardown",
+        description="Are you sure you want to delete all roles, categories, and channels created by the Gemini Bot in this server?",
+        color=discord.Color.orange()
+    )
+    view = TeardownConfirmView(interaction.user, interaction.guild)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@bot.tree.command(name="nuke", description="⚠️ COMPLETE SERVER NUKE — Wipes all channels, categories, and roles")
+@app_commands.default_permissions(administrator=True)
+async def nuke_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="⚠️ DANGER: COMPLETE SERVER NUKE ⚠️",
+        description="Are you sure you want to delete **EVERY SINGLE CHANNEL, CATEGORY, AND ROLE** in this entire server?\n\nThis will wipe all existing rooms and create a fresh `#💥-server-nuked` channel so you can run `/setup` on a clean slate.\n\n**THIS CANNOT BE UNDONE!**",
+        color=discord.Color.red()
+    )
+    view = NukeConfirmView(interaction.user, interaction.guild)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@bot.tree.command(name="setup", description="Generate a server structure preview from text and build it")
+@app_commands.describe(description="Description of the server (e.g. 'community server for anime lovers with art showcase')")
+@app_commands.default_permissions(manage_guild=True)
+async def setup_command(interaction: discord.Interaction, description: str):
+    await interaction.response.defer(thinking=True)
+    try:
+        raw_response = await call_ai_generation(description, SYSTEM_PROMPT, json_mode=True)
+        raw_response = raw_response.strip()
+
+        if raw_response.startswith("```"):
+            lines = raw_response.splitlines()
+            lines = lines[1:] if lines[0].startswith("```") else lines
+            lines = lines[:-1] if lines and lines[-1].startswith("```") else lines
+            raw_response = "\n".join(lines).strip()
+    except Exception as e:
+        logger.error(f"AI API error during setup: {e}")
+        await interaction.followup.send(f"❌ **AI API Connection Failed:** `{e}`\n\n💡 *Make sure your API key in environment variables is valid!*")
+        return
+
+    try:
+        data = json.loads(raw_response)
+    except Exception as e:
+        logger.error(f"JSON parse error: {e}\nRaw response: {raw_response}")
+        await interaction.followup.send("❌ Couldn't understand the generated structure. Try rephrasing your prompt.")
+        return
+
+    roles_summary = [f"`{r['name']}` ({r.get('color', '#fff')})" for r in data.get("roles", [])]
+    categories_summary = []
+    total_channels = 0
+
+    for cat in data.get("categories", []):
+        chans = cat.get("channels", [])
+        total_channels += len(chans)
+        private_tag = " 🔒" if cat.get("private_for") else ""
+        
+        chan_names = []
+        for c in chans:
+            c_name = c.get('name', 'channel')
+            if c.get('topic'):
+                chan_names.append(f"#{c_name} 💬")
+            else:
+                chan_names.append(f"#{c_name}")
+                
+        categories_summary.append(f"**{cat.get('name')}**{private_tag} ({len(chans)} channels: {', '.join(chan_names[:5])}{'...' if len(chan_names)>5 else ''})")
+
+    embed = discord.Embed(title="📋 Server Structure Preview", description="Review the AI-generated layout below before creating channels and roles.\n*(Channels marked with 💬 include automatic topics & descriptions!)*", color=discord.Color.gold())
+    embed.add_field(name="🎭 Roles to Create", value=", ".join(roles_summary) or "None", inline=False)
+    embed.add_field(name=f"📁 Categories & Channels ({total_channels} channels total)", value="\n".join(categories_summary) or "None", inline=False)
+    embed.set_footer(text="Click Confirm & Build below to execute this plan.")
+
+    view = SetupConfirmView(interaction.user, interaction.guild, data, interaction)
+    await interaction.followup.send(embed=embed, view=view)
+
+
+# ── Discord Event Listeners ─────────────────────────────────────────────────
+
+@bot.event
 async def on_member_join(member):
     guild = member.guild
-    style = resource_manager.get_config(guild.id, "welcome", "off")
+    style = await db.get_config(guild.id, "welcome", "off")
     if not style or style.lower() == "off":
         return
 
@@ -620,7 +896,7 @@ async def on_member_join(member):
 
     try:
         prompt = f"Write a short, warm, and exciting 2-sentence welcome greeting for user '{member.display_name}' joining our Discord community '{guild.name}'. Write it in the personality/style of: '{style}'. Use emojis and format nicely!"
-        text = call_ai_generation(prompt, "You are a professional, friendly Discord welcome greeter.")
+        text = await call_ai_generation(prompt, "You are a professional, friendly Discord welcome greeter.")
         if text:
             embed = discord.Embed(title=f"👋 Welcome to {guild.name}!", description=f"{member.mention}\n\n{text.strip()}", color=discord.Color.gold())
             embed.set_thumbnail(url=member.display_avatar.url)
@@ -629,19 +905,18 @@ async def on_member_join(member):
         logger.error(f"Error sending welcome message: {e}")
 
 
-@client.event
+@bot.event
 async def on_message(message):
-    if message.author == client.user:
+    if message.author == bot.user:
         return
 
     # ── Auto-Mod Check ─────────────────────────────────────────────────────
-    if not message.author.bot:
-        automod_enabled = resource_manager.get_config(message.guild.id, "automod", True)
+    if not message.author.bot and message.guild:
+        automod_enabled = await db.get_config(message.guild.id, "automod", True)
         if automod_enabled:
             content = message.content.strip()
-            if content and not content.startswith("!"):
-                # 1. Instant Local Filter (Free and uses ZERO Gemini API quota)
-                import re
+            if content:
+                # 1. Instant Local Filter (Free and uses ZERO API quota)
                 profanities = [
                     "fuck", "bastard", "asshole", "bitch", "cunt", "motherfucker", "mother fucker", 
                     "nigger", "faggot", "retard", "kys", "kill yourself", "dickhead", "pussy", 
@@ -673,7 +948,7 @@ async def on_message(message):
                 if is_toxic_local:
                     try:
                         await message.delete()
-                        warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini Auto-Mod (Local Shield)** for violating community safety rules.")
+                        warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Auto-Mod (Local Shield)** for violating community safety rules.")
                         await asyncio.sleep(5)
                         await warn_msg.delete()
                         
@@ -691,16 +966,16 @@ async def on_message(message):
                         return
 
                 # 2. Optional AI Fallback Filter (Requires automod_mode set to 'ai')
-                automod_mode = resource_manager.get_config(message.guild.id, "automod_mode", "local")
+                automod_mode = await db.get_config(message.guild.id, "automod_mode", "local")
                 if automod_mode == "ai":
                     try:
                         prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{content}'."
-                        text = call_ai_generation(prompt, "You are an expert content moderator. Respond with ONLY the word SAFE or TOXIC. Do not add any other text.")
+                        text = await call_ai_generation(prompt, "You are an expert content moderator. Respond with ONLY the word SAFE or TOXIC. Do not add any other text.")
                         result = text.strip().upper()
                         if "TOXIC" in result:
                                 try:
                                     await message.delete()
-                                    warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Gemini AI Auto-Mod** for violating community safety rules.")
+                                    warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **AI Auto-Mod** for violating community safety rules.")
                                     await asyncio.sleep(5)
                                     await warn_msg.delete()
                                     
@@ -710,353 +985,20 @@ async def on_message(message):
                                         log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
                                         log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
                                         log_embed.add_field(name="Deleted Content", value=content[:1000], inline=False)
-                                        log_embed.add_field(name="Reason", value="Flagged as TOXIC by Gemini AI", inline=True)
+                                        log_embed.add_field(name="Reason", value="Flagged as TOXIC by AI", inline=True)
                                         await mod_log.send(embed=log_embed)
                                     return
                                 except Exception as del_err:
                                     logger.error(f"Auto-Mod AI delete failed: {del_err}")
                                     return
                     except Exception as e:
-                        # Log error but don't spam the chat with 429 quota exceptions!
-                        logger.error(f"Auto-Mod Gemini evaluation error: {e}")
+                        logger.error(f"Auto-Mod AI evaluation error: {e}")
+
+    # Process traditional commands if any are still defined via bot.command() (optional)
+    await bot.process_commands(message)
 
 
-
-    try:
-        # Command: !help
-        if message.content.strip().lower() in ("!help", "!setuphelp"):
-            logger.info(f"Help command triggered by {message.author} in {message.guild.name}")
-            embed = discord.Embed(title="🤖 Discord Gemini Server Builder & Community Shield", description="An all-in-one AI Architect, Auto-Mod, and Community Management Bot powered by Gemini 2.5 Flash!", color=discord.Color.blurple())
-            embed.add_field(name="🏗️ **AI Server Architect**", value="• `!setup <desc>` — Build full server with roles & topics\n• `!addcategory <desc>` — AI builds & adds 1 category\n• `!teardown` — Delete only bot-created items\n• `!nuke` — **DANGER:** Wipe entire server clean", inline=False)
-            embed.add_field(name="🛡️ **Security & Moderation**", value="• `!automod <on/off>` — AI Toxic & Scam Shield\n• `!lockdown <on/off>` — Emergency chat freeze\n• `!purge <num>` — Instant spam/chat cleaner", inline=False)
-            embed.add_field(name="💬 **Community & Engagement**", value="• `!welcome <style/off>` — AI Dynamic Join Greeter\n• `!announce <topic>` — AI Announcement Writer\n• `!ticket` — Create interactive Support Ticket button\n• `!suggest <idea>` — Interactive suggestion box\n• `!poll <question> | <opt1> | <opt2>` — Reaction poll", inline=False)
-            embed.set_footer(text="Powered by Google Gemini 2.5 Flash")
-            await message.reply(embed=embed)
-            return
-
-        # Command: !automod <on/off>
-        if message.content.strip().lower().startswith("!automod"):
-            if not message.author.guild_permissions.manage_guild:
-                await message.reply("❌ You need **Manage Server** permissions to configure Auto-Mod.")
-                return
-            arg = message.content[len("!automod"):].strip().lower()
-            if arg in ("on", "true", "enable"):
-                resource_manager.set_config(message.guild.id, "automod", True)
-                resource_manager.set_config(message.guild.id, "automod_mode", "local")
-                await message.reply("🧠 **Auto-Mod is now ON (Local Shield)!**\nScanning real-time chat instantly for curse words, slurs, and spam links without using API key quota.")
-            elif arg == "ai":
-                resource_manager.set_config(message.guild.id, "automod", True)
-                resource_manager.set_config(message.guild.id, "automod_mode", "ai")
-                await message.reply("🧠 **Auto-Mod set to AI Mode!**\nReal-time messages will be scanned using Google Gemini AI. *(Note: This uses your Gemini API key quota!)*")
-            elif arg == "local":
-                resource_manager.set_config(message.guild.id, "automod", True)
-                resource_manager.set_config(message.guild.id, "automod_mode", "local")
-                await message.reply("🛡️ **Auto-Mod set to Local Mode.**\nUsing instant local filter to save API quota.")
-            elif arg in ("off", "false", "disable"):
-                resource_manager.set_config(message.guild.id, "automod", False)
-                await message.reply("🛡️ **Auto-Mod disabled.**")
-            else:
-                enabled = "ON" if resource_manager.get_config(message.guild.id, "automod", True) else "OFF"
-                mode = resource_manager.get_config(message.guild.id, "automod_mode", "local").upper()
-                await message.reply(f"ℹ️ **Auto-Mod Status:** `{enabled}` (Mode: `{mode}`)\n\nUsage:\n• `!automod on` / `!automod off` — Enable/Disable Auto-Mod\n• `!automod local` — Use free local filter (instant)\n• `!automod ai` — Use advanced Gemini AI toxicity scanner")
-            return
-
-        # Command: !testautomod <text>
-        if message.content.strip().lower().startswith("!testautomod"):
-            if not message.author.guild_permissions.manage_guild:
-                await message.reply("❌ You need **Manage Server** permissions to test Auto-Mod.")
-                return
-            test_text = message.content[len("!testautomod"):].strip()
-            if not test_text:
-                await message.reply("❌ Please provide the text to test.\nExample: `!testautomod you are a stupid idiot`")
-                return
-            status_msg = await message.reply("🔍 Evaluating text with Gemini Auto-Mod AI...")
-            try:
-                prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{test_text}'."
-                text = call_ai_generation(prompt, "You are an expert content moderator. Respond with ONLY the word SAFE or TOXIC. Do not add any other text.")
-                result = text.strip().upper()
-                if "TOXIC" in result:
-                    await status_msg.edit(content=f"🚨 **Gemini Auto-Mod Result:** `TOXIC`\n\n*If sent by a regular member, this message would have been **deleted**, and logged in `#mod-logs`!*")
-                else:
-                    await status_msg.edit(content=f"✅ **Gemini Auto-Mod Result:** `SAFE`\n\n*This message would be allowed in chat.*")
-            except Exception as e:
-                await status_msg.edit(content=f"❌ Evaluation failed: {e}")
-            return
-
-        # Command: !welcome <style>
-        if message.content.strip().lower().startswith("!welcome"):
-            if not message.author.guild_permissions.manage_guild:
-                await message.reply("❌ You need **Manage Server** permissions to configure Welcome Architect.")
-                return
-            style = message.content[len("!welcome"):].strip()
-            if not style or style.lower() in ("off", "disable", "false"):
-                resource_manager.set_config(message.guild.id, "welcome", "off")
-                await message.reply("👋 **AI Welcome Greeter disabled.**")
-            else:
-                resource_manager.set_config(message.guild.id, "welcome", style)
-                await message.reply(f"👋 **AI Welcome Greeter Enabled!**\nPersonality/Style set to: **`{style}`**.\nWhen new members join, Gemini will dynamically generate a unique greeting in your welcome/general channel!")
-            return
-
-        # Command: !announce <topic>
-        if message.content.strip().lower().startswith("!announce"):
-            if not message.author.guild_permissions.mention_everyone and not message.author.guild_permissions.manage_messages:
-                await message.reply("❌ You need **Manage Messages** or **Mention Everyone** permissions to make AI announcements.")
-                return
-            topic = message.content[len("!announce"):].strip()
-            if not topic:
-                await message.reply("❌ Please specify what to announce.\nExample: `!announce weekend valorant tournament with $100 prize pool`")
-                return
-            status_msg = await message.reply("📢 Crafting announcement with Gemini AI...")
-            try:
-                prompt = f"Write an exciting, professional Discord server announcement about: '{topic}'. Format with emojis, bold headers, bullet points, and make it highly engaging! Return ONLY the announcement text."
-                text = call_ai_generation(prompt, "You are a professional Discord community manager.")
-                if text:
-                    embed = discord.Embed(title="📢 Official Announcement", description=text.strip(), color=discord.Color.brand_red())
-                    embed.set_footer(text=f"Announced by {message.author.display_name} • Powered by AI", icon_url=message.author.display_avatar.url)
-                    await status_msg.delete()
-                    await message.channel.send(content="@everyone", embed=embed)
-                    await message.delete()
-            except Exception as e:
-                await status_msg.edit(content=f"❌ Failed to generate announcement: {e}")
-            return
-
-        # Command: !lockdown <on/off>
-        if message.content.strip().lower().startswith("!lockdown"):
-            if not message.author.guild_permissions.manage_channels and not message.author.guild_permissions.administrator:
-                await message.reply("❌ You need **Manage Channels** or **Administrator** permissions to toggle server lockdown.")
-                return
-            arg = message.content[len("!lockdown"):].strip().lower()
-            if arg == "on":
-                locked = 0
-                for chan in message.guild.text_channels:
-                    try:
-                        await chan.set_permissions(message.guild.default_role, send_messages=False, reason="Emergency Lockdown")
-                        locked += 1
-                    except Exception:
-                        pass
-                await message.reply(f"🚨 **EMERGENCY LOCKDOWN INITIATED!** 🚨\nLocked `{locked}` public text channels. Regular members cannot type until you run `!lockdown off`.")
-            elif arg == "off":
-                unlocked = 0
-                for chan in message.guild.text_channels:
-                    try:
-                        await chan.set_permissions(message.guild.default_role, send_messages=None, reason="Lockdown Lifted")
-                        unlocked += 1
-                    except Exception:
-                        pass
-                await message.reply(f"🔓 **LOCKDOWN LIFTED!** Unlocked `{unlocked}` channels. Public chat is reopened.")
-            else:
-                await message.reply("Usage: `!lockdown on` or `!lockdown off`")
-            return
-
-        # Command: !purge <number> or !clear <number>
-        if message.content.strip().lower().startswith("!purge") or message.content.strip().lower().startswith("!clear"):
-            if not message.author.guild_permissions.manage_messages:
-                await message.reply("❌ You need **Manage Messages** permissions to purge chat.")
-                return
-            parts = message.content.split()
-            if len(parts) < 2 or not parts[1].isdigit():
-                await message.reply("❌ Please specify the number of messages to delete.\nExample: `!purge 30`")
-                return
-            num = min(int(parts[1]), 100)
-            try:
-                deleted = await message.channel.purge(limit=num + 1)
-                conf = await message.channel.send(f"🧹 Successfully purged `{len(deleted) - 1}` messages.")
-                await asyncio.sleep(4)
-                await conf.delete()
-            except Exception as e:
-                await message.reply(f"❌ Purge failed: {e}")
-            return
-
-        # Command: !ticket or !setuptickets
-        if message.content.strip().lower() in ("!ticket", "!setuptickets"):
-            if not message.author.guild_permissions.manage_guild:
-                await message.reply("❌ You need **Manage Server** permissions to setup the ticket panel.")
-                return
-            embed = discord.Embed(
-                title="🎟️ Support & Help Desk",
-                description="Need assistance from our moderators or staff team?\n\nClick the **🎟️ Open Support Ticket** button below to create a private, secure chat room with our team!",
-                color=discord.Color.blurple()
-            )
-            embed.set_footer(text="Private 1-on-1 Support • Powered by Gemini Bot")
-            await message.channel.send(embed=embed, view=TicketView())
-            await message.delete()
-            return
-
-        # Command: !suggest <idea>
-        if message.content.strip().lower().startswith("!suggest"):
-            idea = message.content[len("!suggest"):].strip()
-            if not idea:
-                await message.reply("❌ Please include your suggestion!\nExample: `!suggest add an anime movie night every Saturday`")
-                return
-            sug_chan = discord.utils.get(message.guild.text_channels, name="💡-suggestions") or discord.utils.get(message.guild.text_channels, name="suggestions") or discord.utils.get(message.guild.text_channels, name="server-suggestions") or message.channel
-            embed = discord.Embed(title="💡 Community Suggestion", description=f"**{idea}**", color=discord.Color.gold())
-            embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
-            embed.set_footer(text="Status: [UNDER REVIEW] • Vote with 👍 or 👎 below!")
-            sug_msg = await sug_chan.send(embed=embed)
-            await sug_msg.add_reaction("👍")
-            await sug_msg.add_reaction("👎")
-            if sug_chan.id != message.channel.id:
-                await message.reply(f"✅ Your suggestion was posted in {sug_chan.mention}!")
-            await message.delete()
-            return
-
-        # Command: !poll <question> | <opt1> | <opt2>
-        if message.content.strip().lower().startswith("!poll"):
-            content = message.content[len("!poll"):].strip()
-            if "|" not in content:
-                await message.reply("❌ Please format your poll with `|` separating question and options!\nExample: `!poll What game should we play? | Valorant | CS2 | Apex Legends`")
-                return
-            parts = [p.strip() for p in content.split("|") if p.strip()]
-            if len(parts) < 3:
-                await message.reply("❌ Please provide a question and at least 2 options!")
-                return
-            question = parts[0]
-            options = parts[1:11]
-            emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-            desc_lines = [f"{emojis[i]} **{opt}**" for i, opt in enumerate(options)]
-            embed = discord.Embed(title=f"📊 {question}", description="\n\n".join(desc_lines), color=discord.Color.teal())
-            embed.set_footer(text=f"Poll created by {message.author.display_name} • React to vote!", icon_url=message.author.display_avatar.url)
-            poll_msg = await message.channel.send(embed=embed)
-            for i in range(len(options)):
-                await poll_msg.add_reaction(emojis[i])
-            await message.delete()
-            return
-
-        # Command: !addcategory <description>
-        if message.content.strip().lower().startswith("!addcategory"):
-            if not message.author.guild_permissions.manage_guild:
-                await message.reply("❌ You need **Manage Server** permissions to use this command.")
-                return
-            desc = message.content[len("!addcategory"):].strip()
-            if not desc:
-                await message.reply("❌ Please describe the category.\nExample: `!addcategory VIP anime watch party lounge with 4k stream rooms`")
-                return
-            status_msg = await message.reply(f"✨ Designing category `{desc}` with AI...")
-            try:
-                sys_inst = f"The user wants to create a single Discord category: '{desc}'. Return ONLY a raw JSON object with this structure: {{\"categories\": [{{\"name\": \"Category Name\", \"private_for\": [], \"channels\": [{{\"name\": \"chan-name\", \"type\": \"text\", \"topic\": \"chan topic\"}}, {{\"name\": \"voice-chan\", \"type\": \"voice\"}}]}}]}}. Do not include markdown or code blocks. Just JSON."
-                text = call_ai_generation(desc, sys_inst, json_mode=True)
-                data = json.loads(text.strip())
-                await status_msg.edit(content="⚙️ **Building new category and channels...**")
-                await build_server_structure(message.guild, data, message.channel)
-                await status_msg.delete()
-            except Exception as e:
-                await status_msg.edit(content=f"❌ Failed to build category: {e}")
-            return
-
-        # Command: !help
-        if message.content.strip().lower() in ("!help", "!setuphelp"):
-            logger.info(f"Help command triggered by {message.author} in {message.guild.name}")
-            embed = discord.Embed(title="🤖 Discord Gemini Server Builder", description="Generate and manage your Discord server layout using AI!", color=discord.Color.blurple())
-            embed.add_field(name="✨ `!setup <description>`", value="Generate a server structure preview from text. Includes emojis, channel topics, roles, and private channels.\n*Example:* `!setup gaming guild with clips, lfg, welcome lounge, and private staff channels`", inline=False)
-            embed.add_field(name="🗑️ `!teardown` or `!cleanup`", value="Delete only the roles, categories, and channels created by this bot.", inline=False)
-            embed.add_field(name="💥 `!nuke` or `!cleanall`", value="**⚠️ DANGER:** Wipes **ALL** channels, categories, and roles in the entire server for a complete reset!", inline=False)
-            embed.set_footer(text="Requires Manage Server permissions")
-            await message.reply(embed=embed)
-            return
-
-        # Command: !teardown or !cleanup
-        if message.content.strip().lower() in ("!teardown", "!cleanup"):
-            logger.info(f"Teardown command triggered by {message.author} in {message.guild.name}")
-            if not message.author.guild_permissions.manage_guild:
-                await message.reply("❌ You need **Manage Server** permissions to use this command.")
-                return
-
-            embed = discord.Embed(
-                title="⚠️ Confirm Teardown",
-                description="Are you sure you want to delete all roles, categories, and channels created by the Gemini Bot in this server?",
-                color=discord.Color.orange()
-            )
-            view = TeardownConfirmView(message.author, message.guild)
-            await message.reply(embed=embed, view=view)
-            return
-
-        # Command: !nuke or !cleanall
-        if message.content.strip().lower() in ("!nuke", "!cleanall", "!resetserver"):
-            logger.info(f"Nuke command triggered by {message.author} in {message.guild.name}")
-            if not message.author.guild_permissions.administrator:
-                await message.reply("❌ You need **Administrator** permissions to use the complete server nuke command.")
-                return
-
-            embed = discord.Embed(
-                title="⚠️ DANGER: COMPLETE SERVER NUKE ⚠️",
-                description="Are you sure you want to delete **EVERY SINGLE CHANNEL, CATEGORY, AND ROLE** in this entire server?\n\nThis will wipe all existing rooms and create a fresh `#💥-server-nuked` channel so you can run `!setup` on a 100% clean slate.\n\n**THIS CANNOT BE UNDONE!**",
-                color=discord.Color.red()
-            )
-            view = NukeConfirmView(message.author, message.guild)
-            await message.reply(embed=embed, view=view)
-            return
-
-        # Command: !setup <description>
-        if message.content.startswith("!setup"):
-            logger.info(f"Setup command triggered by {message.author} in {message.guild.name}: {message.content}")
-            if not message.author.guild_permissions.manage_guild:
-                await message.reply("❌ You need **Manage Server** permissions to use this command.")
-                return
-
-            description = message.content[len("!setup"):].strip()
-            if not description:
-                await message.reply("❌ Please provide a description.\nExample: `!setup community server for anime lovers with art showcase and VIP lounge`")
-                return
-
-            status_message = await message.reply("✨ Generating server plan with AI (including channel topics & roles)... Please wait.")
-            try:
-                raw_response = call_ai_generation(description, SYSTEM_PROMPT, json_mode=True)
-                raw_response = raw_response.strip()
-
-                if raw_response.startswith("```"):
-                    lines = raw_response.splitlines()
-                    lines = lines[1:] if lines[0].startswith("```") else lines
-                    lines = lines[:-1] if lines and lines[-1].startswith("```") else lines
-                    raw_response = "\n".join(lines).strip()
-            except Exception as e:
-                logger.error(f"AI API error during setup: {e}")
-                await status_message.edit(content=f"❌ **AI API Connection Failed:** `{e}`\n\n💡 *Make sure your API key in Render environment variables is valid!*")
-                return
-
-            try:
-                data = json.loads(raw_response)
-            except Exception as e:
-                logger.error(f"JSON parse error: {e}\nRaw response: {raw_response}")
-                await status_message.edit(content="❌ Couldn't understand the generated structure. Try rephrasing your prompt.")
-                return
-
-            # Prepare Preview Embed
-            roles_summary = [f"`{r['name']}` ({r.get('color', '#fff')})" for r in data.get("roles", [])]
-            categories_summary = []
-            total_channels = 0
-
-            for cat in data.get("categories", []):
-                chans = cat.get("channels", [])
-                total_channels += len(chans)
-                private_tag = " 🔒" if cat.get("private_for") else ""
-                
-                # Highlight channels that have topics generated
-                chan_names = []
-                for c in chans:
-                    c_name = c.get('name', 'channel')
-                    if c.get('topic'):
-                        chan_names.append(f"#{c_name} 💬")
-                    else:
-                        chan_names.append(f"#{c_name}")
-                        
-                categories_summary.append(f"**{cat.get('name')}**{private_tag} ({len(chans)} channels: {', '.join(chan_names[:5])}{'...' if len(chan_names)>5 else ''})")
-
-            embed = discord.Embed(title="📋 Server Structure Preview", description="Review the AI-generated layout below before creating channels and roles.\n*(Channels marked with 💬 include automatic topics & descriptions!)*", color=discord.Color.gold())
-            embed.add_field(name="🎭 Roles to Create", value=", ".join(roles_summary) or "None", inline=False)
-            embed.add_field(name=f"📁 Categories & Channels ({total_channels} channels total)", value="\n".join(categories_summary) or "None", inline=False)
-            embed.set_footer(text="Click Confirm & Build below to execute this plan.")
-
-            await status_message.delete()
-            view = SetupConfirmView(message.author, message.guild, data, message)
-            await message.channel.send(embed=embed, view=view)
-
-    except Exception as e:
-        logger.exception(f"Unhandled exception in on_message: {e}")
-        try:
-            await message.reply(f"⚠️ An unexpected error occurred: `{e}`")
-        except Exception:
-            pass
-
+# ── Main Entry Point ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     if not DISCORD_TOKEN or DISCORD_TOKEN == "your_token_here":
@@ -1066,4 +1008,4 @@ if __name__ == "__main__":
     else:
         print("Starting Discord bot...")
         keep_alive()
-        client.run(DISCORD_TOKEN)
+        bot.run(DISCORD_TOKEN)
