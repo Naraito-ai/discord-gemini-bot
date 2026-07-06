@@ -3,6 +3,7 @@ import json
 import asyncio
 import logging
 import re
+import io
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -43,7 +44,6 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
     groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
     
-    # If GEMINI_API_KEY is actually a Groq key (starts with gsk_)
     if gemini_key.startswith("gsk_"):
         groq_key = gemini_key
         gemini_key = ""
@@ -85,7 +85,6 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
             
         config = types.GenerateContentConfig(**config_args)
         
-        # Use client.aio for non-blocking async execution
         resp = await c.aio.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
@@ -130,6 +129,266 @@ Rules:
 - private_for is an optional list of role names that should have exclusive access to this category or channel. For example, if a category or channel is meant only for staff/admins, include "private_for": ["Admin", "Moderator"].
 - topic is an optional but highly recommended string (max 1024 chars) describing the purpose of text channels. For example: "👋 Welcome new members! Please check out the rules." or "💬 General discussion about gaming and life." Always include engaging topics for text channels!
 """
+
+# ── Preset Themes Data ──────────────────────────────────────────────────────
+
+THEME_PRESETS = {
+    "gaming": {
+        "roles": [
+            {"name": "Guild Master", "color": "#FF0000", "hoist": True},
+            {"name": "Officer", "color": "#0000FF", "hoist": True},
+            {"name": "Esports Team", "color": "#00FF00", "hoist": True},
+            {"name": "Member", "color": "#808080", "hoist": False}
+        ],
+        "categories": [
+            {
+                "name": "📌 INFORMATION",
+                "channels": [
+                    {"name": "👋-rules", "type": "text", "topic": "Please read and follow the server rules!"},
+                    {"name": "📢-announcements", "type": "text", "topic": "Official guild announcements and news."},
+                    {"name": "🎁-giveaways", "type": "text", "topic": "Participate in server giveaways here!"}
+                ]
+            },
+            {
+                "name": "💬 TEXT LOUNGES",
+                "channels": [
+                    {"name": "💬-general-chat", "type": "text", "topic": "General chat for members."},
+                    {"name": "🎮-lfg-gaming", "type": "text", "topic": "Looking for group! Find teammates here."},
+                    {"name": "📸-clips-and-highlights", "type": "text", "topic": "Share your best gaming moments!"},
+                    {"name": "🤖-bot-commands", "type": "text", "topic": "Execute commands for discord bots."}
+                ]
+            },
+            {
+                "name": "🔊 VOICE LOUNGES",
+                "channels": [
+                    {"name": "Lounge 1", "type": "voice"},
+                    {"name": "Squad Room A", "type": "voice"},
+                    {"name": "Squad Room B", "type": "voice"},
+                    {"name": "Duo Room", "type": "voice"}
+                ]
+            },
+            {
+                "name": "🔒 STAFF ZONE",
+                "private_for": ["Guild Master", "Officer"],
+                "channels": [
+                    {"name": "🚨-staff-chat", "type": "text", "topic": "Private discussions for the staff team."},
+                    {"name": "🚨-mod-logs", "type": "text", "topic": "Logging moderation events."}
+                ]
+            }
+        ]
+    },
+    "anime": {
+        "roles": [
+            {"name": "Sensei", "color": "#8A2BE2", "hoist": True},
+            {"name": "Senpai", "color": "#FF69B4", "hoist": True},
+            {"name": "Otaku", "color": "#00FFFF", "hoist": True},
+            {"name": "Weeb", "color": "#808080", "hoist": False}
+        ],
+        "categories": [
+            {
+                "name": "📌 ANNOUNCEMENTS",
+                "channels": [
+                    {"name": "👋-rules", "type": "text", "topic": "Read the community rules and code of conduct!"},
+                    {"name": "📢-announcements", "type": "text", "topic": "Server updates and events announcements."},
+                    {"name": "🌸-welcome", "type": "text", "topic": "Welcome room for new Otaku joining us!"}
+                ]
+            },
+            {
+                "name": "🌸 ANIME ZONE",
+                "channels": [
+                    {"name": "💬-general-chat", "type": "text", "topic": "General chat about anime, manga, and gaming."},
+                    {"name": "📺-current-season", "type": "text", "topic": "Discussion on currently airing anime series!"},
+                    {"name": "🎨-art-showcase", "type": "text", "topic": "Share your drawings, edits, and fanart."},
+                    {"name": "🍥-ramen-lounge", "type": "text", "topic": "Casual discussion and food pictures."}
+                ]
+            },
+            {
+                "name": "🔊 VOICE CHATS",
+                "channels": [
+                    {"name": "Stage Room", "type": "voice"},
+                    {"name": "Watch Party 1", "type": "voice"},
+                    {"name": "Watch Party 2", "type": "voice"},
+                    {"name": "Chill Lounge", "type": "voice"}
+                ]
+            },
+            {
+                "name": "🔒 SENSEI ROOM",
+                "private_for": ["Sensei", "Senpai"],
+                "channels": [
+                    {"name": "🔒-staff-only", "type": "text", "topic": "Private lounge for Sensei & Senpai."}
+                ]
+            }
+        ]
+    },
+    "study": {
+        "roles": [
+            {"name": "Professor", "color": "#006400", "hoist": True},
+            {"name": "Tutor", "color": "#FFD700", "hoist": True},
+            {"name": "Study Partner", "color": "#008080", "hoist": True},
+            {"name": "Student", "color": "#808080", "hoist": False}
+        ],
+        "categories": [
+            {
+                "name": "📌 WELCOME & RULES",
+                "channels": [
+                    {"name": "📚-rules", "type": "text", "topic": "Community guidelines for study sessions."},
+                    {"name": "📢-news-and-updates", "type": "text", "topic": "Important study announcements and schedules."}
+                ]
+            },
+            {
+                "name": "📝 STUDY ROOMS",
+                "channels": [
+                    {"name": "💬-study-lounge", "type": "text", "topic": "General study discussions and planning."},
+                    {"name": "🙋-ask-for-help", "type": "text", "topic": "Ask questions about homework or study topics."},
+                    {"name": "📓-resources-share", "type": "text", "topic": "Share useful study websites, PDFs, and notes."},
+                    {"name": "🎯-study-goals", "type": "text", "topic": "Post your daily study goals and track progress!"}
+                ]
+            },
+            {
+                "name": "🔊 CO-WORKING VOICES",
+                "channels": [
+                    {"name": "Focus Room (Muted)", "type": "voice"},
+                    {"name": "Study Session A", "type": "voice"},
+                    {"name": "Study Session B", "type": "voice"},
+                    {"name": "Chill Lounge", "type": "voice"}
+                ]
+            },
+            {
+                "name": "🔒 FACULTY OFFICE",
+                "private_for": ["Professor", "Tutor"],
+                "channels": [
+                    {"name": "🔒-staff-only", "type": "text", "topic": "Private faculty meeting room."}
+                ]
+            }
+        ]
+    },
+    "creator": {
+        "roles": [
+            {"name": "Streamer", "color": "#FF0000", "hoist": True},
+            {"name": "Moderator", "color": "#0000FF", "hoist": True},
+            {"name": "VIP", "color": "#FFD700", "hoist": True},
+            {"name": "Subscribers", "color": "#FF69B4", "hoist": True},
+            {"name": "Fan", "color": "#808080", "hoist": False}
+        ],
+        "categories": [
+            {
+                "name": "📌 BROADCAST INFO",
+                "channels": [
+                    {"name": "👋-welcome", "type": "text", "topic": "Welcome to the fan guild!"},
+                    {"name": "📢-stream-announcements", "type": "text", "topic": "Get notified when we go live!"},
+                    {"name": "🎥-youtube-videos", "type": "text", "topic": "New YouTube video updates."}
+                ]
+            },
+            {
+                "name": "💬 FAN LOUNGE",
+                "channels": [
+                    {"name": "💬-general-chat", "type": "text", "topic": "Chat with the community here!"},
+                    {"name": "💡-suggestions", "type": "text", "topic": "Suggest video or stream ideas."},
+                    {"name": "📸-memes", "type": "text", "topic": "Post memes and funny pictures."},
+                    {"name": "🎮-play-with-me", "type": "text", "topic": "LFG to play games during fan streams!"}
+                ]
+            },
+            {
+                "name": "🔊 VOICE CHANNELS",
+                "channels": [
+                    {"name": "Lounge", "type": "voice"},
+                    {"name": "Gaming with Fans", "type": "voice"},
+                    {"name": "Sub Lounge", "type": "voice"}
+                ]
+            },
+            {
+                "name": "🔒 STAFF CONTROL",
+                "private_for": ["Streamer", "Moderator"],
+                "channels": [
+                    {"name": "🚨-staff-chat", "type": "text", "topic": "Private channel for staff and streamer."},
+                    {"name": "🚨-mod-logs", "type": "text", "topic": "Moderation bot logs."}
+                ]
+            }
+        ]
+    },
+    "business": {
+        "roles": [
+            {"name": "Director", "color": "#1A5276", "hoist": True},
+            {"name": "Manager", "color": "#5DADE2", "hoist": True},
+            {"name": "Employee", "color": "#808080", "hoist": False}
+        ],
+        "categories": [
+            {
+                "name": "📌 GENERAL INFO",
+                "channels": [
+                    {"name": "📢-announcements", "type": "text", "topic": "Important corporate announcements."},
+                    {"name": "📅-schedule", "type": "text", "topic": "Upcoming company events and schedules."},
+                    {"name": "🏢-company-info", "type": "text", "topic": "General company links and resources."}
+                ]
+            },
+            {
+                "name": "💬 WORKSPACE",
+                "channels": [
+                    {"name": "💬-general-discussion", "type": "text", "topic": "General workspace discussion."},
+                    {"name": "💡-project-ideas", "type": "text", "topic": "Brainstorming new projects."},
+                    {"name": "📎-file-sharing", "type": "text", "topic": "Share project mockups and docs here."},
+                    {"name": "🤝-client-feedback", "type": "text", "topic": "Post client feedback and suggestions."}
+                ]
+            },
+            {
+                "name": "🔊 MEETING ROOMS",
+                "channels": [
+                    {"name": "Conference Room A", "type": "voice"},
+                    {"name": "Conference Room B", "type": "voice"},
+                    {"name": "Watercooler (Casual)", "type": "voice"}
+                ]
+            },
+            {
+                "name": "🔒 EXEC ZONE",
+                "private_for": ["Director", "Manager"],
+                "channels": [
+                    {"name": "🔒-directors-only", "type": "text", "topic": "Confidential management discussions."}
+                ]
+            }
+        ]
+    }
+}
+
+# ── Aesthetic Letter Converters ─────────────────────────────────────────────
+
+SMALL_CAPS_MAP = {
+    'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ',
+    'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ',
+    's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ',
+    'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ꜰ', 'G': 'ɢ', 'H': 'ʜ', 'I': 'ɪ',
+    'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ', 'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ',
+    'S': 'ꜱ', 'T': 'ᴛ', 'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x', 'Y': 'ʏ', 'Z': 'ᴢ'
+}
+
+BUBBLE_MAP = {
+    'a': 'ⓐ', 'b': 'ⓑ', 'c': 'ⓒ', 'd': 'ⓓ', 'e': 'ⓔ', 'f': 'ⓕ', 'g': 'ⓖ', 'h': 'ⓗ', 'i': 'ⓘ',
+    'j': 'ⓙ', 'k': 'ⓚ', 'l': 'ⓛ', 'm': 'ⓜ', 'n': 'ⓝ', 'o': 'ⓞ', 'p': 'ⓟ', 'q': 'ⓠ', 'r': 'ⓡ',
+    's': 'ⓢ', 't': 'ⓣ', 'u': 'ⓤ', 'v': 'ⓥ', 'w': 'ⓦ', 'x': 'ⓧ', 'y': 'ⓨ', 'z': 'ⓩ',
+    'A': 'ⓐ', 'B': 'ⓑ', 'C': 'ⓒ', 'D': 'ⓓ', 'E': 'ⓔ', 'F': 'ⓕ', 'G': 'ⓖ', 'H': 'ⓗ', 'I': 'ⓘ',
+    'J': 'ⓙ', 'K': 'ⓚ', 'L': 'ⓛ', 'M': 'ⓜ', 'N': 'ⓝ', 'O': 'ⓞ', 'P': 'ⓟ', 'Q': 'ⓠ', 'R': 'ⓡ',
+    'S': 'ⓢ', 'T': 'ⓣ', 'U': 'ⓤ', 'V': 'ⓥ', 'W': 'ⓦ', 'X': 'ⓧ', 'Y': 'ⓨ', 'Z': 'ⓩ',
+    '0': '⓪', '1': '①', '2': '②', '3': '③', '4': '④', '5': '⑤', '6': '⑥', '7': '⑦', '8': '⑧', '9': '⑨'
+}
+
+def style_text(text: str, style_type: str) -> str:
+    if style_type == "lowercase":
+        return text.lower().replace(" ", "-")
+    elif style_type == "uppercase":
+        return text.upper().replace(" ", "-")
+    elif style_type == "small_caps":
+        res = []
+        for char in text:
+            res.append(SMALL_CAPS_MAP.get(char, char))
+        return "".join(res)
+    elif style_type == "bubble":
+        res = []
+        for char in text:
+            res.append(BUBBLE_MAP.get(char, char))
+        return "".join(res)
+    elif style_type == "spaced":
+        chars = [char for char in text]
+        return " ".join(chars)
+    return text
 
 # ── Teardown & Nuke Handlers ───────────────────────────────────────────────
 
@@ -186,7 +445,6 @@ async def nuke_guild(guild):
     stats = {"roles": 0, "categories": 0, "channels": 0}
     logger.info(f"Starting TOTAL NUKE for guild {guild.name} ({guild.id})...")
 
-    # Create a clean default channel so server isn't 100% empty
     clean_channel = None
     try:
         clean_channel = await guild.create_text_channel(
@@ -318,7 +576,7 @@ class NukeConfirmView(discord.ui.View):
         embed.add_field(name="Channels Deleted", value=str(stats['channels']), inline=True)
         embed.add_field(name="Categories Deleted", value=str(stats['categories']), inline=True)
         embed.add_field(name="Roles Deleted", value=str(stats['roles']), inline=True)
-        embed.add_field(name="Next Step", value="Use `/setup <description>` right here to build your new server layout on a clean slate!", inline=False)
+        embed.add_field(name="Next Step", value="Use `/setup` or select a preset theme to build your new layout on a clean slate!", inline=False)
         embed.set_footer(text="Powered by AI")
         
         if clean_channel:
@@ -353,7 +611,6 @@ class TicketView(discord.ui.View):
 
     @discord.ui.button(label="🎟️ Open Support Ticket", style=discord.ButtonStyle.primary, emoji="🎟️", custom_id="gemini_bot:open_ticket")
     async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Support ticket operations can take some time, so we defer first
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         user = interaction.user
@@ -559,7 +816,6 @@ class GeminiBot(commands.Bot):
         
     async def on_ready(self):
         logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
-        # Sync slash commands globally
         try:
             synced = await self.tree.sync()
             logger.info(f"Synced {len(synced)} slash commands globally.")
@@ -578,11 +834,270 @@ async def help_command(interaction: discord.Interaction):
         description="An all-in-one AI Architect, Auto-Mod, and Community Management Bot powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
-    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup <desc>` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
+    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner", inline=False)
     embed.add_field(name="💬 **Community & Engagement**", value="• `/welcome <style>` — AI Dynamic Join Greeter\n• `/announce <topic>` — AI Announcement Writer\n• `/ticket` — Create interactive Support Ticket button\n• `/suggest <idea>` — Interactive suggestion box\n• `/poll <question> <options>` — Reaction poll", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="setup", description="Generate a server structure preview and build it (Theme or Custom)")
+@app_commands.describe(
+    theme="An instant, ready-made preset theme for your server (Gaming, Anime, Study, Creator, Business)",
+    description="Custom server description to generate via AI (e.g., 'art portfolio server with critiques')"
+)
+@app_commands.choices(
+    theme=[
+        app_commands.Choice(name="Gaming Guild", value="gaming"),
+        app_commands.Choice(name="Anime Community", value="anime"),
+        app_commands.Choice(name="Study Group", value="study"),
+        app_commands.Choice(name="Content Creator / Streamer", value="creator"),
+        app_commands.Choice(name="Business / Team Workspace", value="business")
+    ]
+)
+@app_commands.default_permissions(manage_guild=True)
+async def setup_command(interaction: discord.Interaction, theme: str = None, description: str = None):
+    if not theme and not description:
+        await interaction.response.send_message("❌ Please provide a preset `theme` OR a custom `description` to set up your server.", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True)
+    data = None
+    
+    # Case 1: Preset Theme only (runs instantly, zero quota usage)
+    if theme and not description:
+        logger.info(f"Loading preset theme '{theme}' for guild '{interaction.guild.name}'")
+        data = THEME_PRESETS.get(theme)
+        
+    # Case 2: Custom Description or Hybrid Prompt (runs AI)
+    else:
+        try:
+            prompt = description
+            sys_prompt = SYSTEM_PROMPT
+            
+            if theme:
+                theme_data = THEME_PRESETS.get(theme)
+                prompt = f"Using this preset layout as a reference: {json.dumps(theme_data)}, please modify and expand it to match the user's custom request: '{description}'."
+                
+            raw_response = await call_ai_generation(prompt, sys_prompt, json_mode=True)
+            raw_response = raw_response.strip()
+
+            if raw_response.startswith("```"):
+                lines = raw_response.splitlines()
+                lines = lines[1:] if lines[0].startswith("```") else lines
+                lines = lines[:-1] if lines and lines[-1].startswith("```") else lines
+                raw_response = "\n".join(lines).strip()
+                
+            data = json.loads(raw_response)
+        except Exception as e:
+            logger.error(f"AI API error during setup: {e}")
+            await interaction.followup.send(f"❌ **AI Generation Failed:** `{e}`\n\n💡 *If your API key is invalid or not loaded, try selecting a preset theme directly without a description!*")
+            return
+
+    if not data:
+        await interaction.followup.send("❌ Error loading or generating the server layout.", ephemeral=True)
+        return
+
+    # Prepare Preview Embed
+    roles_summary = [f"`{r['name']}` ({r.get('color', '#fff')})" for r in data.get("roles", [])]
+    categories_summary = []
+    total_channels = 0
+
+    for cat in data.get("categories", []):
+        chans = cat.get("channels", [])
+        total_channels += len(chans)
+        private_tag = " 🔒" if cat.get("private_for") else ""
+        
+        chan_names = []
+        for c in chans:
+            c_name = c.get('name', 'channel')
+            if c.get('topic'):
+                chan_names.append(f"#{c_name} 💬")
+            else:
+                chan_names.append(f"#{c_name}")
+                
+        categories_summary.append(f"**{cat.get('name')}**{private_tag} ({len(chans)} channels: {', '.join(chan_names[:5])}{'...' if len(chan_names)>5 else ''})")
+
+    embed = discord.Embed(title="📋 Server Structure Preview", description="Review the generated layout below before creating channels and roles.\n*(Channels marked with 💬 include automatic topics & descriptions!)*", color=discord.Color.gold())
+    embed.add_field(name="🎭 Roles to Create", value=", ".join(roles_summary) or "None", inline=False)
+    embed.add_field(name=f"📁 Categories & Channels ({total_channels} channels total)", value="\n".join(categories_summary) or "None", inline=False)
+    embed.set_footer(text="Click Confirm & Build below to execute this plan.")
+
+    view = SetupConfirmView(interaction.user, interaction.guild, data, interaction)
+    await interaction.followup.send(embed=embed, view=view)
+
+
+@bot.tree.command(name="stylechannels", description="Apply a custom text styling aesthetic to all text channels in the server")
+@app_commands.describe(style="The aesthetic style to apply")
+@app_commands.choices(
+    style=[
+        app_commands.Choice(name="ɢᴇɴᴇʀᴀʟ-ᴄʜᴀᴛ (Small Caps)", value="small_caps"),
+        app_commands.Choice(name="ⓖⓔⓝⓔⓡⓐⓛ-ⓒⓗⓐⓣ (Bubbles)", value="bubble"),
+        app_commands.Choice(name="general-chat (Lowercase)", value="lowercase"),
+        app_commands.Choice(name="GENERAL-CHAT (Uppercase)", value="uppercase"),
+        app_commands.Choice(name="g e n e r a l - c h a t (Spaced)", value="spaced")
+    ]
+)
+@app_commands.default_permissions(manage_channels=True)
+async def stylechannels_command(interaction: discord.Interaction, style: str):
+    await interaction.response.defer(thinking=True)
+    success_count = 0
+    fail_count = 0
+    
+    for channel in interaction.guild.text_channels:
+        old_name = channel.name
+        
+        # Regex extracts starting emoji prefix if present, styles the rest
+        match = re.match(r"^([\u2000-\u32ff\ud83c-\udbff\udf00-\udfff]+[-#|]*)?(.*)$", old_name)
+        if match:
+            emoji_prefix = match.group(1) or ""
+            core_name = match.group(2) or ""
+        else:
+            emoji_prefix = ""
+            core_name = old_name
+            
+        styled_core = style_text(core_name, style)
+        new_name = f"{emoji_prefix}{styled_core}"
+        
+        if old_name == new_name:
+            continue
+            
+        try:
+            await channel.edit(name=new_name, reason="Style Channels Command")
+            success_count += 1
+            await asyncio.sleep(0.5)  # Avoid rate limits
+        except Exception as e:
+            logger.warning(f"Failed to style channel {old_name}: {e}")
+            fail_count += 1
+            
+    await interaction.followup.send(f"✅ Re-styled `{success_count}` text channels to chosen style! (Failed: `{fail_count}` due to permissions/limits)")
+
+
+@bot.tree.command(name="backup", description="Export the current server structure (roles, categories, channels) as a JSON template")
+@app_commands.default_permissions(manage_guild=True)
+async def backup_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    guild = interaction.guild
+    
+    # 1. Export Roles
+    roles_list = []
+    for role in guild.roles:
+        if role == guild.default_role or role.managed:
+            continue
+        roles_list.append({
+            "name": role.name,
+            "color": f"#{role.color.value:06x}",
+            "hoist": role.hoist
+        })
+        
+    # 2. Export Categories & Channels
+    categories_list = []
+    sorted_categories = sorted(guild.categories, key=lambda c: c.position)
+    
+    for cat in sorted_categories:
+        cat_data = {
+            "name": cat.name,
+            "private_for": [],
+            "channels": []
+        }
+        
+        # Check if category has private role overwrites
+        default_overwrite = cat.overwrites_for(guild.default_role)
+        if default_overwrite.read_messages is False or default_overwrite.connect is False:
+            for target, overwrite in cat.overwrites:
+                if isinstance(target, discord.Role) and target != guild.default_role:
+                    if overwrite.read_messages is True or overwrite.connect is True:
+                        cat_data["private_for"].append(target.name)
+                        
+        sorted_chans = sorted(cat.channels, key=lambda c: c.position)
+        for chan in sorted_chans:
+            chan_type = "text" if isinstance(chan, discord.TextChannel) else "voice"
+            chan_topic = getattr(chan, "topic", "")
+            
+            chan_data = {
+                "name": chan.name,
+                "type": chan_type,
+                "topic": chan_topic or ""
+            }
+            
+            # Check for channel-specific overrides
+            chan_default_overwrite = chan.overwrites_for(guild.default_role)
+            if chan_default_overwrite.read_messages is False or chan_default_overwrite.connect is False:
+                chan_data["private_for"] = []
+                for target, overwrite in chan.overwrites:
+                    if isinstance(target, discord.Role) and target != guild.default_role:
+                        if overwrite.read_messages is True or overwrite.connect is True:
+                            chan_data["private_for"].append(target.name)
+                            
+            cat_data["channels"].append(chan_data)
+            
+        categories_list.append(cat_data)
+        
+    backup_data = {
+        "roles": roles_list,
+        "categories": categories_list
+    }
+    
+    # Convert to JSON file in memory
+    json_bytes = io.BytesIO(json.dumps(backup_data, indent=2, ensure_ascii=False).encode('utf-8'))
+    discord_file = discord.File(json_bytes, filename=f"backup_{guild.name.replace(' ', '_')}.json")
+    
+    await interaction.followup.send(
+        content="✅ **Server layout successfully exported!** Save this file to restore or clone this layout later using `/restore`.",
+        file=discord_file,
+        ephemeral=True
+    )
+
+
+@bot.tree.command(name="restore", description="Restore or clone a server structure from a backup JSON file")
+@app_commands.describe(file="The backup JSON file generated by the /backup command")
+@app_commands.default_permissions(manage_guild=True)
+async def restore_command(interaction: discord.Interaction, file: discord.Attachment):
+    if not file.filename.endswith(".json"):
+        await interaction.response.send_message("❌ Please upload a valid JSON template file (.json).", ephemeral=True)
+        return
+        
+    await interaction.response.defer(thinking=True)
+    try:
+        file_bytes = await file.read()
+        raw_data = file_bytes.decode("utf-8")
+        data = json.loads(raw_data)
+    except Exception as e:
+        logger.error(f"Failed to read backup file: {e}")
+        await interaction.followup.send(f"❌ Failed to parse the backup file: `{e}`")
+        return
+        
+    if "categories" not in data:
+        await interaction.followup.send("❌ Invalid template format. Missing the `categories` array.")
+        return
+        
+    # Prepare Preview Embed
+    roles_summary = [f"`{r['name']}` ({r.get('color', '#fff')})" for r in data.get("roles", [])]
+    categories_summary = []
+    total_channels = 0
+
+    for cat in data.get("categories", []):
+        chans = cat.get("channels", [])
+        total_channels += len(chans)
+        private_tag = " 🔒" if cat.get("private_for") else ""
+        
+        chan_names = []
+        for c in chans:
+            c_name = c.get('name', 'channel')
+            if c.get('topic'):
+                chan_names.append(f"#{c_name} 💬")
+            else:
+                chan_names.append(f"#{c_name}")
+                
+        categories_summary.append(f"**{cat.get('name')}**{private_tag} ({len(chans)} channels: {', '.join(chan_names[:5])}{'...' if len(chan_names)>5 else ''})")
+
+    embed = discord.Embed(title="📋 Server Structure Preview (Restore)", description="Review the backup template layout below before creating channels and roles.", color=discord.Color.gold())
+    embed.add_field(name="🎭 Roles to Create", value=", ".join(roles_summary) or "None", inline=False)
+    embed.add_field(name=f"📁 Categories & Channels ({total_channels} channels total)", value="\n".join(categories_summary) or "None", inline=False)
+    embed.set_footer(text="Click Confirm & Build below to restore this layout.")
+
+    view = SetupConfirmView(interaction.user, interaction.guild, data, interaction)
+    await interaction.followup.send(embed=embed, view=view)
 
 
 @bot.tree.command(name="automod", description="Configure the Auto-Mod security and scam shield")
@@ -818,60 +1333,6 @@ async def nuke_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 
-@bot.tree.command(name="setup", description="Generate a server structure preview from text and build it")
-@app_commands.describe(description="Description of the server (e.g. 'community server for anime lovers with art showcase')")
-@app_commands.default_permissions(manage_guild=True)
-async def setup_command(interaction: discord.Interaction, description: str):
-    await interaction.response.defer(thinking=True)
-    try:
-        raw_response = await call_ai_generation(description, SYSTEM_PROMPT, json_mode=True)
-        raw_response = raw_response.strip()
-
-        if raw_response.startswith("```"):
-            lines = raw_response.splitlines()
-            lines = lines[1:] if lines[0].startswith("```") else lines
-            lines = lines[:-1] if lines and lines[-1].startswith("```") else lines
-            raw_response = "\n".join(lines).strip()
-    except Exception as e:
-        logger.error(f"AI API error during setup: {e}")
-        await interaction.followup.send(f"❌ **AI API Connection Failed:** `{e}`\n\n💡 *Make sure your API key in environment variables is valid!*")
-        return
-
-    try:
-        data = json.loads(raw_response)
-    except Exception as e:
-        logger.error(f"JSON parse error: {e}\nRaw response: {raw_response}")
-        await interaction.followup.send("❌ Couldn't understand the generated structure. Try rephrasing your prompt.")
-        return
-
-    roles_summary = [f"`{r['name']}` ({r.get('color', '#fff')})" for r in data.get("roles", [])]
-    categories_summary = []
-    total_channels = 0
-
-    for cat in data.get("categories", []):
-        chans = cat.get("channels", [])
-        total_channels += len(chans)
-        private_tag = " 🔒" if cat.get("private_for") else ""
-        
-        chan_names = []
-        for c in chans:
-            c_name = c.get('name', 'channel')
-            if c.get('topic'):
-                chan_names.append(f"#{c_name} 💬")
-            else:
-                chan_names.append(f"#{c_name}")
-                
-        categories_summary.append(f"**{cat.get('name')}**{private_tag} ({len(chans)} channels: {', '.join(chan_names[:5])}{'...' if len(chan_names)>5 else ''})")
-
-    embed = discord.Embed(title="📋 Server Structure Preview", description="Review the AI-generated layout below before creating channels and roles.\n*(Channels marked with 💬 include automatic topics & descriptions!)*", color=discord.Color.gold())
-    embed.add_field(name="🎭 Roles to Create", value=", ".join(roles_summary) or "None", inline=False)
-    embed.add_field(name=f"📁 Categories & Channels ({total_channels} channels total)", value="\n".join(categories_summary) or "None", inline=False)
-    embed.set_footer(text="Click Confirm & Build below to execute this plan.")
-
-    view = SetupConfirmView(interaction.user, interaction.guild, data, interaction)
-    await interaction.followup.send(embed=embed, view=view)
-
-
 # ── Discord Event Listeners ─────────────────────────────────────────────────
 
 @bot.event
@@ -910,7 +1371,6 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    # ── Auto-Mod Check ─────────────────────────────────────────────────────
     if not message.author.bot and message.guild:
         automod_enabled = await db.get_config(message.guild.id, "automod", True)
         if automod_enabled:
@@ -994,7 +1454,6 @@ async def on_message(message):
                     except Exception as e:
                         logger.error(f"Auto-Mod AI evaluation error: {e}")
 
-    # Process traditional commands if any are still defined via bot.command() (optional)
     await bot.process_commands(message)
 
 
