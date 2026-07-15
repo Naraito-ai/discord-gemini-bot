@@ -54,6 +54,20 @@ class DatabaseManager:
     async def _create_tables(self):
         """Creates database schema."""
         queries = [
+            # Guilds Table
+            """
+            CREATE TABLE IF NOT EXISTS guilds (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                icon TEXT,
+                owner_id TEXT,
+                member_count INTEGER DEFAULT 0,
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ai_enabled BOOLEAN DEFAULT TRUE,
+                logging_enabled BOOLEAN DEFAULT FALSE
+            );
+            """,
+            # Guild Resources
             """
             CREATE TABLE IF NOT EXISTS guild_resources (
                 guild_id TEXT NOT NULL,
@@ -61,12 +75,153 @@ class DatabaseManager:
                 resource_id BIGINT NOT NULL
             );
             """,
+            # Guild Config
             """
             CREATE TABLE IF NOT EXISTS guild_config (
                 guild_id TEXT NOT NULL,
                 key TEXT NOT NULL,
                 value TEXT,
                 PRIMARY KEY (guild_id, key)
+            );
+            """,
+            # Users Table
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                discriminator TEXT,
+                avatar TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Commands Tracking Table
+            """
+            CREATE TABLE IF NOT EXISTS commands (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT,
+                user_id TEXT,
+                command_name TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status TEXT NOT NULL,
+                latency REAL
+            );
+            """,
+            # Warnings Table
+            """
+            CREATE TABLE IF NOT EXISTS warnings (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                moderator_id TEXT NOT NULL,
+                reason TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Timeouts Table
+            """
+            CREATE TABLE IF NOT EXISTS timeouts (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                moderator_id TEXT NOT NULL,
+                duration_seconds INTEGER NOT NULL,
+                reason TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Bans Table
+            """
+            CREATE TABLE IF NOT EXISTS bans (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                moderator_id TEXT NOT NULL,
+                reason TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # AI Usage Tracking Table
+            """
+            CREATE TABLE IF NOT EXISTS ai_usage (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT,
+                user_id TEXT,
+                prompt TEXT,
+                response TEXT,
+                model TEXT,
+                tokens_used INTEGER DEFAULT 0,
+                latency REAL DEFAULT 0.0,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # API Usage Table
+            """
+            CREATE TABLE IF NOT EXISTS api_usage (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT,
+                endpoint TEXT NOT NULL,
+                status_code INTEGER NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Backups Table
+            """
+            CREATE TABLE IF NOT EXISTS backups (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                backup_data TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Audit Logs Table
+            """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                details TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Notifications Table
+            """
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                type TEXT NOT NULL,
+                read BOOLEAN DEFAULT FALSE,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Errors Table
+            """
+            CREATE TABLE IF NOT EXISTS errors (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT,
+                error_type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                stack_trace TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Analytics Table
+            """
+            CREATE TABLE IF NOT EXISTS analytics (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                date DATE DEFAULT CURRENT_DATE,
+                messages_count INTEGER DEFAULT 0,
+                commands_count INTEGER DEFAULT 0,
+                joins_count INTEGER DEFAULT 0,
+                leaves_count INTEGER DEFAULT 0,
+                warnings_count INTEGER DEFAULT 0,
+                mutes_count INTEGER DEFAULT 0,
+                bans_count INTEGER DEFAULT 0,
+                voice_active_seconds INTEGER DEFAULT 0
             );
             """
         ]
@@ -90,7 +245,9 @@ class DatabaseManager:
         else:
             async with self._sqlite_lock:
                 # SQLite uses ? placeholders
-                sqlite_query = query.replace("$", "?")  # Just in case
+                sqlite_query = query.replace("$", "?")
+                if "SERIAL PRIMARY KEY" in sqlite_query:
+                    sqlite_query = sqlite_query.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
                 await self.sqlite_conn.execute(sqlite_query, args)
                 await self.sqlite_conn.commit()
 
@@ -107,6 +264,8 @@ class DatabaseManager:
         else:
             async with self._sqlite_lock:
                 sqlite_query = query.replace("$", "?")
+                if "SERIAL PRIMARY KEY" in sqlite_query:
+                    sqlite_query = sqlite_query.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
                 async with self.sqlite_conn.execute(sqlite_query, args) as cursor:
                     rows = await cursor.fetchall()
                     # Convert to list of dicts to match asyncpg interface
@@ -180,6 +339,63 @@ class DatabaseManager:
         # Cache negative/default values too to prevent repeat misses
         self._config_cache[cache_key] = "None" if default is None else str(default)
         return default
+
+    # ── Dashboard Helper Queries ──────────────────────────────────────────
+
+    async def increment_analytics(self, guild_id: int, column_name: str, amount: int = 1):
+        """Increments a specific statistic counter in the analytics table for today."""
+        try:
+            from datetime import datetime
+            from typing import Optional
+            today = datetime.now().date()
+            rows = await self.fetch(
+                "SELECT id FROM analytics WHERE guild_id = ? AND date = ?",
+                str(guild_id),
+                today
+            )
+            if rows:
+                query = f"UPDATE analytics SET {column_name} = {column_name} + ? WHERE guild_id = ? AND date = ?"
+                await self.execute(query, amount, str(guild_id), today)
+            else:
+                query = f"INSERT INTO analytics (guild_id, date, {column_name}) VALUES (?, ?, ?)"
+                await self.execute(query, str(guild_id), today, amount)
+        except Exception as e:
+            logger.error(f"Failed to increment analytics: {e}")
+
+    async def log_command(self, guild_id, user_id: int, command_name: str, status: str, latency: float):
+        """Logs a slash command execution."""
+        query = "INSERT INTO commands (guild_id, user_id, command_name, status, latency) VALUES (?, ?, ?, ?, ?)"
+        await self.execute(query, str(guild_id) if guild_id else None, str(user_id), command_name, status, latency)
+        if guild_id:
+            await self.increment_analytics(guild_id, "commands_count")
+
+    async def log_ai_usage(self, guild_id, user_id: int, prompt: str, response: str, model: str, tokens_used: int, latency: float):
+        """Logs an AI query usage entry."""
+        query = "INSERT INTO ai_usage (guild_id, user_id, prompt, response, model, tokens_used, latency) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        await self.execute(query, str(guild_id) if guild_id else None, str(user_id), prompt, response, model, tokens_used, latency)
+
+    async def add_warning(self, guild_id: int, user_id: int, moderator_id: int, reason: str):
+        """Logs a member warning."""
+        query = "INSERT INTO warnings (guild_id, user_id, moderator_id, reason) VALUES (?, ?, ?, ?)"
+        await self.execute(query, str(guild_id), str(user_id), str(moderator_id), reason)
+        await self.increment_analytics(guild_id, "warnings_count")
+
+    async def add_timeout(self, guild_id: int, user_id: int, moderator_id: int, duration_seconds: int, reason: str):
+        """Logs a member timeout."""
+        query = "INSERT INTO timeouts (guild_id, user_id, moderator_id, duration_seconds, reason) VALUES (?, ?, ?, ?, ?)"
+        await self.execute(query, str(guild_id), str(user_id), str(moderator_id), duration_seconds, reason)
+        await self.increment_analytics(guild_id, "mutes_count")
+
+    async def add_ban(self, guild_id: int, user_id: int, moderator_id: int, reason: str):
+        """Logs a member ban."""
+        query = "INSERT INTO bans (guild_id, user_id, moderator_id, reason) VALUES (?, ?, ?, ?)"
+        await self.execute(query, str(guild_id), str(user_id), str(moderator_id), reason)
+        await self.increment_analytics(guild_id, "bans_count")
+
+    async def log_audit(self, guild_id: int, user_id: int, action: str, details: str = None):
+        """Logs a dashboard or moderator action."""
+        query = "INSERT INTO audit_logs (guild_id, user_id, action, details) VALUES (?, ?, ?, ?)"
+        await self.execute(query, str(guild_id), str(user_id), action, details)
 
     async def close(self):
         """Closes all database connections."""

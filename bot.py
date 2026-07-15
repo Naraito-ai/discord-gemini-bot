@@ -1148,6 +1148,12 @@ class GeminiBot(commands.Bot):
         # Connect database & create tables
         await db.initialize()
         
+        # Start FastAPI and WebSockets server inside the bot's event loop
+        port = int(os.getenv("PORT", 8080))
+        from api import start_fastapi
+        asyncio.create_task(start_fastapi(self, db, port))
+
+        
     async def on_ready(self):
         logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
         try:
@@ -2445,6 +2451,10 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    if message.guild and not message.author.bot:
+        await db.increment_analytics(message.guild.id, "messages_count")
+
+
     # Owner-only force sync check (copies global tree to guild for instant updates!)
     if message.content.strip() == "!sync":
         try:
@@ -2600,5 +2610,6 @@ if __name__ == "__main__":
         logger.info("🔒 Security layer active: rate limiting, input sanitization, and prompt injection resistance enabled.")
         logger.info(f"🔒 Per-user AI cooldown: {_USER_COOLDOWN_SECONDS}s | Per-server hourly AI limit: {_SERVER_HOURLY_LIMIT} calls")
         print("✅ Starting Discord bot...")
-        keep_alive()
+        # Flask keep_alive is disabled as FastAPI handles health pings on the same port
         bot.run(DISCORD_TOKEN)
+
