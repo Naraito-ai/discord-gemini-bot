@@ -132,14 +132,12 @@ async def register_uptime_monitor(api_key: str, url: str):
             "api_key": api_key,
             "friendly_name": "Discord Gemini Bot (Render)",
             "url": url,
-            "type": 1,  # HTTP(s)
-            "interval": 300  # 5 minutes
-        }
-        headers = {
-            "content-type": "application/json"
+            "type": "1",  # HTTP(s)
+            "interval": "300",  # 5 minutes
+            "format": "json"
         }
         async with aiohttp.ClientSession() as session:
-            async with session.post("https://api.uptimerobot.com/v2/newMonitor", json=payload, headers=headers) as resp:
+            async with session.post("https://api.uptimerobot.com/v2/newMonitor", data=payload) as resp:
                 data = await resp.json()
                 if data.get("stat") == "ok":
                     logger.info(f"🚀 Successfully registered UptimeRobot monitor for: {url}")
@@ -151,6 +149,7 @@ async def register_uptime_monitor(api_key: str, url: str):
                         logger.warning(f"⚠️ UptimeRobot registration feedback: {data}")
     except Exception as e:
         logger.error(f"Failed to register UptimeRobot monitor: {e}")
+
 
 async def call_ai_generation(prompt, system_instruction, json_mode=False):
     """Generates content asynchronously using Groq (via aiohttp) or Gemini (via google-genai async)."""

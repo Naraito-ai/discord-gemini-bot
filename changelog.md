@@ -2,7 +2,15 @@
 
 All notable changes to the Discord Gemini Bot project are documented here.
 
+## [1.1.4] - 2026-07-15
+
+### Fixed
+*   **UptimeRobot API payload format**: Fixed `register_uptime_monitor` to send parameters using `application/x-www-form-urlencoded` format (`data=payload`) rather than `application/json` (`json=payload`), complying with the UptimeRobot API v2 specification and ensuring successful monitor registration.
+*   **Web hosting container keep-alive**: Changed the process type in `Procfile` from `worker` to `web` so that web hosting services like Render or Railway route HTTP requests and bind `PORT` variables correctly, preventing the container from sleeping.
+*   **Environment documentation updates**: Added production configurations (`DATABASE_URL`, `UPTIME_API_KEY`, and `RENDER_EXTERNAL_URL`) to `.env.example`.
+
 ## [1.1.3] - 2026-07-15
+
 
 ### Added
 *   **Uncategorized Channels Backup & Restore**: Added support for exporting and restoring channels not belong to any category in the `/backup` and `/restore` commands.
