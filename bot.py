@@ -921,10 +921,12 @@ async def help_command(interaction: discord.Interaction):
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="👋 **Engagement & Tickets**", value="• `/welcome <status> [style]` — Toggle/select style for dynamic AI welcomes\n• `/ticket` — Spawns interactive support ticket panel\n• `/announce <topic> [channel]` — Drafts and posts AI official announcement\n• `/suggest <idea>` — Submit suggestion to the dedicated channel\n• `/poll <question> <options>` — Create multi-option interactive polls", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
+
 
 
 @bot.tree.command(name="setup", description="Generate a server structure preview and build it (Theme or Custom)")
