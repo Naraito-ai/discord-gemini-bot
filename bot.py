@@ -2609,7 +2609,7 @@ if __name__ == "__main__":
     else:
         logger.info("🔒 Security layer active: rate limiting, input sanitization, and prompt injection resistance enabled.")
         logger.info(f"🔒 Per-user AI cooldown: {_USER_COOLDOWN_SECONDS}s | Per-server hourly AI limit: {_SERVER_HOURLY_LIMIT} calls")
-        print("✅ Starting Discord bot...")
+        print("[OK] Starting Discord bot...")
         # Flask keep_alive is disabled as FastAPI handles health pings on the same port
         bot.run(DISCORD_TOKEN)
 

@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from fastapi import FastAPI, Request, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import uvicorn
 
 # Logging Setup
 logger = logging.getLogger("GeminiBot.API")
