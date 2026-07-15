@@ -11,6 +11,8 @@ All notable changes to the Discord Gemini Bot project are documented here.
 *   **Chat Spam & Duplicate Message Protection**: Integrated memory-based rate limiters to monitor rapid message bursts (5 messages in 5s) and duplicate content spamming (3 identical messages in 15s). Message bursts are deleted and offenders are auto-muted.
 *   **NSFW/Porn link filtering**: Integrated a URL scanner in the Auto-Mod filter that checks links for pornographic or adult gif content keywords (e.g., `porn`, `nsfw`, `xxx`, `rule34`, `hentai`). Flagged messages are deleted instantly.
 *   **Automatic 10-Minute Timeout (Mute)**: Auto-Mod now executes an automatic 10-minute timeout/mute on users sending NSFW/Porn links or chat spam, logging the action and warning the user in chat.
+*   **AI Permission Manager (`/aiperms`)**: Introduced the `/aiperms <target> <description>` command which uses AI to translate natural language configuration requests into concrete Discord permission overrides for multiple roles and/or specific members concurrently on a selected channel or category.
+
 
 
 

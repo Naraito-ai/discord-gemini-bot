@@ -211,6 +211,51 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
         raise ValueError("No valid GROQ_API_KEY or GEMINI_API_KEY found in environment variables.")
 
 
+# Gemini permissions prompt for AI permission configurator
+SYSTEM_PERMS_PROMPT = """You are an expert Discord permissions manager.
+Analyze the user's description of channel/category permissions and output a JSON map of permission overrides for the server's roles and members.
+
+You will be given:
+1. The list of roles existing in the server.
+2. The list of members (with their usernames and display names) existing in the server.
+3. The target channel or category name.
+4. A description of the permissions to set up.
+
+Supported permission keys (use ONLY these exact keys, all others are ignored):
+- view_channel
+- send_messages
+- embed_links
+- attach_files
+- add_reactions
+- use_external_emojis
+- mention_everyone
+- manage_messages
+- read_message_history
+- connect
+- speak
+- mute_members
+- deafen_members
+- move_members
+
+For each role/member, map the permission keys to:
+- true: Allow
+- false: Deny
+- null: Inherit (neutral/reset override)
+
+Your output must be a single raw JSON object with this exact structure:
+{
+  "roles": {
+    "RoleName": { "permission_key": true/false/null }
+  },
+  "members": {
+    "MemberUsernameOrDisplayName": { "permission_key": true/false/null }
+  }
+}
+
+Use the exact role names or member usernames/display names provided. You can also use "@everyone" for the default role under the "roles" object.
+Do not include markdown code fences, backticks, or explanatory text. Just the raw JSON.
+"""
+
 # Gemini system prompt with Emoji, Topics, Private Channel support, and injection resistance
 SYSTEM_PROMPT = """You are an expert Discord server structure generator and community architect.
 Your ONLY job is to generate Discord server layouts (roles, categories, channels) based on user descriptions.
@@ -1010,7 +1055,7 @@ async def help_command(interaction: discord.Interaction):
         description="An all-in-one AI Architect, Auto-Mod, and Community Restorer Bot powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
-    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
+    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
@@ -1481,6 +1526,122 @@ async def addcategory_command(interaction: discord.Interaction, description: str
         await build_server_structure(interaction.guild, data, interaction.channel)
     except Exception as e:
         await interaction.edit_original_response(content=f"❌ Failed to build category: {e}")
+
+
+@bot.tree.command(name="aiperms", description="Configure channel/category permissions for roles and users using AI")
+@app_commands.describe(
+    target="The channel or category to configure permissions for",
+    description="English description of permissions (e.g. 'private: block everyone, allow Moderator and user Vinay')"
+)
+@app_commands.default_permissions(manage_permissions=True)
+async def aiperms_command(interaction: discord.Interaction, target: discord.abc.GuildChannel, description: str):
+    # Rate limit (user cooldown)
+    allowed, remaining = _check_user_cooldown(interaction.user.id)
+    if not allowed:
+        await interaction.response.send_message(f"⏳ Please wait **{remaining}s** before using `/aiperms` again.", ephemeral=True)
+        return
+
+    # Rate limit (server hourly cap)
+    if not _check_server_limit(interaction.guild.id):
+        await interaction.response.send_message(f"🚫 This server has reached the hourly AI uses limit.", ephemeral=True)
+        return
+
+    # Input sanitization
+    is_clean, result = _sanitize_ai_input(description)
+    if not is_clean:
+        await interaction.response.send_message("⚠️ Your description was flagged for suspicious content.", ephemeral=True)
+        return
+    description = result
+
+    await interaction.response.defer(thinking=True)
+    
+    # Collect roles and active members to send as context
+    roles_list = [r.name for r in interaction.guild.roles]
+    members_list = [f"{m.name} (display: {m.display_name})" for m in interaction.guild.members if not m.bot][:50]
+    
+    sys_prompt = SYSTEM_PERMS_PROMPT
+    prompt = f"Roles on server: {json.dumps(roles_list)}\nMembers on server: {json.dumps(members_list)}\nTarget Channel/Category: {target.name}\n\nDescription: {description}"
+    
+    try:
+        response = await call_ai_generation(prompt, sys_prompt, json_mode=True)
+        
+        # Clean response if markdown code fences are present
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.splitlines()
+            lines = lines[1:] if lines[0].startswith("```") else lines
+            lines = lines[:-1] if lines and lines[-1].startswith("```") else lines
+            response = "\n".join(lines).strip()
+            
+        data = json.loads(response)
+    except Exception as e:
+        logger.error(f"AI Perms configuration failed: {e}")
+        await interaction.followup.send(f"❌ AI configuration failed: `{e}`")
+        return
+        
+    success_roles = []
+    success_members = []
+    errors = []
+    
+    role_rules = data.get("roles", {})
+    member_rules = data.get("members", {})
+    
+    # Apply Role permissions
+    for r_name, perms in role_rules.items():
+        role = None
+        if r_name == "@everyone":
+            role = interaction.guild.default_role
+        else:
+            role = discord.utils.get(interaction.guild.roles, name=r_name)
+            
+        if not role:
+            errors.append(f"Role '{r_name}' not found.")
+            continue
+            
+        try:
+            overwrite = discord.PermissionOverwrite()
+            for perm_key, val in perms.items():
+                # Set attribute on PermissionOverwrite object
+                if hasattr(overwrite, perm_key):
+                    setattr(overwrite, perm_key, val)
+            await target.set_permissions(role, overwrite=overwrite, reason="AI Permission Configurator")
+            success_roles.append(role.name)
+        except Exception as e:
+            errors.append(f"Failed to set overrides for role '{r_name}': {e}")
+            
+    # Apply Member permissions
+    for m_name, perms in member_rules.items():
+        clean_m_name = m_name.split(" (display:")[0].strip()
+        member = discord.utils.get(interaction.guild.members, name=clean_m_name) or \
+                 discord.utils.get(interaction.guild.members, display_name=clean_m_name)
+                 
+        if not member:
+            errors.append(f"Member '{m_name}' not found.")
+            continue
+            
+        try:
+            overwrite = discord.PermissionOverwrite()
+            for perm_key, val in perms.items():
+                if hasattr(overwrite, perm_key):
+                    setattr(overwrite, perm_key, val)
+            await target.set_permissions(member, overwrite=overwrite, reason="AI Permission Configurator")
+            success_members.append(member.display_name)
+        except Exception as e:
+            errors.append(f"Failed to set overrides for member '{m_name}': {e}")
+            
+    embed = discord.Embed(title="⚙️ AI Permission Configuration Complete", color=discord.Color.green())
+    embed.add_field(name="Target Channel/Category", value=target.mention if hasattr(target, "mention") else f"📁 {target.name}", inline=False)
+    if success_roles:
+        embed.add_field(name="Roles Configured", value=", ".join(success_roles), inline=True)
+    if success_members:
+        embed.add_field(name="Members Configured", value=", ".join(success_members), inline=True)
+    if errors:
+        embed.add_field(name="⚠️ Errors", value="\n".join(errors[:5]), inline=False)
+        
+    await interaction.followup.send(embed=embed)
+    
+    log_details = f"Roles: {', '.join(success_roles) or 'None'} | Members: {', '.join(success_members) or 'None'}"
+    await log_mod_action(interaction.guild, interaction.user, target, "AI Permissions Configuration", description, log_details)
 
 
 @bot.tree.command(name="teardown", description="Delete only the roles, categories, and channels created by this bot")
