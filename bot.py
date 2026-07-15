@@ -1240,6 +1240,10 @@ async def teardown_command(interaction: discord.Interaction):
 @bot.tree.command(name="nuke", description="⚠️ COMPLETE SERVER NUKE — Wipes all channels, categories, and roles")
 @app_commands.default_permissions(administrator=True)
 async def nuke_command(interaction: discord.Interaction):
+    if interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ This command is restricted to the Server Owner only.", ephemeral=True)
+        return
+
     embed = discord.Embed(
         title="⚠️ DANGER: COMPLETE SERVER NUKE ⚠️",
         description="Are you sure you want to delete **EVERY SINGLE CHANNEL, CATEGORY, AND ROLE** in this entire server?\n\nThis will wipe all existing rooms and create a fresh `#💥-server-nuked` channel so you can run `/setup` on a clean slate.\n\n**THIS CANNOT BE UNDONE!**",
@@ -1247,6 +1251,7 @@ async def nuke_command(interaction: discord.Interaction):
     )
     view = NukeConfirmView(interaction.user, interaction.guild)
     await interaction.response.send_message(embed=embed, view=view)
+
 
 
 # ── Administration & Moderation Commands ────────────────────────────────────

@@ -22,3 +22,7 @@ All notable changes to the Discord Gemini Bot project are documented here.
     *   `/ticket` (persistent support button ticket panels)
     *   `/suggest` (suggestion voting)
     *   `/poll` (multi-option reaction polls)
+
+### Changed
+*   **Restricted /nuke Command to Server Owner**: Added a runtime check (`interaction.user.id == interaction.guild.owner_id`) inside `nuke_command` in [bot.py](file:///D:/discord-gemini-bot/bot.py) to prevent any user (including administrators who are not the server owner) from invoking the nuke command.
+
