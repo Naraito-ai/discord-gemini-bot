@@ -2,7 +2,57 @@
 
 All notable changes to the Discord Gemini Bot project are documented here.
 
+## [1.2.1] - 2026-07-15
+
+### Fixed
+*   **Missing `uvicorn` Import in `api.py`**: Added `import uvicorn` to the top-level imports in [api.py](file:///D:/discord-gemini-bot/api.py). The omission caused a `NameError` when `start_fastapi()` tried to subclass `uvicorn.Server`, preventing the FastAPI web server from starting alongside the bot.
+*   **Windows Unicode Encoding Crash on Startup**: Replaced the `✅` emoji in the `bot.py` startup `print()` call with an ASCII-safe `[OK]` string to fix a `UnicodeEncodeError` on Windows terminals using the `cp1252` codec.
+*   **Next.js Auth Callback Suspense Boundary**: Wrapped the `useSearchParams()` hook in [callback/page.tsx](file:///D:/discord-gemini-bot/dashboard/src/app/api/auth/callback/page.tsx) inside a `<Suspense>` boundary to comply with Next.js 15 static generation requirements and fix the production build error.
+*   **Incorrect `Link` Import in `Sidebar.tsx`**: Fixed a broken import — `Link` was incorrectly imported from `next/navigation` instead of `next/link`, causing a TypeScript build error during `npm run build`.
+
+---
+
+## [1.2.0] - 2026-07-15
+
+### Added
+*   **Production FastAPI Backend (`api.py`)**: Created a full REST + WebSocket API server (`api.py`) that runs concurrently with the Discord bot inside the **same asyncio event loop** via `setup_hook()`. This design allows both services to run within a single Render free-tier web service container, avoiding multi-container cost.
+    *   **Discord OAuth2 Authentication**: Implemented a `/api/auth/callback` endpoint that exchanges Discord authorization codes for access tokens, verifies that the authenticating user has `MANAGE_GUILD` or `ADMINISTRATOR` permissions, and returns signed **JWT tokens** for session management.
+    *   **Bot Health & System Stats Endpoint** (`/api/bot/stats`): Returns live CPU usage, RAM usage, bot ping latency, uptime, total guild count, and active WebSocket connection counts using `psutil`.
+    *   **Guild Configuration Endpoints** (`/api/guilds/{guild_id}/config`): GET and POST endpoints to read and write per-guild settings (prefix, AutoMod status, log channels, autorole) from the database.
+    *   **Moderation Logs Endpoint** (`/api/guilds/{guild_id}/moderation`): Returns paginated warning, timeout, and ban records for a given guild.
+    *   **Backups Endpoint** (`/api/guilds/{guild_id}/backups`): Returns and allows deletion of layout snapshot backups stored in the database.
+    *   **Live Console WebSocket** (`/api/ws/console`): Streams backend Python log output to the dashboard console viewer in real time using a custom `WebSocketLogHandler`.
+    *   **Live Events WebSocket** (`/api/ws/events`): Broadcasts moderation events (warnings, bans, Auto-Mod triggers) to all connected dashboard clients in real time.
+*   **Expanded Database Schema (`database.py`)**: Added **15 production tables** to the database schema: `users`, `guilds`, `guild_config`, `guild_resources`, `commands`, `warnings`, `timeouts`, `bans`, `ai_usage`, `api_usage`, `backups`, `audit_logs`, `notifications`, `errors`, `analytics`. All tables are created automatically on first startup.
+*   **Database Logging Helper Methods**: Added `log_command()`, `log_ai_usage()`, `add_warning()`, `add_timeout()`, `add_ban()`, `log_audit()`, and `increment_analytics()` helper methods to `DatabaseManager` in [database.py](file:///D:/discord-gemini-bot/database.py) for structured telemetry logging across bot events.
+*   **Neon PostgreSQL Integration**: Configured the bot and API to connect to a Neon free-tier PostgreSQL database (`aws-ap-southeast-1` region) in production via `DATABASE_URL`, while automatically falling back to local SQLite during development with dynamic SQL dialect translation.
+*   **Next.js 15 Web Dashboard (`dashboard/`)**: Built a complete, production-compiled multi-page web dashboard with glassmorphism dark UI:
+    *   **Landing / Login Page** (`page.tsx`): Discord OAuth2 login card, global stats (guilds, users, commands), live alert panel, and server selector grid.
+    *   **Auth Callback Handler** (`/api/auth/callback/page.tsx`): Exchanges Discord OAuth codes with the backend and persists the JWT session.
+    *   **Live Terminal Console** (`/console/page.tsx`): A streaming black-box terminal that receives and displays Python bot logs in real time over WebSocket, with auto-scroll, log-level color coding, and search filtering.
+    *   **Guild Overview Page** (`/guilds/[guild_id]/page.tsx`): Server detail card showing member count, channel count, role count, and guild-level statistics.
+    *   **Analytics Charts** (`/guilds/[guild_id]/analytics/page.tsx`): Recharts `AreaChart` and `BarChart` displaying message traffic, command usage, and join/leave trends over time.
+    *   **AI Usage Dashboard** (`/guilds/[guild_id]/ai-usage/page.tsx`): Recharts `PieChart` showing Gemini vs Groq model distribution and token consumption breakdown.
+    *   **Moderation Incident Registry** (`/guilds/[guild_id]/moderation/page.tsx`): Three-panel view displaying warnings, active timeouts, and ban records pulled from the database.
+    *   **Server Layout Backups Manager** (`/guilds/[guild_id]/backups/page.tsx`): Lists and allows deletion of guild layout snapshots created via `/backup`.
+    *   **Bot Settings Configuration** (`/guilds/[guild_id]/settings/page.tsx`): Form-based editor for command prefix, AutoMod mode, AI deep moderation toggle, mod logs channel, and autorole settings — saved via API POST.
+*   **Responsive Sidebar & Header Components**: Built `Sidebar.tsx` with a mobile-drawer toggle, guild switcher dropdown, and active-route highlighting. Built `Header.tsx` with a user avatar, real-time WebSocket pulse beacon, and logout button.
+*   **Global Dashboard Context** (`DashboardContext.tsx`): React context managing authentication state, guild selections, bot stats, and real-time WebSocket event subscriptions with automatic reconnection on disconnect.
+*   **Deployment Infrastructure**:
+    *   Updated [Dockerfile](file:///D:/discord-gemini-bot/Dockerfile) to copy `api.py` and `database.py` alongside `bot.py`.
+    *   Created [dashboard/.env.local](file:///D:/discord-gemini-bot/dashboard/.env.local) with `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_DISCORD_CLIENT_ID`.
+    *   Created [DASHBOARD_README.md](file:///D:/discord-gemini-bot/DASHBOARD_README.md) documenting the full directory structure, PostgreSQL schema, environment variable checklist, and step-by-step free-tier deployment guides for Neon, Render, and Vercel.
+*   **Auto-configured Neon Database**: Provisioned a Neon PostgreSQL project (`wild-fog-70302333`) in the `aws-ap-southeast-1` region using the Neon API, initialized all 15 schema tables, and stored the pooler connection string in `.env`.
+*   **Auto-generated JWT Secret**: Generated and stored a cryptographically secure 32-byte hex JWT secret in `.env` for signing dashboard session tokens.
+
+### Changed
+*   **Replaced Flask Keep-Alive with FastAPI**: Disabled the `keep_alive()` Flask server in `bot.py.__main__` and replaced it with an integrated `uvicorn` server launched inside `setup_hook()`, eliminating the Flask dependency and merging both HTTP and WebSocket serving into a single process.
+*   **Updated `requirements.txt`**: Replaced `flask` with `fastapi`, `uvicorn[standard]`, `python-multipart`, `pyjwt`, and `psutil`.
+
+---
+
 ## [1.1.4] - 2026-07-15
+
 
 ### Fixed
 *   **UptimeRobot API payload format**: Fixed `register_uptime_monitor` to send parameters using `application/x-www-form-urlencoded` format (`data=payload`) rather than `application/json` (`json=payload`), complying with the UptimeRobot API v2 specification and ensuring successful monitor registration.
