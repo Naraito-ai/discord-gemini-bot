@@ -23,6 +23,8 @@ All notable changes to the Discord Gemini Bot project are documented here.
 *   **Prevented Error Information Leakage**: Replaced all instances of raw exception details (`f"{e}"`) being displayed to public users on command failure with user-safe generic error responses, logging the full debug tracebacks internally using `logger.error`.
 *   **Targeted Member Resolving in `/aiperms`**: Optimized `/aiperms` context generation to search descriptions for user mentions or matching names, sending only the targeted members to the AI instead of a generic list of the first 50 members.
 *   **Restricted Commands to Guilds Only**: Restricted all server-specific slash commands from execution inside bot DMs by applying the `@app_commands.guild_only()` decorator, preventing database errors and rate limit bypasses.
+*   **Resolved Log Channel Cache Failures**: Added an API fallback (`await guild.fetch_channel(channel_id)`) to `get_mod_log_channel` when the configured log channel is not found in the bot's local memory cache, and wrapped the auto-mute log send block in try-except wrappers to prevent failures.
+
 
 
 ### Optimized

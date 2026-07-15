@@ -606,10 +606,17 @@ def _check_spam(user_id: int, content: str) -> tuple[bool, str]:
 async def get_mod_log_channel(guild: discord.Guild):
     """Retrieves the configured mod log channel or falls back to name-based detection."""
     channel_id = await db.get_config(guild.id, "mod_log_channel_id")
-    if channel_id:
-        channel = guild.get_channel(channel_id)
-        if channel:
-            return channel
+    if channel_id and str(channel_id) != "None":
+        try:
+            channel_id = int(channel_id)
+            channel = guild.get_channel(channel_id)
+            if not channel:
+                channel = await guild.fetch_channel(channel_id)
+            if channel:
+                return channel
+        except Exception as e:
+            logger.warning(f"Failed to retrieve/fetch channel {channel_id}: {e}")
+            
     return discord.utils.get(guild.text_channels, name="🚨-mod-logs") or \
            discord.utils.get(guild.text_channels, name="mod-logs") or \
            discord.utils.get(guild.text_channels, name="🚨-admin-chat")
@@ -646,7 +653,10 @@ async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: 
         log_embed.add_field(name="Violation", value=reason, inline=True)
         log_embed.add_field(name="Action Taken", value="Timed out for 10 minutes" if mute_success else f"Failed to mute: {err_msg}", inline=True)
         log_embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
-        await mod_log.send(embed=log_embed)
+        try:
+            await mod_log.send(embed=log_embed)
+        except Exception as e:
+            logger.error(f"Failed to send Auto-Mod log embed: {e}")
 
 async def delete_after_delay(msg, delay):
     await asyncio.sleep(delay)
