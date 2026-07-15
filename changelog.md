@@ -7,6 +7,11 @@ All notable changes to the Discord Gemini Bot project are documented here.
 ### Added
 *   **Database Cleanup Event Listeners**: Added `on_guild_channel_delete` and `on_guild_role_delete` listeners in [bot.py](file:///D:/discord-gemini-bot/bot.py) to automatically remove deleted channels and roles from database tracking resources, preventing errors during `/teardown`.
 *   **AI Rate Limiting & Input Sanitization**: Added a multi-layered security wrapper in [bot.py](file:///D:/discord-gemini-bot/bot.py) containing user cooldowns (30 seconds), server hourly limits (10 calls/hour), maximum input length restrictions (500 characters), and detection profiles for typical prompt injection keywords to protect custom setup commands from injection/abuse.
+*   **Dynamic Moderation Logging**: Added a new `/setlogchannel <channel>` command in [bot.py](file:///D:/discord-gemini-bot/bot.py) to dynamically set a target logging channel. All moderation events, slash commands, and Auto-Mod violations are logged as structured rich embeds to this configured channel.
+*   **Chat Spam & Duplicate Message Protection**: Integrated memory-based rate limiters to monitor rapid message bursts (5 messages in 5s) and duplicate content spamming (3 identical messages in 15s). Message bursts are deleted and offenders are auto-muted.
+*   **NSFW/Porn link filtering**: Integrated a URL scanner in the Auto-Mod filter that checks links for pornographic or adult gif content keywords (e.g., `porn`, `nsfw`, `xxx`, `rule34`, `hentai`). Flagged messages are deleted instantly.
+*   **Automatic 10-Minute Timeout (Mute)**: Auto-Mod now executes an automatic 10-minute timeout/mute on users sending NSFW/Porn links or chat spam, logging the action and warning the user in chat.
+
 
 
 ### Fixed

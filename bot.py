@@ -515,6 +515,117 @@ def style_text(text: str, style_type: str) -> str:
         return " ".join(chars)
     return text
 
+# ── Security: Chat Spam & NSFW Filters ─────────────────────────────────────
+_user_message_timestamps: dict[int, list[float]] = {}
+_user_message_contents: dict[int, list[tuple[float, str]]] = {}
+
+_SPAM_WINDOW = 5.0
+_SPAM_LIMIT = 5
+_DUPLICATE_LIMIT = 3
+_DUPLICATE_WINDOW = 15.0
+
+def _is_nsfw_link(text: str) -> tuple[bool, str]:
+    """Scans for URLs containing NSFW/porn keywords."""
+    urls = re.findall(r'https?://[^\s]+', text.lower())
+    nsfw_keywords = ["porn", "nsfw", "xxx", "hentai", "rule34", "xrated", "sex", "redtube", "pornhub", "xvideos"]
+    for url in urls:
+        for kw in nsfw_keywords:
+            if kw in url:
+                return True, kw
+    return False, ""
+
+def _check_spam(user_id: int, content: str) -> tuple[bool, str]:
+    """Checks rapid messaging rate and duplicate messaging content."""
+    now = time.time()
+    
+    # 1. Check rapid message limit (spamming)
+    if user_id not in _user_message_timestamps:
+        _user_message_timestamps[user_id] = []
+    _user_message_timestamps[user_id] = [t for t in _user_message_timestamps[user_id] if now - t <= _SPAM_WINDOW]
+    _user_message_timestamps[user_id].append(now)
+    if len(_user_message_timestamps[user_id]) >= _SPAM_LIMIT:
+        return True, f"sending messages too rapidly ({_SPAM_LIMIT} messages in {_SPAM_WINDOW}s)"
+
+    # 2. Check identical message limit (duplicate spam)
+    if user_id not in _user_message_contents:
+        _user_message_contents[user_id] = []
+    _user_message_contents[user_id] = [mc for mc in _user_message_contents[user_id] if now - mc[0] <= _DUPLICATE_WINDOW]
+    _user_message_contents[user_id].append((now, content))
+    
+    duplicates = [mc for mc in _user_message_contents[user_id] if mc[1] == content]
+    if len(duplicates) >= _DUPLICATE_LIMIT:
+        return True, f"repeating the same message ({_DUPLICATE_LIMIT} times in {_DUPLICATE_WINDOW}s)"
+        
+    return False, ""
+
+async def get_mod_log_channel(guild: discord.Guild):
+    """Retrieves the configured mod log channel or falls back to name-based detection."""
+    channel_id = await db.get_config(guild.id, "mod_log_channel_id")
+    if channel_id:
+        channel = guild.get_channel(channel_id)
+        if channel:
+            return channel
+    return discord.utils.get(guild.text_channels, name="🚨-mod-logs") or \
+           discord.utils.get(guild.text_channels, name="mod-logs") or \
+           discord.utils.get(guild.text_channels, name="🚨-admin-chat")
+
+async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: discord.TextChannel, reason: str, message_content: str):
+    """Automatically times out (mutes) a user for 10 minutes, notifies chat, and logs to mod log."""
+    duration = datetime.timedelta(minutes=10)
+    mute_success = False
+    err_msg = ""
+    
+    try:
+        await member.timeout(duration, reason=f"Auto-Mod: {reason}")
+        mute_success = True
+    except Exception as e:
+        err_msg = str(e)
+        logger.error(f"Failed to auto-mute user {member.name}: {e}")
+        
+    warn_text = f"⚠️ {member.mention} has been timed out for 10 minutes for {reason}."
+    if not mute_success:
+        warn_text = f"⚠️ {member.mention} had their message flagged for {reason}, but I couldn't mute them (Role Hierarchy/Permissions)."
+        
+    warn_msg = await channel.send(warn_text)
+    asyncio.create_task(delete_after_delay(warn_msg, 10))
+    
+    mod_log = await get_mod_log_channel(guild)
+    if mod_log:
+        log_embed = discord.Embed(
+            title="🚨 Auto-Mod Action: Automatic Timeout", 
+            color=discord.Color.red()
+        )
+        log_embed.add_field(name="User", value=f"{member} ({member.id})", inline=True)
+        log_embed.add_field(name="Channel", value=channel.mention, inline=True)
+        log_embed.add_field(name="Flagged Message", value=message_content[:1000] or "[Empty]", inline=False)
+        log_embed.add_field(name="Violation", value=reason, inline=True)
+        log_embed.add_field(name="Action Taken", value="Timed out for 10 minutes" if mute_success else f"Failed to mute: {err_msg}", inline=True)
+        log_embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+        await mod_log.send(embed=log_embed)
+
+async def delete_after_delay(msg, delay):
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
+async def log_mod_action(guild: discord.Guild, moderator: discord.User, target: discord.User, action: str, reason: str, details: str = None):
+    """Sends a detailed moderation action log embed to the configured logs channel."""
+    mod_log = await get_mod_log_channel(guild)
+    if mod_log:
+        embed = discord.Embed(title=f"🛡️ Mod Action: {action}", color=discord.Color.orange())
+        embed.add_field(name="Moderator", value=f"{moderator} ({moderator.id})", inline=True)
+        embed.add_field(name="Target User", value=f"{target} ({target.id})", inline=True)
+        embed.add_field(name="Reason", value=reason, inline=False)
+        if details:
+            embed.add_field(name="Details", value=details, inline=False)
+        embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+        try:
+            await mod_log.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Failed to send mod action log: {e}")
+
 # ── Teardown & Nuke Handlers ───────────────────────────────────────────────
 
 async def teardown_guild(guild):
@@ -900,7 +1011,7 @@ async def help_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
@@ -1217,6 +1328,19 @@ async def dynamicvoice_command(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to set up dynamic voice system: {e}")
 
 
+@bot.tree.command(name="setlogchannel", description="Set the channel where all moderation logs and Auto-Mod flags will be sent")
+@app_commands.describe(channel="The text channel for moderation logs")
+@app_commands.default_permissions(manage_guild=True)
+async def setlogchannel_command(interaction: discord.Interaction, channel: discord.TextChannel):
+    permissions = channel.permissions_for(interaction.guild.me)
+    if not permissions.send_messages or not permissions.embed_links:
+        await interaction.response.send_message(f"❌ I don't have permission to send messages or embed links in {channel.mention}!", ephemeral=True)
+        return
+        
+    await db.set_config(interaction.guild.id, "mod_log_channel_id", channel.id)
+    await interaction.response.send_message(f"✅ **Logging channel updated!** All moderation events and Auto-Mod logs will now be sent to {channel.mention}.")
+
+
 @bot.tree.command(name="automod", description="Configure the Auto-Mod security and scam shield")
 @app_commands.describe(
     status="Enable or disable Auto-Mod",
@@ -1405,6 +1529,7 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
     try:
         await member.kick(reason=reason)
         await interaction.response.send_message(f"✅ **{member.display_name}** has been kicked from the server. (Reason: {reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Kick", reason)
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to kick member: {e}", ephemeral=True)
 
@@ -1437,6 +1562,7 @@ async def ban_command(interaction: discord.Interaction, member: discord.User, re
         seconds = delete_message_days * 86400
         await interaction.guild.ban(member, reason=reason, delete_message_seconds=seconds)
         await interaction.response.send_message(f"✅ **{member.display_name}** has been banned from the server. (Reason: {reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Ban", reason, f"Deleted messages history: {delete_message_days} days")
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to ban user: {e}", ephemeral=True)
 
@@ -1450,6 +1576,7 @@ async def unban_command(interaction: discord.Interaction, user_id: str, reason: 
         user = await bot.fetch_user(uid)
         await interaction.guild.unban(user, reason=reason)
         await interaction.response.send_message(f"✅ **{user.display_name}** (ID: {user_id}) has been unbanned. (Reason: {reason})")
+        await log_mod_action(interaction.guild, interaction.user, user, "Unban", reason)
     except ValueError:
         await interaction.response.send_message("❌ Please provide a valid numerical User ID.", ephemeral=True)
     except discord.NotFound:
@@ -1477,6 +1604,7 @@ async def mute_command(interaction: discord.Interaction, member: discord.Member,
     try:
         await member.timeout(duration, reason=reason)
         await interaction.response.send_message(f"✅ **{member.display_name}** has been timed out for `{duration_minutes}` minutes. (Reason: {reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Timeout (Mute)", reason, f"Duration: {duration_minutes} minutes")
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to mute member: {e}", ephemeral=True)
 
@@ -1492,6 +1620,7 @@ async def unmute_command(interaction: discord.Interaction, member: discord.Membe
     try:
         await member.timeout(None, reason=reason)
         await interaction.response.send_message(f"✅ **{member.display_name}** is no longer timed out. (Reason: {reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Unmute", reason)
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to unmute member: {e}", ephemeral=True)
 
@@ -1507,6 +1636,7 @@ async def deafen_command(interaction: discord.Interaction, member: discord.Membe
     try:
         await member.edit(deafen=True, reason=reason)
         await interaction.response.send_message(f"✅ **{member.display_name}** has been voice deafened. (Reason: {reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Voice Deafen", reason)
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to deafen member: {e}", ephemeral=True)
 
@@ -1522,8 +1652,10 @@ async def undeafen_command(interaction: discord.Interaction, member: discord.Mem
     try:
         await member.edit(deafen=False, reason=reason)
         await interaction.response.send_message(f"✅ **{member.display_name}** has been voice undeafened. (Reason: {reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Voice Undeafen", reason)
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to undeafen member: {e}", ephemeral=True)
+
 
 
 # ── Role Setup & Management Commands ────────────────────────────────────────
@@ -1829,11 +1961,45 @@ async def on_message(message):
 
     # Auto-Mod checks
     if not message.author.bot and message.guild:
+        is_staff = message.author.guild_permissions.administrator or message.author.guild_permissions.manage_guild
         automod_enabled = await db.get_config(message.guild.id, "automod", True)
-        if automod_enabled:
+        
+        if automod_enabled and not is_staff:
             content = message.content.strip()
             if content:
-                # 1. Instant Local Filter (Free and uses ZERO API quota)
+                # A. Porn GIF / NSFW link filter
+                is_nsfw, nsfw_kw = _is_nsfw_link(content)
+                if is_nsfw:
+                    try:
+                        await message.delete()
+                    except Exception:
+                        pass
+                    await auto_mute_user(
+                        member=message.author,
+                        guild=message.guild,
+                        channel=message.channel,
+                        reason=f"sending NSFW/Porn link (contains keyword: '{nsfw_kw}')",
+                        message_content=content
+                    )
+                    return
+
+                # B. Chat Spam / Rate Limit Filter
+                is_spam, spam_reason = _check_spam(message.author.id, content)
+                if is_spam:
+                    try:
+                        await message.delete()
+                    except Exception:
+                        pass
+                    await auto_mute_user(
+                        member=message.author,
+                        guild=message.guild,
+                        channel=message.channel,
+                        reason=f"chat spam ({spam_reason})",
+                        message_content=content
+                    )
+                    return
+
+                # C. Instant Local Filter (Free and uses ZERO API quota)
                 profanities = [
                     "fuck", "bastard", "asshole", "bitch", "cunt", "motherfucker", "mother fucker", 
                     "nigger", "faggot", "retard", "kys", "kill yourself", "dickhead", "pussy", 
@@ -1869,7 +2035,7 @@ async def on_message(message):
                         await asyncio.sleep(5)
                         await warn_msg.delete()
                         
-                        mod_log = discord.utils.get(message.guild.text_channels, name="🚨-mod-logs") or discord.utils.get(message.guild.text_channels, name="mod-logs") or discord.utils.get(message.guild.text_channels, name="🚨-admin-chat")
+                        mod_log = await get_mod_log_channel(message.guild)
                         if mod_log:
                             log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message", color=discord.Color.red())
                             log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
@@ -1882,7 +2048,7 @@ async def on_message(message):
                         logger.error(f"Auto-Mod local delete failed: {del_err}")
                         return
 
-                # 2. Optional AI Fallback Filter (Requires automod_mode set to 'ai')
+                # D. Optional AI Fallback Filter (Requires automod_mode set to 'ai')
                 automod_mode = await db.get_config(message.guild.id, "automod_mode", "local")
                 if automod_mode == "ai":
                     try:
@@ -1896,9 +2062,9 @@ async def on_message(message):
                                     await asyncio.sleep(5)
                                     await warn_msg.delete()
                                     
-                                    mod_log = discord.utils.get(message.guild.text_channels, name="🚨-mod-logs") or discord.utils.get(message.guild.text_channels, name="mod-logs") or discord.utils.get(message.guild.text_channels, name="🚨-admin-chat")
+                                    mod_log = await get_mod_log_channel(message.guild)
                                     if mod_log:
-                                        log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message", color=discord.Color.red())
+                                        log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message (AI)", color=discord.Color.red())
                                         log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
                                         log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
                                         log_embed.add_field(name="Deleted Content", value=content[:1000], inline=False)
