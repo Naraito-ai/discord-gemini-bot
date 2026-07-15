@@ -11,6 +11,8 @@ class DatabaseManager:
         self.pg_pool = None
         self.sqlite_conn = None
         self._sqlite_lock = asyncio.Lock()  # Prevent SQLite write locks
+        self._config_cache = {}  # Cache for guild configurations
+
 
         # Detect database type
         if self.db_url and (self.db_url.startswith("postgres://") or self.db_url.startswith("postgresql://")):
@@ -148,20 +150,35 @@ class DatabaseManager:
         
         query_ins = "INSERT INTO guild_config (guild_id, key, value) VALUES (?, ?, ?)"
         await self.execute(query_ins, str(guild_id), key, str(value))
+        
+        # Update cache
+        self._config_cache[(str(guild_id), key)] = str(value)
+
+    def _parse_config_value(self, val):
+        if val == "True": return True
+        if val == "False": return False
+        if val == "None" or val is None: return None
+        try:
+            return int(val)
+        except ValueError:
+            return val
 
     async def get_config(self, guild_id: int, key: str, default=None):
         """Gets a configuration option."""
+        cache_key = (str(guild_id), key)
+        if cache_key in self._config_cache:
+            val = self._config_cache[cache_key]
+            return self._parse_config_value(val)
+
         query = "SELECT value FROM guild_config WHERE guild_id = ? AND key = ?"
         row = await self.fetchrow(query, str(guild_id), key)
         if row:
             val = row["value"]
-            # Convert booleans or ints if they look like it
-            if val == "True": return True
-            if val == "False": return False
-            try:
-                return int(val)
-            except ValueError:
-                return val
+            self._config_cache[cache_key] = val
+            return self._parse_config_value(val)
+        
+        # Cache negative/default values too to prevent repeat misses
+        self._config_cache[cache_key] = "None" if default is None else str(default)
         return default
 
     async def close(self):

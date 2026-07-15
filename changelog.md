@@ -2,6 +2,26 @@
 
 All notable changes to the Discord Gemini Bot project are documented here.
 
+## [1.1.2] - 2026-07-15
+
+### Fixed
+*   **AI Cooldown Bypass in `/embed`**: Applied rate-limiting user cooldowns, server hourly caps, and input sanitization to the `/embed` command when using AI styling to prevent API quota abuse and prompt injection.
+*   **Security Lockdown Reversal Vulnerability**: Redesigned the `/lockdown` command to explicitly log and track which channels the bot locked in the database. When lifting the lockdown, only those specific channels have their permissions restored, leaving read-only/announcement channels secure.
+*   **Privilege Escalation Protection**: Enforced role hierarchy checks for `/autorole` settings and prevented `/aiperms` from granting overrides that the executing member doesn't possess.
+*   **Voice State DB Query Flood**: Optimized `on_voice_state_update` events by keeping temporary voice channel IDs in a memory set cache (`bot.temp_voice_channel_ids`), avoiding database calls on user voice events.
+*   **Discord API Rate-Limit (429) Throttling**: Added a `0.2s` - `0.3s` backoff sleep delay inside sequential resource creations and deletions (`/setup`, `/teardown`, `/nuke`, `/lockdown`) to prevent hitting Discord's strict rate limits.
+
+### Changed
+*   **Relaxed AI Cooldown Constraints**: Adjusted the default AI user cooldown to `5` seconds (down from `30`s) and increased the server hourly limit to `100` calls (up from `10`) to allow smoother and more frequent user interactions.
+
+## [1.1.1] - 2026-07-15
+
+### Fixed
+*   **Aesthetic Channel Styling Re-application**: Integrated `destyle_text` in [bot.py](file:///D:/discord-gemini-bot/bot.py) to strip any previously applied Unicode formatting (Small Caps, Bubbles, Spaced) and collapse spaced names before applying a new style. This enables users to freely switch between styles or revert channels back to normal lowercase via the `/stylechannels` command.
+
+### Optimized
+*   **Fast Configuration Caching**: Added an in-memory configuration cache in [database.py](file:///D:/discord-gemini-bot/database.py). This completely eliminates database reads on every single incoming chat message, dramatically improving the bot's overall response speed and reliability under load.
+
 ## [1.1.0] - 2026-07-15
 
 ### Added

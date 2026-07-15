@@ -18,3 +18,9 @@ build/
 .vscode/
 .idea/
 *.swp
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+

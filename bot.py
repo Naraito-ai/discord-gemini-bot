@@ -17,8 +17,8 @@ from threading import Thread
 from database import db
 
 # ── Security: Rate Limit Trackers ──────────────────────────────────────────
-_USER_COOLDOWN_SECONDS = 30
-_SERVER_HOURLY_LIMIT = 10
+_USER_COOLDOWN_SECONDS = 5
+_SERVER_HOURLY_LIMIT = 100
 _user_last_ai_call: dict[int, float] = {}
 _server_ai_call_count: dict[int, int] = {}
 _server_ai_call_reset: dict[int, float] = {}
@@ -123,6 +123,34 @@ def extract_json(text: str) -> str:
     if start != -1 and end != -1 and end > start:
         return text[start:end+1]
     return text
+
+async def register_uptime_monitor(api_key: str, url: str):
+    """Automatically registers this service with UptimeRobot to keep it awake on Render."""
+    try:
+        import aiohttp
+        payload = {
+            "api_key": api_key,
+            "friendly_name": "Discord Gemini Bot (Render)",
+            "url": url,
+            "type": 1,  # HTTP(s)
+            "interval": 300  # 5 minutes
+        }
+        headers = {
+            "content-type": "application/json"
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post("https://api.uptimerobot.com/v2/newMonitor", json=payload, headers=headers) as resp:
+                data = await resp.json()
+                if data.get("stat") == "ok":
+                    logger.info(f"🚀 Successfully registered UptimeRobot monitor for: {url}")
+                else:
+                    err_msg = data.get("error", {}).get("message", "")
+                    if "already exists" in err_msg.lower() or "exists" in err_msg.lower():
+                        logger.info(f"ℹ️ UptimeRobot monitor already active for: {url}")
+                    else:
+                        logger.warning(f"⚠️ UptimeRobot registration feedback: {data}")
+    except Exception as e:
+        logger.error(f"Failed to register UptimeRobot monitor: {e}")
 
 async def call_ai_generation(prompt, system_instruction, json_mode=False):
     """Generates content asynchronously using Groq (via aiohttp) or Gemini (via google-genai async)."""
@@ -560,6 +588,30 @@ def style_text(text: str, style_type: str) -> str:
         return " ".join(chars)
     return text
 
+INVERSE_SMALL_CAPS = {v: k for k, v in SMALL_CAPS_MAP.items() if k != v}
+INVERSE_BUBBLE = {v: k for k, v in BUBBLE_MAP.items()}
+
+def destyle_text(text: str) -> str:
+    # 1. Convert bubble and small caps characters back to normal lowercase ascii
+    res = []
+    for char in text:
+        if char in INVERSE_BUBBLE:
+            res.append(INVERSE_BUBBLE[char])
+        elif char in INVERSE_SMALL_CAPS:
+            res.append(INVERSE_SMALL_CAPS[char])
+        else:
+            res.append(char)
+    decoded = "".join(res).lower()
+    
+    # 2. Handle spaced text (e.g. "g-e-n-e-r-a-l---c-h-a-t" or "g-e-n-e-r-a-l-c-h-a-t")
+    # Replace multiple hyphens (2 or more) with a placeholder tilde
+    decoded = re.sub(r'-{2,}', '~', decoded)
+    # Remove single hyphens/spaces between single letter words
+    decoded = re.sub(r'(?<=\b[a-z])[\s\-](?=[a-z]\b)', '', decoded)
+    # Restore the word separators as a single hyphen
+    decoded = decoded.replace('~', '-')
+    return decoded
+
 # ── Security: Chat Spam & NSFW Filters ─────────────────────────────────────
 _user_message_timestamps: dict[int, list[float]] = {}
 _user_message_contents: dict[int, list[tuple[float, str]]] = {}
@@ -704,6 +756,7 @@ async def teardown_guild(guild):
             try:
                 await channel.delete(reason="Gemini Bot Teardown")
                 stats["channels"] += 1
+                await asyncio.sleep(0.2)  # Avoid rate limiting
             except Exception as e:
                 logger.warning(f"Failed to delete channel {cid}: {e}")
 
@@ -714,6 +767,7 @@ async def teardown_guild(guild):
             try:
                 await cat.delete(reason="Gemini Bot Teardown")
                 stats["categories"] += 1
+                await asyncio.sleep(0.2)  # Avoid rate limiting
             except Exception as e:
                 logger.warning(f"Failed to delete category {cid}: {e}")
 
@@ -724,6 +778,7 @@ async def teardown_guild(guild):
             try:
                 await role.delete(reason="Gemini Bot Teardown")
                 stats["roles"] += 1
+                await asyncio.sleep(0.2)  # Avoid rate limiting
             except Exception as e:
                 logger.warning(f"Failed to delete role {rid}: {e}")
 
@@ -756,6 +811,7 @@ async def nuke_guild(guild):
                 stats["categories"] += 1
             else:
                 stats["channels"] += 1
+            await asyncio.sleep(0.2)  # Avoid rate limiting
         except Exception as e:
             logger.warning(f"Could not delete channel/category {channel.name}: {e}")
 
@@ -768,6 +824,7 @@ async def nuke_guild(guild):
         try:
             await role.delete(reason="Gemini Bot Complete Nuke")
             stats["roles"] += 1
+            await asyncio.sleep(0.2)  # Avoid rate limiting
         except Exception as e:
             logger.warning(f"Could not delete role {role.name}: {e}")
 
@@ -926,6 +983,7 @@ async def build_server_structure(guild, data, response_channel):
             role_objects[role_name] = new_role
             await db.add_resource(guild.id, "roles", new_role.id)
             logger.info(f"Created role: {new_role.name}")
+            await asyncio.sleep(0.3)  # Rate limiting backoff
         except Exception as e:
             logger.error(f"Failed to create role '{role_name}': {e}")
             errors_encountered.append(f"Role '{role_name}': {e}")
@@ -962,6 +1020,7 @@ async def build_server_structure(guild, data, response_channel):
                 categories_created.append(category.name)
                 await db.add_resource(guild.id, "categories", category.id)
                 logger.info(f"Created category: {category.name}")
+                await asyncio.sleep(0.3)  # Rate limiting backoff
             else:
                 categories_created.append(f"{category.name} (reused)")
         except Exception as e:
@@ -996,6 +1055,7 @@ async def build_server_structure(guild, data, response_channel):
                     channels_created.append(f"#{new_chan.name}")
                     await db.add_resource(guild.id, "channels", new_chan.id)
                     logger.info(f"Created text channel: #{new_chan.name} (Topic: {chan_topic})")
+                    await asyncio.sleep(0.3)  # Rate limiting backoff
                 elif chan_type == "voice":
                     new_chan = await guild.create_voice_channel(
                         name=chan_name,
@@ -1006,6 +1066,7 @@ async def build_server_structure(guild, data, response_channel):
                     channels_created.append(f"🔊 {new_chan.name}")
                     await db.add_resource(guild.id, "channels", new_chan.id)
                     logger.info(f"Created voice channel: 🔊 {new_chan.name}")
+                    await asyncio.sleep(0.3)  # Rate limiting backoff
             except Exception as e:
                 logger.error(f"Failed to create channel '{chan_name}' in '{cat_name}': {e}")
                 errors_encountered.append(f"Channel '{chan_name}' in '{cat_name}': {e}")
@@ -1038,6 +1099,7 @@ class GeminiBot(commands.Bot):
         intents.members = True
         intents.voice_states = True  # Required for Join-to-Create dynamic voice
         super().__init__(command_prefix="!", intents=intents)
+        self.temp_voice_channel_ids = set()
         
     async def setup_hook(self):
         # Connect database & create tables
@@ -1046,10 +1108,27 @@ class GeminiBot(commands.Bot):
     async def on_ready(self):
         logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
         try:
+            # Query all temp voice channels from database into memory cache
+            rows = await db.fetch("SELECT resource_id FROM guild_resources WHERE resource_type = 'temp_voice_channels'")
+            self.temp_voice_channel_ids = {int(r["resource_id"]) for r in rows}
+            logger.info(f"Loaded {len(self.temp_voice_channel_ids)} temporary voice channels into memory cache.")
+        except Exception as e:
+            logger.error(f"Failed to cache temp voice channels: {e}")
+            
+        try:
             synced = await self.tree.sync()
             logger.info(f"Synced {len(synced)} slash commands globally.")
         except Exception as e:
             logger.error(f"Failed to sync slash commands: {e}")
+            
+        # Automatic UptimeRobot self-registration
+        uptime_key = os.getenv("UPTIME_API_KEY", "").strip()
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
+        if not render_url and os.getenv("RENDER_SERVICE_NAME"):
+            render_url = f"https://{os.getenv('RENDER_SERVICE_NAME')}.onrender.com"
+            
+        if uptime_key and render_url:
+            asyncio.create_task(register_uptime_monitor(uptime_key, render_url))
 
 bot = GeminiBot()
 
@@ -1221,7 +1300,8 @@ async def stylechannels_command(interaction: discord.Interaction, style: str):
             emoji_prefix = ""
             core_name = old_name
             
-        styled_core = style_text(core_name, style)
+        clean_core = destyle_text(core_name)
+        styled_core = style_text(clean_core, style)
         new_name = f"{emoji_prefix}{styled_core}"
         
         if old_name == new_name:
@@ -1472,20 +1552,33 @@ async def lockdown_command(interaction: discord.Interaction, status: str):
     if status == "on":
         locked = 0
         for chan in guild.text_channels:
+            # Skip if regular members already cannot send messages
+            overwrites = chan.overwrites_for(guild.default_role)
+            if overwrites.send_messages is False:
+                continue
+                
             try:
                 await chan.set_permissions(guild.default_role, send_messages=False, reason="Emergency Lockdown")
+                await db.add_resource(guild.id, "locked_channels", chan.id)
                 locked += 1
+                await asyncio.sleep(0.2)  # Avoid rate limiting
             except Exception:
                 pass
         await interaction.followup.send(f"🚨 **EMERGENCY LOCKDOWN INITIATED!** 🚨\nLocked `{locked}` public text channels. Regular members cannot type until unlocked.")
     else:
         unlocked = 0
+        locked_resources = await db.get_resources(guild.id, "locked_channels")
+        locked_ids = {r["resource_id"] for r in locked_resources}
+        
         for chan in guild.text_channels:
-            try:
-                await chan.set_permissions(guild.default_role, send_messages=None, reason="Lockdown Lifted")
-                unlocked += 1
-            except Exception:
-                pass
+            if chan.id in locked_ids:
+                try:
+                    await chan.set_permissions(guild.default_role, send_messages=None, reason="Lockdown Lifted")
+                    unlocked += 1
+                    await asyncio.sleep(0.2)  # Avoid rate limiting
+                except Exception:
+                    pass
+        await db.execute("DELETE FROM guild_resources WHERE guild_id = ? AND resource_type = 'locked_channels'", str(guild.id))
         await interaction.followup.send(f"🔓 **LOCKDOWN LIFTED!** Unlocked `{unlocked}` channels. Public chat is reopened.")
 
 
@@ -1641,6 +1734,9 @@ async def aiperms_command(interaction: discord.Interaction, target: discord.abc.
     role_rules = data.get("roles", {})
     member_rules = data.get("members", {})
     
+    user_perms = target.permissions_for(interaction.user)
+    is_owner = interaction.user.id == interaction.guild.owner_id
+    
     # Apply Role permissions
     for r_name, perms in role_rules.items():
         role = None
@@ -1656,8 +1752,11 @@ async def aiperms_command(interaction: discord.Interaction, target: discord.abc.
         try:
             overwrite = discord.PermissionOverwrite()
             for perm_key, val in perms.items():
-                # Set attribute on PermissionOverwrite object
                 if hasattr(overwrite, perm_key):
+                    # Prevent granting permissions the command executor does not have
+                    if not is_owner and not getattr(user_perms, perm_key, False):
+                        errors.append(f"Permission '{perm_key}' skipped: you do not possess it.")
+                        continue
                     setattr(overwrite, perm_key, val)
             await target.set_permissions(role, overwrite=overwrite, reason="AI Permission Configurator")
             success_roles.append(role.name)
@@ -1678,6 +1777,10 @@ async def aiperms_command(interaction: discord.Interaction, target: discord.abc.
             overwrite = discord.PermissionOverwrite()
             for perm_key, val in perms.items():
                 if hasattr(overwrite, perm_key):
+                    # Prevent granting permissions the command executor does not have
+                    if not is_owner and not getattr(user_perms, perm_key, False):
+                        errors.append(f"Permission '{perm_key}' skipped: you do not possess it.")
+                        continue
                     setattr(overwrite, perm_key, val)
             await target.set_permissions(member, overwrite=overwrite, reason="AI Permission Configurator")
             success_members.append(member.display_name)
@@ -1824,6 +1927,10 @@ async def mute_command(interaction: discord.Interaction, member: discord.Member,
     if member.top_role >= interaction.guild.me.top_role:
         await interaction.response.send_message("❌ I cannot mute this member because they have a higher or equal role than me.", ephemeral=True)
         return
+
+    if duration_minutes <= 0 or duration_minutes > 40320:
+        await interaction.response.send_message("❌ Mute duration must be between 1 and 40,320 minutes (28 days).", ephemeral=True)
+        return
         
     duration = datetime.timedelta(minutes=duration_minutes)
     try:
@@ -1909,6 +2016,10 @@ async def autorole_command(interaction: discord.Interaction, status: str, role: 
     if status == "on":
         if not role:
             await interaction.response.send_message("❌ Please specify the `role` you want to assign automatically.", ephemeral=True)
+            return
+            
+        if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
+            await interaction.response.send_message("❌ You cannot configure an auto-role that is higher than or equal to your own top role.", ephemeral=True)
             return
             
         if role.position >= interaction.guild.me.top_role.position:
@@ -2063,6 +2174,34 @@ async def embed_command(
         await interaction.response.send_message(f"❌ I don't have permission to send embeds in {target_channel.mention}!", ephemeral=True)
         return
         
+    if use_ai:
+        # 1. User cooldown
+        allowed, remaining = _check_user_cooldown(interaction.user.id)
+        if not allowed:
+            await interaction.response.send_message(
+                f"⏳ You're sending commands too fast. Please wait **{remaining}s** before using AI Embed formatting again.",
+                ephemeral=True
+            )
+            return
+
+        # 2. Server hourly cap
+        if not _check_server_limit(interaction.guild.id):
+            await interaction.response.send_message(
+                f"🚫 This server has reached the hourly AI uses limit. Try again later or create a standard embed.",
+                ephemeral=True
+            )
+            return
+
+        # 3. Input sanitization
+        is_clean, result = _sanitize_ai_input(description)
+        if not is_clean:
+            await interaction.response.send_message(
+                "⚠️ Your description was flagged for suspicious content.",
+                ephemeral=True
+            )
+            return
+        description = result
+
     await interaction.response.defer(thinking=True)
     
     content = description
@@ -2146,6 +2285,7 @@ async def on_voice_state_update(member, before, after):
         category = after.channel.category
         temp_channel_name = f"🔊 {member.display_name}'s Room"
         
+        temp_channel = None
         try:
             temp_channel = await guild.create_voice_channel(
                 name=temp_channel_name,
@@ -2153,22 +2293,27 @@ async def on_voice_state_update(member, before, after):
                 reason=f"Temporary room for {member.display_name}"
             )
             await db.add_resource(guild.id, "temp_voice_channels", temp_channel.id)
+            bot.temp_voice_channel_ids.add(temp_channel.id)
             await member.move_to(temp_channel)
         except Exception as e:
-            logger.error(f"Error creating temp voice channel: {e}")
+            logger.error(f"Error creating/moving to temp voice channel: {e}")
+            if temp_channel:
+                try:
+                    await temp_channel.delete(reason="Failed to move creator to temporary channel")
+                    await db.execute("DELETE FROM guild_resources WHERE guild_id = ? AND resource_id = ?", str(guild.id), temp_channel.id)
+                    bot.temp_voice_channel_ids.discard(temp_channel.id)
+                except Exception:
+                    pass
             
     # 2. User leaves a temporary voice channel
-    if before.channel:
-        temp_channels = await db.get_resources(guild.id, "temp_voice_channels")
-        temp_ids = [r["resource_id"] for r in temp_channels]
-        
-        if before.channel.id in temp_ids:
-            if len(before.channel.members) == 0:
-                try:
-                    await before.channel.delete(reason="Temporary voice channel empty")
-                    await db.execute("DELETE FROM guild_resources WHERE guild_id = ? AND resource_id = ?", str(guild.id), before.channel.id)
-                except Exception as e:
-                    logger.error(f"Error deleting empty temp channel: {e}")
+    if before.channel and before.channel.id in bot.temp_voice_channel_ids:
+        if len(before.channel.members) == 0:
+            try:
+                await before.channel.delete(reason="Temporary voice channel empty")
+                await db.execute("DELETE FROM guild_resources WHERE guild_id = ? AND resource_id = ?", str(guild.id), before.channel.id)
+                bot.temp_voice_channel_ids.discard(before.channel.id)
+            except Exception as e:
+                logger.error(f"Error deleting empty temp channel: {e}")
 
 
 @bot.event
