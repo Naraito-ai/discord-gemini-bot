@@ -6,6 +6,8 @@ All notable changes to the Discord Gemini Bot project are documented here.
 
 ### Added
 *   **Database Cleanup Event Listeners**: Added `on_guild_channel_delete` and `on_guild_role_delete` listeners in [bot.py](file:///D:/discord-gemini-bot/bot.py) to automatically remove deleted channels and roles from database tracking resources, preventing errors during `/teardown`.
+*   **AI Rate Limiting & Input Sanitization**: Added a multi-layered security wrapper in [bot.py](file:///D:/discord-gemini-bot/bot.py) containing user cooldowns (30 seconds), server hourly limits (10 calls/hour), maximum input length restrictions (500 characters), and detection profiles for typical prompt injection keywords to protect custom setup commands from injection/abuse.
+
 
 ### Fixed
 *   **Render Keep-Alive Routing**: Modified `keep_alive()` in [bot.py](file:///D:/discord-gemini-bot/bot.py) to bind to the dynamic `PORT` environment variable injected by Render, falling back to `8080` if not present. This ensures Render's port detection and routing work correctly, and prevents the web container from going to sleep when UptimeRobot pings the service.
