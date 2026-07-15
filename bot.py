@@ -1080,6 +1080,7 @@ async def help_command(interaction: discord.Interaction):
     ]
 )
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def setup_command(interaction: discord.Interaction, theme: str = None, description: str = None):
     if not theme and not description:
         await interaction.response.send_message("❌ Please provide a preset `theme` OR a custom `description` to set up your server.", ephemeral=True)
@@ -1144,8 +1145,8 @@ async def setup_command(interaction: discord.Interaction, theme: str = None, des
                 
             data = json.loads(raw_response)
         except Exception as e:
-            logger.error(f"AI API error during setup: {e}")
-            await interaction.followup.send(f"❌ **AI Generation Failed:** `{e}`\n\n💡 *If your API key is invalid or not loaded, try selecting a preset theme directly without a description!*")
+            logger.error(f"AI API error during setup: {e}", exc_info=True)
+            await interaction.followup.send("❌ **AI Generation Failed:** An unexpected error occurred while communicating with the AI. The error has been logged for our developers.")
             return
 
     if not data:
@@ -1193,6 +1194,7 @@ async def setup_command(interaction: discord.Interaction, theme: str = None, des
     ]
 )
 @app_commands.default_permissions(manage_channels=True)
+@app_commands.guild_only()
 async def stylechannels_command(interaction: discord.Interaction, style: str):
     await interaction.response.defer(thinking=True)
     success_count = 0
@@ -1228,80 +1230,86 @@ async def stylechannels_command(interaction: discord.Interaction, style: str):
 
 @bot.tree.command(name="backup", description="Export the current server structure (roles, categories, channels) as a JSON template")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def backup_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     guild = interaction.guild
     
-    # 1. Export Roles
-    roles_list = []
-    for role in guild.roles:
-        if role == guild.default_role or role.managed:
-            continue
-        roles_list.append({
-            "name": role.name,
-            "color": f"#{role.color.value:06x}",
-            "hoist": role.hoist
-        })
-        
-    # 2. Export Categories & Channels
-    categories_list = []
-    sorted_categories = sorted(guild.categories, key=lambda c: c.position)
-    
-    for cat in sorted_categories:
-        cat_data = {
-            "name": cat.name,
-            "private_for": [],
-            "channels": []
-        }
-        
-        default_overwrite = cat.overwrites_for(guild.default_role)
-        if default_overwrite.read_messages is False or default_overwrite.connect is False:
-            for target, overwrite in cat.overwrites:
-                if isinstance(target, discord.Role) and target != guild.default_role:
-                    if overwrite.read_messages is True or overwrite.connect is True:
-                        cat_data["private_for"].append(target.name)
-                        
-        sorted_chans = sorted(cat.channels, key=lambda c: c.position)
-        for chan in sorted_chans:
-            chan_type = "text" if isinstance(chan, discord.TextChannel) else "voice"
-            chan_topic = getattr(chan, "topic", "")
+    try:
+        # 1. Export Roles
+        roles_list = []
+        for role in guild.roles:
+            if role == guild.default_role or role.managed:
+                continue
+            roles_list.append({
+                "name": role.name,
+                "color": f"#{role.color.value:06x}",
+                "hoist": role.hoist
+            })
             
-            chan_data = {
-                "name": chan.name,
-                "type": chan_type,
-                "topic": chan_topic or ""
+        # 2. Export Categories & Channels
+        categories_list = []
+        sorted_categories = sorted(guild.categories, key=lambda c: c.position)
+        
+        for cat in sorted_categories:
+            cat_data = {
+                "name": cat.name,
+                "private_for": [],
+                "channels": []
             }
             
-            chan_default_overwrite = chan.overwrites_for(guild.default_role)
-            if chan_default_overwrite.read_messages is False or chan_default_overwrite.connect is False:
-                chan_data["private_for"] = []
-                for target, overwrite in chan.overwrites:
+            default_overwrite = cat.overwrites_for(guild.default_role)
+            if default_overwrite.read_messages is False or default_overwrite.connect is False:
+                for target, overwrite in cat.overwrites:
                     if isinstance(target, discord.Role) and target != guild.default_role:
                         if overwrite.read_messages is True or overwrite.connect is True:
-                            chan_data["private_for"].append(target.name)
+                            cat_data["private_for"].append(target.name)
                             
-            cat_data["channels"].append(chan_data)
+            sorted_chans = sorted(cat.channels, key=lambda c: c.position)
+            for chan in sorted_chans:
+                chan_type = "text" if isinstance(chan, discord.TextChannel) else "voice"
+                chan_topic = getattr(chan, "topic", "")
+                
+                chan_data = {
+                    "name": chan.name,
+                    "type": chan_type,
+                    "topic": chan_topic or ""
+                }
+                
+                chan_default_overwrite = chan.overwrites_for(guild.default_role)
+                if chan_default_overwrite.read_messages is False or chan_default_overwrite.connect is False:
+                    chan_data["private_for"] = []
+                    for target, overwrite in chan.overwrites:
+                        if isinstance(target, discord.Role) and target != guild.default_role:
+                            if overwrite.read_messages is True or overwrite.connect is True:
+                                chan_data["private_for"].append(target.name)
+                                
+                cat_data["channels"].append(chan_data)
+                
+            categories_list.append(cat_data)
             
-        categories_list.append(cat_data)
+        backup_data = {
+            "roles": roles_list,
+            "categories": categories_list
+        }
         
-    backup_data = {
-        "roles": roles_list,
-        "categories": categories_list
-    }
-    
-    json_bytes = io.BytesIO(json.dumps(backup_data, indent=2, ensure_ascii=False).encode('utf-8'))
-    discord_file = discord.File(json_bytes, filename=f"backup_{guild.name.replace(' ', '_')}.json")
-    
-    await interaction.followup.send(
-        content="✅ **Server layout successfully exported!** Save this file to restore or clone this layout later using `/restore`.",
-        file=discord_file,
-        ephemeral=True
-    )
+        json_bytes = io.BytesIO(json.dumps(backup_data, indent=2, ensure_ascii=False).encode('utf-8'))
+        discord_file = discord.File(json_bytes, filename=f"backup_{guild.name.replace(' ', '_')}.json")
+        
+        await interaction.followup.send(
+            content="✅ **Server layout successfully exported!** Save this file to restore or clone this layout later using `/restore`.",
+            file=discord_file,
+            ephemeral=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate backup: {e}", exc_info=True)
+        await interaction.followup.send("❌ Failed to generate server backup due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="restore", description="Restore or clone a server structure from a backup JSON file")
 @app_commands.describe(file="The backup JSON file generated by the /backup command")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def restore_command(interaction: discord.Interaction, file: discord.Attachment):
     if not file.filename.endswith(".json"):
         await interaction.response.send_message("❌ Please upload a valid JSON template file (.json).", ephemeral=True)
@@ -1313,8 +1321,8 @@ async def restore_command(interaction: discord.Interaction, file: discord.Attach
         raw_data = file_bytes.decode("utf-8")
         data = json.loads(raw_data)
     except Exception as e:
-        logger.error(f"Failed to read backup file: {e}")
-        await interaction.followup.send(f"❌ Failed to parse the backup file: `{e}`")
+        logger.error(f"Failed to read backup file: {e}", exc_info=True)
+        await interaction.followup.send("❌ Failed to parse the backup file. Please ensure it is a valid backup JSON.")
         return
         
     if "categories" not in data:
@@ -1352,6 +1360,7 @@ async def restore_command(interaction: discord.Interaction, file: discord.Attach
 
 @bot.tree.command(name="dynamicvoice", description="Set up a dynamic Join-to-Create voice channel system")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def dynamicvoice_command(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     guild = interaction.guild
@@ -1370,12 +1379,14 @@ async def dynamicvoice_command(interaction: discord.Interaction):
         
         await interaction.followup.send(f"✅ **Dynamic Voice System set up successfully!**\nMembers joining {generator_channel.mention} will automatically get their own temporary voice rooms.")
     except Exception as e:
-        await interaction.followup.send(f"❌ Failed to set up dynamic voice system: {e}")
+        logger.error(f"Failed to set up dynamic voice system: {e}", exc_info=True)
+        await interaction.followup.send("❌ Failed to set up dynamic voice system due to an internal error.")
 
 
 @bot.tree.command(name="setlogchannel", description="Set the channel where all moderation logs and Auto-Mod flags will be sent")
 @app_commands.describe(channel="The text channel for moderation logs")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def setlogchannel_command(interaction: discord.Interaction, channel: discord.TextChannel):
     permissions = channel.permissions_for(interaction.guild.me)
     if not permissions.send_messages or not permissions.embed_links:
@@ -1402,6 +1413,7 @@ async def setlogchannel_command(interaction: discord.Interaction, channel: disco
     ]
 )
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def automod_command(interaction: discord.Interaction, status: str, mode: str = "local"):
     if status == "on":
         await db.set_config(interaction.guild_id, "automod", True)
@@ -1418,6 +1430,7 @@ async def automod_command(interaction: discord.Interaction, status: str, mode: s
 @bot.tree.command(name="testautomod", description="Test how the AI Auto-Mod rates a specific text block")
 @app_commands.describe(text="The message content to test")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def testautomod_command(interaction: discord.Interaction, text: str):
     await interaction.response.defer(thinking=True)
     try:
@@ -1429,7 +1442,8 @@ async def testautomod_command(interaction: discord.Interaction, text: str):
         else:
             await interaction.followup.send(f"✅ **Auto-Mod Result:** `SAFE`\n\n*This message would be allowed in chat.*")
     except Exception as e:
-        await interaction.followup.send(f"❌ Evaluation failed: {e}")
+        logger.error(f"Test Auto-Mod evaluation failed: {e}", exc_info=True)
+        await interaction.followup.send("❌ Evaluation failed due to an internal error.")
 
 
 @bot.tree.command(name="lockdown", description="Freeze or unfreeze public chat channels in an emergency")
@@ -1441,6 +1455,7 @@ async def testautomod_command(interaction: discord.Interaction, text: str):
     ]
 )
 @app_commands.default_permissions(manage_channels=True)
+@app_commands.guild_only()
 async def lockdown_command(interaction: discord.Interaction, status: str):
     await interaction.response.defer(thinking=True)
     guild = interaction.guild
@@ -1467,6 +1482,7 @@ async def lockdown_command(interaction: discord.Interaction, status: str):
 @bot.tree.command(name="purge", description="Quickly delete a specified number of messages from this channel")
 @app_commands.describe(amount="Number of messages to delete (max 100)")
 @app_commands.default_permissions(manage_messages=True)
+@app_commands.guild_only()
 async def purge_command(interaction: discord.Interaction, amount: int):
     amount = max(1, min(amount, 100))
     await interaction.response.defer(ephemeral=True)
@@ -1474,12 +1490,14 @@ async def purge_command(interaction: discord.Interaction, amount: int):
         deleted = await interaction.channel.purge(limit=amount)
         await interaction.followup.send(f"🧹 Successfully purged `{len(deleted)}` messages.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Purge failed: {e}", ephemeral=True)
+        logger.error(f"Purge failed: {e}", exc_info=True)
+        await interaction.followup.send("❌ Purge failed due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="addcategory", description="Ask AI to design and add a single category with custom channels")
 @app_commands.describe(description="Description of the category (e.g. 'VIP anime lounge with 4k stream rooms')")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def addcategory_command(interaction: discord.Interaction, description: str):
     # ── Layer 1: Rate limit (user cooldown) ────────────────────────────────
     allowed, remaining = _check_user_cooldown(interaction.user.id)
@@ -1525,7 +1543,8 @@ async def addcategory_command(interaction: discord.Interaction, description: str
         await interaction.edit_original_response(content="⚙️ **Building new category and channels...**")
         await build_server_structure(interaction.guild, data, interaction.channel)
     except Exception as e:
-        await interaction.edit_original_response(content=f"❌ Failed to build category: {e}")
+        logger.error(f"Failed to build category: {e}", exc_info=True)
+        await interaction.edit_original_response(content="❌ Failed to build category due to an internal error.")
 
 
 @bot.tree.command(name="aiperms", description="Configure channel/category permissions for roles and users using AI")
@@ -1534,6 +1553,7 @@ async def addcategory_command(interaction: discord.Interaction, description: str
     description="English description of permissions (e.g. 'private: block everyone, allow Moderator and user Vinay')"
 )
 @app_commands.default_permissions(manage_permissions=True)
+@app_commands.guild_only()
 async def aiperms_command(interaction: discord.Interaction, target: discord.abc.GuildChannel, description: str):
     # Rate limit (user cooldown)
     allowed, remaining = _check_user_cooldown(interaction.user.id)
@@ -1557,7 +1577,32 @@ async def aiperms_command(interaction: discord.Interaction, target: discord.abc.
     
     # Collect roles and active members to send as context
     roles_list = [r.name for r in interaction.guild.roles]
-    members_list = [f"{m.name} (display: {m.display_name})" for m in interaction.guild.members if not m.bot][:50]
+    
+    # Extract user mentions like <@123456789...> from the description
+    mentioned_ids = re.findall(r'<@!?(\d+)>', description)
+    mentioned_members = []
+    for m_id in mentioned_ids:
+        try:
+            m = interaction.guild.get_member(int(m_id))
+            if m and not m.bot:
+                mentioned_members.append(m)
+        except Exception:
+            pass
+            
+    # Fallback scan for usernames/display names in text
+    if not mentioned_members:
+        desc_lower = description.lower()
+        count = 0
+        for m in interaction.guild.members:
+            if m.bot:
+                continue
+            if m.name.lower() in desc_lower or m.display_name.lower() in desc_lower:
+                mentioned_members.append(m)
+                count += 1
+                if count >= 10:
+                    break
+                    
+    members_list = [f"{m.name} (display: {m.display_name})" for m in mentioned_members]
     
     sys_prompt = SYSTEM_PERMS_PROMPT
     prompt = f"Roles on server: {json.dumps(roles_list)}\nMembers on server: {json.dumps(members_list)}\nTarget Channel/Category: {target.name}\n\nDescription: {description}"
@@ -1575,8 +1620,8 @@ async def aiperms_command(interaction: discord.Interaction, target: discord.abc.
             
         data = json.loads(response)
     except Exception as e:
-        logger.error(f"AI Perms configuration failed: {e}")
-        await interaction.followup.send(f"❌ AI configuration failed: `{e}`")
+        logger.error(f"AI Perms configuration failed: {e}", exc_info=True)
+        await interaction.followup.send("❌ AI configuration failed due to an internal error.")
         return
         
     success_roles = []
@@ -1646,6 +1691,7 @@ async def aiperms_command(interaction: discord.Interaction, target: discord.abc.
 
 @bot.tree.command(name="teardown", description="Delete only the roles, categories, and channels created by this bot")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
 async def teardown_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="⚠️ Confirm Teardown",
@@ -1658,6 +1704,7 @@ async def teardown_command(interaction: discord.Interaction):
 
 @bot.tree.command(name="nuke", description="⚠️ COMPLETE SERVER NUKE — Wipes all channels, categories, and roles")
 @app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
 async def nuke_command(interaction: discord.Interaction):
     if interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ This command is restricted to the Server Owner only.", ephemeral=True)
@@ -1679,6 +1726,7 @@ async def nuke_command(interaction: discord.Interaction):
 @bot.tree.command(name="kick", description="Kick a member from the server")
 @app_commands.describe(member="The member to kick", reason="The reason for kicking")
 @app_commands.default_permissions(kick_members=True)
+@app_commands.guild_only()
 async def kick_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot kick this member because they have a higher or equal role than you.", ephemeral=True)
@@ -1692,7 +1740,8 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
         await interaction.response.send_message(f"✅ **{member.display_name}** has been kicked from the server. (Reason: {reason})")
         await log_mod_action(interaction.guild, interaction.user, member, "Kick", reason)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to kick member: {e}", ephemeral=True)
+        logger.error(f"Kick command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to kick member due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="ban", description="Ban a user from the server")
@@ -1709,6 +1758,7 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
     ]
 )
 @app_commands.default_permissions(ban_members=True)
+@app_commands.guild_only()
 async def ban_command(interaction: discord.Interaction, member: discord.User, reason: str = "No reason provided", delete_message_days: int = 0):
     guild_member = interaction.guild.get_member(member.id)
     if guild_member:
@@ -1725,12 +1775,14 @@ async def ban_command(interaction: discord.Interaction, member: discord.User, re
         await interaction.response.send_message(f"✅ **{member.display_name}** has been banned from the server. (Reason: {reason})")
         await log_mod_action(interaction.guild, interaction.user, member, "Ban", reason, f"Deleted messages history: {delete_message_days} days")
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to ban user: {e}", ephemeral=True)
+        logger.error(f"Ban command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to ban user due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="unban", description="Unban a user from the server")
 @app_commands.describe(user_id="The Discord ID of the user to unban", reason="The reason for unbanning")
 @app_commands.default_permissions(ban_members=True)
+@app_commands.guild_only()
 async def unban_command(interaction: discord.Interaction, user_id: str, reason: str = "No reason provided"):
     try:
         uid = int(user_id)
@@ -1743,7 +1795,8 @@ async def unban_command(interaction: discord.Interaction, user_id: str, reason: 
     except discord.NotFound:
         await interaction.response.send_message("❌ That user was not found or is not banned.", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to unban user: {e}", ephemeral=True)
+        logger.error(f"Unban command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to unban user due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="mute", description="Timeout (mute) a member in the server")
@@ -1753,6 +1806,7 @@ async def unban_command(interaction: discord.Interaction, user_id: str, reason: 
     reason="The reason for muting"
 )
 @app_commands.default_permissions(moderate_members=True)
+@app_commands.guild_only()
 async def mute_command(interaction: discord.Interaction, member: discord.Member, duration_minutes: int, reason: str = "No reason provided"):
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot mute this member because they have a higher or equal role than you.", ephemeral=True)
@@ -1767,12 +1821,14 @@ async def mute_command(interaction: discord.Interaction, member: discord.Member,
         await interaction.response.send_message(f"✅ **{member.display_name}** has been timed out for `{duration_minutes}` minutes. (Reason: {reason})")
         await log_mod_action(interaction.guild, interaction.user, member, "Timeout (Mute)", reason, f"Duration: {duration_minutes} minutes")
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to mute member: {e}", ephemeral=True)
+        logger.error(f"Mute command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to mute member due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="unmute", description="Remove timeout (unmute) from a member in the server")
 @app_commands.describe(member="The member to unmute", reason="The reason for unmuting")
 @app_commands.default_permissions(moderate_members=True)
+@app_commands.guild_only()
 async def unmute_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not member.is_timed_out():
         await interaction.response.send_message(f"ℹ️ **{member.display_name}** is not timed out.", ephemeral=True)
@@ -1783,12 +1839,14 @@ async def unmute_command(interaction: discord.Interaction, member: discord.Membe
         await interaction.response.send_message(f"✅ **{member.display_name}** is no longer timed out. (Reason: {reason})")
         await log_mod_action(interaction.guild, interaction.user, member, "Unmute", reason)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to unmute member: {e}", ephemeral=True)
+        logger.error(f"Unmute command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to unmute member due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="deafen", description="Deafen a member in a voice channel")
 @app_commands.describe(member="The member to deafen", reason="The reason for deafening")
 @app_commands.default_permissions(deafen_members=True)
+@app_commands.guild_only()
 async def deafen_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not member.voice or not member.voice.channel:
         await interaction.response.send_message(f"❌ **{member.display_name}** is not in a voice channel.", ephemeral=True)
@@ -1799,12 +1857,14 @@ async def deafen_command(interaction: discord.Interaction, member: discord.Membe
         await interaction.response.send_message(f"✅ **{member.display_name}** has been voice deafened. (Reason: {reason})")
         await log_mod_action(interaction.guild, interaction.user, member, "Voice Deafen", reason)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to deafen member: {e}", ephemeral=True)
+        logger.error(f"Deafen command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to deafen member due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="undeafen", description="Undeafen a member in a voice channel")
 @app_commands.describe(member="The member to undeafen", reason="The reason for undeafening")
 @app_commands.default_permissions(deafen_members=True)
+@app_commands.guild_only()
 async def undeafen_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not member.voice or not member.voice.channel:
         await interaction.response.send_message(f"❌ **{member.display_name}** is not in a voice channel.", ephemeral=True)
@@ -1815,7 +1875,8 @@ async def undeafen_command(interaction: discord.Interaction, member: discord.Mem
         await interaction.response.send_message(f"✅ **{member.display_name}** has been voice undeafened. (Reason: {reason})")
         await log_mod_action(interaction.guild, interaction.user, member, "Voice Undeafen", reason)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to undeafen member: {e}", ephemeral=True)
+        logger.error(f"Undeafen command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to undeafen member due to an internal error.", ephemeral=True)
 
 
 
@@ -1833,6 +1894,7 @@ async def undeafen_command(interaction: discord.Interaction, member: discord.Mem
     ]
 )
 @app_commands.default_permissions(manage_roles=True)
+@app_commands.guild_only()
 async def autorole_command(interaction: discord.Interaction, status: str, role: discord.Role = None):
     if status == "on":
         if not role:
@@ -1853,6 +1915,7 @@ async def autorole_command(interaction: discord.Interaction, status: str, role: 
 @bot.tree.command(name="addrole", description="Assign a role to a member")
 @app_commands.describe(member="The member to assign the role to", role="The role to assign")
 @app_commands.default_permissions(manage_roles=True)
+@app_commands.guild_only()
 async def addrole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
@@ -1865,12 +1928,14 @@ async def addrole_command(interaction: discord.Interaction, member: discord.Memb
         await member.add_roles(role, reason=f"Assigned by {interaction.user.display_name}")
         await interaction.response.send_message(f"✅ Successfully added role **{role.name}** to **{member.display_name}**.")
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to assign role: {e}", ephemeral=True)
+        logger.error(f"Addrole command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to assign role due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="removerole", description="Remove a role from a member")
 @app_commands.describe(member="The member to remove the role from", role="The role to remove")
 @app_commands.default_permissions(manage_roles=True)
+@app_commands.guild_only()
 async def removerole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
@@ -1883,12 +1948,14 @@ async def removerole_command(interaction: discord.Interaction, member: discord.M
         await member.remove_roles(role, reason=f"Removed by {interaction.user.display_name}")
         await interaction.response.send_message(f"✅ Successfully removed role **{role.name}** from **{member.display_name}**.")
     except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to remove role: {e}", ephemeral=True)
+        logger.error(f"Removerole command failed: {e}", exc_info=True)
+        await interaction.response.send_message("❌ Failed to remove role due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="roleall", description="Assign a role to every member in the server")
 @app_commands.describe(role="The role to assign to everyone")
 @app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
 async def roleall_command(interaction: discord.Interaction, role: discord.Role):
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
@@ -1920,6 +1987,7 @@ async def roleall_command(interaction: discord.Interaction, role: discord.Role):
 @bot.tree.command(name="roleallremove", description="Remove a role from every member in the server")
 @app_commands.describe(role="The role to remove from everyone")
 @app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
 async def roleallremove_command(interaction: discord.Interaction, role: discord.Role):
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
@@ -1968,6 +2036,7 @@ async def roleallremove_command(interaction: discord.Interaction, role: discord.
     ]
 )
 @app_commands.default_permissions(manage_messages=True)
+@app_commands.guild_only()
 async def embed_command(
     interaction: discord.Interaction, 
     title: str, 
@@ -1993,8 +2062,8 @@ async def embed_command(
             sys_inst = "You are a professional server designer. The user wants to write an announcement, rule list, or description for their Discord server. Take their description and turn it into a highly aesthetic, professional, and well-structured layout using markdown, bold headers, list formatting, and emojis. Do not output anything other than the formatted text. Do not wrap it in quotes."
             content = await call_ai_generation(description, sys_inst)
         except Exception as e:
-            logger.error(f"AI Generation failed for embed: {e}")
-            await interaction.followup.send(f"⚠️ AI Generation failed: `{e}`. Using raw description instead.")
+            logger.error(f"AI Generation failed for embed: {e}", exc_info=True)
+            await interaction.followup.send("⚠️ AI Generation failed due to an internal error. Using raw description instead.")
             content = description
 
     # Parse color

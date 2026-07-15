@@ -20,6 +20,10 @@ All notable changes to the Discord Gemini Bot project are documented here.
 *   **Render Keep-Alive Routing**: Modified `keep_alive()` in [bot.py](file:///D:/discord-gemini-bot/bot.py) to bind to the dynamic `PORT` environment variable injected by Render, falling back to `8080` if not present. This ensures Render's port detection and routing work correctly, and prevents the web container from going to sleep when UptimeRobot pings the service.
 *   **Auto-Mod Safety Bypass Protection**: Configured safety settings thresholds to `BLOCK_NONE` inside the Gemini client request configuration. This ensures toxicity moderation checks successfully return a `TOXIC` classification rather than raising a safety block error (which would bypass moderation and leave toxic messages in chat).
 *   **Robust JSON Extraction**: Added an `extract_json(text)` helper in [bot.py](file:///D:/discord-gemini-bot/bot.py) to cleanly isolate layout responses between the first `{` and last `}` curly braces, preventing parsing failures if the AI model prepends introductory text.
+*   **Prevented Error Information Leakage**: Replaced all instances of raw exception details (`f"{e}"`) being displayed to public users on command failure with user-safe generic error responses, logging the full debug tracebacks internally using `logger.error`.
+*   **Targeted Member Resolving in `/aiperms`**: Optimized `/aiperms` context generation to search descriptions for user mentions or matching names, sending only the targeted members to the AI instead of a generic list of the first 50 members.
+*   **Restricted Commands to Guilds Only**: Restricted all server-specific slash commands from execution inside bot DMs by applying the `@app_commands.guild_only()` decorator, preventing database errors and rate limit bypasses.
+
 
 ### Optimized
 *   **Reusable Global Gemini Client**: Refactored the `genai.Client` instantiation logic to initialize the client object globally and reuse it via `get_gemini_client()`, avoiding heavy re-instantiation overhead on every single message/moderation scan.
