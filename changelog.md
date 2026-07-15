@@ -24,5 +24,7 @@ All notable changes to the Discord Gemini Bot project are documented here.
     *   `/poll` (multi-option reaction polls)
 
 ### Changed
-*   **Restricted /nuke Command to Server Owner**: Added a runtime check (`interaction.user.id == interaction.guild.owner_id`) inside `nuke_command` in [bot.py](file:///D:/discord-gemini-bot/bot.py) to prevent any user (including administrators who are not the server owner) from invoking the nuke command.
+*   **Restricted /nuke Command to Server Owner**: Added a double layer of runtime checks (`interaction.user.id == interaction.guild.owner_id` both inside `nuke_command` and inside the `nuke_button` confirm callback in `NukeConfirmView`) in [bot.py](file:///D:/discord-gemini-bot/bot.py) to guarantee that only the server owner can invoke or confirm the nuke command under any circumstance.
+
+
 

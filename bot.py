@@ -620,9 +620,14 @@ class NukeConfirmView(discord.ui.View):
 
     @discord.ui.button(label="💥 YES, NUKE ENTIRE SERVER", style=discord.ButtonStyle.danger, emoji="⚠️")
     async def nuke_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.guild.owner_id:
+            await interaction.response.send_message("❌ This action is restricted to the Server Owner only.", ephemeral=True)
+            return
+
         for b in self.children:
             b.disabled = True
         await interaction.response.edit_message(content="💥 **NUKING ENTIRE SERVER... Deleting all channels, categories, and roles!**", embed=None, view=self)
+
         
         stats, clean_channel = await nuke_guild(self.guild)
         
