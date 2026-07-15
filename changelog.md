@@ -2,6 +2,18 @@
 
 All notable changes to the Discord Gemini Bot project are documented here.
 
+## [1.1.3] - 2026-07-15
+
+### Added
+*   **Uncategorized Channels Backup & Restore**: Added support for exporting and restoring channels not belong to any category in the `/backup` and `/restore` commands.
+
+### Fixed
+*   **Log Channel View Permission Verification**: Modified `/setlogchannel` to check that the bot has `view_channel` permission in the logging channel, preventing log delivery failures.
+*   **AI Auto-Mod Activation Crash**: Added checks to `/automod` and `/testautomod` to gracefully verify that AI API credentials (`GEMINI_API_KEY` or `GROQ_API_KEY`) are present in environment variables before setting AI mode, preventing unhandled runtime errors.
+*   **Role Hierarchy Enforcement**: Integrated role hierarchy checks to the voice moderation commands (`/deafen`, `/undeafen`) and `/unmute` to protect administrators and moderators.
+*   **Managed Role Assignment Failures**: Patched `/addrole`, `/removerole`, `/roleall`, and `/roleallremove` to reject operations on managed integration/booster roles, returning clear user-facing errors rather than API crashes.
+*   **Server Owner Action Protection**: Prevented moderation actions (`/kick` and `/ban`) from being targeted against the guild's Server Owner.
+
 ## [1.1.2] - 2026-07-15
 
 ### Fixed

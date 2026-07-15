@@ -1071,6 +1071,50 @@ async def build_server_structure(guild, data, response_channel):
                 logger.error(f"Failed to create channel '{chan_name}' in '{cat_name}': {e}")
                 errors_encountered.append(f"Channel '{chan_name}' in '{cat_name}': {e}")
 
+    # 3. Create Uncategorized Channels (with individual error resilience)
+    for chan_data in data.get("uncategorized", []):
+        chan_name = chan_data.get("name")
+        chan_type = chan_data.get("type", "text")
+        chan_topic = chan_data.get("topic")
+        if not chan_name:
+            continue
+            
+        try:
+            existing_chan = discord.utils.get(guild.channels, name=chan_name, category=None)
+            if existing_chan:
+                prefix = "🔊 " if isinstance(existing_chan, discord.VoiceChannel) else "#"
+                channels_created.append(f"{prefix}{chan_name} (reused)")
+                continue
+
+            chan_overrides = get_overrides(chan_data.get("private_for"))
+
+            if chan_type == "text":
+                new_chan = await guild.create_text_channel(
+                    name=chan_name,
+                    category=None,
+                    overwrites=chan_overrides,
+                    topic=chan_topic or None,
+                    reason="Gemini Discord Bot Setup"
+                )
+                channels_created.append(f"#{new_chan.name}")
+                await db.add_resource(guild.id, "channels", new_chan.id)
+                logger.info(f"Created uncategorized text channel: #{new_chan.name}")
+                await asyncio.sleep(0.3)
+            elif chan_type == "voice":
+                new_chan = await guild.create_voice_channel(
+                    name=chan_name,
+                    category=None,
+                    overwrites=chan_overrides,
+                    reason="Gemini Discord Bot Setup"
+                )
+                channels_created.append(f"🔊 {new_chan.name}")
+                await db.add_resource(guild.id, "channels", new_chan.id)
+                logger.info(f"Created uncategorized voice channel: 🔊 {new_chan.name}")
+                await asyncio.sleep(0.3)
+        except Exception as e:
+            logger.error(f"Failed to create uncategorized channel '{chan_name}': {e}")
+            errors_encountered.append(f"Uncategorized Channel '{chan_name}': {e}")
+
     logger.info(f"Server structure build completed for {guild.name}")
 
     # Send confirmation embed
@@ -1378,9 +1422,32 @@ async def backup_command(interaction: discord.Interaction):
                 
             categories_list.append(cat_data)
             
+        # 3. Export Uncategorized Channels
+        uncategorized_list = []
+        for chan in guild.channels:
+            if chan.category is None and not isinstance(chan, discord.CategoryChannel):
+                chan_type = "text" if isinstance(chan, discord.TextChannel) else "voice"
+                chan_topic = getattr(chan, "topic", "")
+                
+                chan_data = {
+                    "name": chan.name,
+                    "type": chan_type,
+                    "topic": chan_topic or ""
+                }
+                
+                chan_default_overwrite = chan.overwrites_for(guild.default_role)
+                if chan_default_overwrite.read_messages is False or chan_default_overwrite.connect is False:
+                    chan_data["private_for"] = []
+                    for target, overwrite in chan.overwrites:
+                        if isinstance(target, discord.Role) and target != guild.default_role:
+                            if overwrite.read_messages is True or overwrite.connect is True:
+                                chan_data["private_for"].append(target.name)
+                uncategorized_list.append(chan_data)
+            
         backup_data = {
             "roles": roles_list,
-            "categories": categories_list
+            "categories": categories_list,
+            "uncategorized": uncategorized_list
         }
         
         json_bytes = io.BytesIO(json.dumps(backup_data, indent=2, ensure_ascii=False).encode('utf-8'))
@@ -1479,8 +1546,8 @@ async def dynamicvoice_command(interaction: discord.Interaction):
 @app_commands.guild_only()
 async def setlogchannel_command(interaction: discord.Interaction, channel: discord.TextChannel):
     permissions = channel.permissions_for(interaction.guild.me)
-    if not permissions.send_messages or not permissions.embed_links:
-        await interaction.response.send_message(f"❌ I don't have permission to send messages or embed links in {channel.mention}!", ephemeral=True)
+    if not permissions.view_channel or not permissions.send_messages or not permissions.embed_links:
+        await interaction.response.send_message(f"❌ I don't have permission to view, send messages, or embed links in {channel.mention}!", ephemeral=True)
         return
         
     await db.set_config(interaction.guild.id, "mod_log_channel_id", channel.id)
@@ -1506,6 +1573,13 @@ async def setlogchannel_command(interaction: discord.Interaction, channel: disco
 @app_commands.guild_only()
 async def automod_command(interaction: discord.Interaction, status: str, mode: str = "local"):
     if status == "on":
+        if mode == "ai":
+            gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+            groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
+            if not gemini_key and not groq_key:
+                await interaction.response.send_message("❌ **Cannot enable AI Scanner**: Neither `GEMINI_API_KEY` nor `GROQ_API_KEY` is set in the environment variables.", ephemeral=True)
+                return
+                
         await db.set_config(interaction.guild_id, "automod", True)
         await db.set_config(interaction.guild_id, "automod_mode", mode)
         if mode == "local":
@@ -1522,6 +1596,12 @@ async def automod_command(interaction: discord.Interaction, status: str, mode: s
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.guild_only()
 async def testautomod_command(interaction: discord.Interaction, text: str):
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+    groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
+    if not gemini_key and not groq_key:
+        await interaction.response.send_message("❌ **Cannot run test**: Neither `GEMINI_API_KEY` nor `GROQ_API_KEY` is configured in your environment.", ephemeral=True)
+        return
+        
     await interaction.response.defer(thinking=True)
     try:
         prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{text}'."
@@ -1841,6 +1921,10 @@ async def nuke_command(interaction: discord.Interaction):
 @app_commands.default_permissions(kick_members=True)
 @app_commands.guild_only()
 async def kick_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member.id == interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot kick the Server Owner!", ephemeral=True)
+        return
+        
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot kick this member because they have a higher or equal role than you.", ephemeral=True)
         return
@@ -1873,6 +1957,10 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
 @app_commands.default_permissions(ban_members=True)
 @app_commands.guild_only()
 async def ban_command(interaction: discord.Interaction, member: discord.User, reason: str = "No reason provided", delete_message_days: int = 0):
+    if member.id == interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot ban the Server Owner!", ephemeral=True)
+        return
+        
     guild_member = interaction.guild.get_member(member.id)
     if guild_member:
         if guild_member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
@@ -1947,6 +2035,13 @@ async def mute_command(interaction: discord.Interaction, member: discord.Member,
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
 async def unmute_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot unmute this member because they have a higher or equal role than you.", ephemeral=True)
+        return
+    if member.top_role >= interaction.guild.me.top_role:
+        await interaction.response.send_message("❌ I cannot unmute this member because they have a higher or equal role than me.", ephemeral=True)
+        return
+        
     if not member.is_timed_out():
         await interaction.response.send_message(f"ℹ️ **{member.display_name}** is not timed out.", ephemeral=True)
         return
@@ -1965,6 +2060,13 @@ async def unmute_command(interaction: discord.Interaction, member: discord.Membe
 @app_commands.default_permissions(deafen_members=True)
 @app_commands.guild_only()
 async def deafen_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot deafen this member because they have a higher or equal role than you.", ephemeral=True)
+        return
+    if member.top_role >= interaction.guild.me.top_role:
+        await interaction.response.send_message("❌ I cannot deafen this member because they have a higher or equal role than me.", ephemeral=True)
+        return
+        
     if not member.voice or not member.voice.channel:
         await interaction.response.send_message(f"❌ **{member.display_name}** is not in a voice channel.", ephemeral=True)
         return
@@ -1983,6 +2085,13 @@ async def deafen_command(interaction: discord.Interaction, member: discord.Membe
 @app_commands.default_permissions(deafen_members=True)
 @app_commands.guild_only()
 async def undeafen_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot undeafen this member because they have a higher or equal role than you.", ephemeral=True)
+        return
+    if member.top_role >= interaction.guild.me.top_role:
+        await interaction.response.send_message("❌ I cannot undeafen this member because they have a higher or equal role than me.", ephemeral=True)
+        return
+        
     if not member.voice or not member.voice.channel:
         await interaction.response.send_message(f"❌ **{member.display_name}** is not in a voice channel.", ephemeral=True)
         return
@@ -2038,6 +2147,10 @@ async def autorole_command(interaction: discord.Interaction, status: str, role: 
 @app_commands.default_permissions(manage_roles=True)
 @app_commands.guild_only()
 async def addrole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+    if role.managed:
+        await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually assigned.", ephemeral=True)
+        return
+        
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
         return
@@ -2058,6 +2171,10 @@ async def addrole_command(interaction: discord.Interaction, member: discord.Memb
 @app_commands.default_permissions(manage_roles=True)
 @app_commands.guild_only()
 async def removerole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+    if role.managed:
+        await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually removed.", ephemeral=True)
+        return
+        
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
         return
@@ -2078,6 +2195,10 @@ async def removerole_command(interaction: discord.Interaction, member: discord.M
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
 async def roleall_command(interaction: discord.Interaction, role: discord.Role):
+    if role.managed:
+        await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually assigned.", ephemeral=True)
+        return
+        
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
         return
@@ -2110,6 +2231,10 @@ async def roleall_command(interaction: discord.Interaction, role: discord.Role):
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
 async def roleallremove_command(interaction: discord.Interaction, role: discord.Role):
+    if role.managed:
+        await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually removed.", ephemeral=True)
+        return
+        
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
         return
