@@ -2,6 +2,14 @@
 
 All notable changes to the Discord Gemini Bot project are documented here.
 
+## [1.3.0] - 2026-07-28
+
+### Added
+*   **Sweety Bot Configuration & Branding**: Configured bot branding, persona identity, and logging configuration for "Sweety" (Discord Gemini Bot).
+*   **Enhanced System Logging**: Integrated structured event tracking and file logging setup for monitoring bot behavior and moderation events.
+
+---
+
 ## [1.2.1] - 2026-07-15
 
 ### Fixed

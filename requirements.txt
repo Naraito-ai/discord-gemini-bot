@@ -7,3 +7,5 @@ aiosqlite
 asyncpg
 aiohttp
 pyjwt
+flask
+

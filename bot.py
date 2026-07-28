@@ -1148,10 +1148,15 @@ class GeminiBot(commands.Bot):
         # Connect database & create tables
         await db.initialize()
         
-        # Start FastAPI and WebSockets server inside the bot's event loop
-        port = int(os.getenv("PORT", 8080))
-        from api import start_fastapi
-        asyncio.create_task(start_fastapi(self, db, port))
+        # Start FastAPI web server unless explicitly disabled (e.g. on DisCloud)
+        disable_api = os.getenv("DISABLE_API", "false").lower() in ("true", "1", "yes")
+        if not disable_api:
+            port = int(os.getenv("PORT", 8080))
+            from api import start_fastapi
+            asyncio.create_task(start_fastapi(self, db, port))
+        else:
+            logger.info("FastAPI web server skipped (DISABLE_API=true). Memory usage minimized.")
+
 
         
     async def on_ready(self):
