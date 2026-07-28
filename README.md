@@ -70,9 +70,18 @@ Since Render free plans restart frequently and have ephemeral storage, configure
     *   `DISCORD_TOKEN`
     *   `GROQ_API_KEY` or `GEMINI_API_KEY`
     *   `DATABASE_URL` (Retrieve from a free Supabase PostgreSQL database or a Render PostgreSQL database).
-5.  *(Optional)* Use a ping service (like UptimeRobot) to ping the Render URL (port `8080`) to keep the service awake.
+5.  *(Optional)* Set `DISABLE_API=true` in environment variables if you are deploying to memory-restricted free hosts (like DisCloud 100MB limit) to bypass the web server and cut RAM usage to ~45MB.
 
 ---
+
+## 🌩️ Deploying to DisCloud (Free Discord Bot Host)
+
+The repo includes pre-configured [discloud.config](file:///D:/discord-gemini-bot/discloud.config) for DisCloud:
+1. Set `DISABLE_API=true` in `.env` to keep RAM usage under 100MB.
+2. Upload `discloud-upload.zip` to [discloud.app](https://discloud.app) via Dashboard or `.api` Discord bot command.
+
+---
+
 
 ## 📋 Slash Commands Reference
 

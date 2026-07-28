@@ -2,7 +2,17 @@
 
 All notable changes to the Discord Gemini Bot project are documented here.
 
+## [1.3.1] - 2026-07-28
+
+### Added & Fixed
+*   **Low-Memory Cloud Deployment Support (`DISABLE_API`)**: Added support for `DISABLE_API=true` environment variable in [bot.py](file:///D:/discord-gemini-bot/bot.py#L1151). When set, the bot skips launching the FastAPI/Uvicorn web server, reducing memory usage from ~120MB down to ~45-50MB for resource-constrained free hosts like DisCloud (100MB RAM cap).
+*   **DisCloud Configuration Fix (`discloud.config`)**: Standardized [discloud.config](file:///D:/discord-gemini-bot/discloud.config) property keys to uppercase (`NAME`, `TYPE=bot`, `MAIN=bot.py`, `RAM=100`, `AUTORESTART=true`) as required by DisCloud's v2 REST API.
+*   **Missing Dependency in `requirements.txt`**: Added `flask` to [requirements.txt](file:///D:/discord-gemini-bot/requirements.txt).
+
+---
+
 ## [1.3.0] - 2026-07-28
+
 
 ### Added
 *   **Sweety Bot Configuration & Branding**: Configured bot branding, persona identity, and logging configuration for "Sweety" (Discord Gemini Bot).
