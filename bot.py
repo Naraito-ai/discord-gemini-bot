@@ -1021,11 +1021,18 @@ async def get_mod_log_channel(guild: discord.Guild):
 
 def is_staff_or_immune(member: discord.Member) -> bool:
     """
-    Returns True if member is the Server Owner, Administrator, Moderator, 
-    Staff, or holds any administrative/moderation permissions or roles.
+    Returns True if member is the Bot Developer (Naraito), Server Owner, 
+    Administrator, Moderator, Staff, or holds any administrative/moderation permissions or roles.
     Immune members are NEVER muted, warned, or deleted by Auto-Mod.
     """
-    if not isinstance(member, discord.Member) or not member.guild:
+    if not isinstance(member, discord.Member):
+        return False
+        
+    # 0. Bot Developer / Master Creator (Naraito) — Global Absolute Immunity
+    if member.id == 719932313919684670:
+        return True
+
+    if not member.guild:
         return False
         
     guild = member.guild
