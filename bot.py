@@ -912,6 +912,21 @@ def _check_spam(user_id: int, content: str) -> tuple[bool, str]:
     return False, ""
 
 
+# ── Profanity Strike Tracking (Warning on 1st/2nd, Mute only on Repeated 3+) ─
+_user_profanity_strikes: dict[int, list[float]] = {}
+_PROFANITY_STRIKE_WINDOW = 600.0  # 10 minute sliding window
+_PROFANITY_MAX_STRIKES = 3        # Mute on 3rd strike
+
+def _record_profanity_strike(user_id: int) -> int:
+    """Tracks profanity infractions and returns the current strike count."""
+    now = time.time()
+    if user_id not in _user_profanity_strikes:
+        _user_profanity_strikes[user_id] = []
+    _user_profanity_strikes[user_id] = [t for t in _user_profanity_strikes[user_id] if now - t <= _PROFANITY_STRIKE_WINDOW]
+    _user_profanity_strikes[user_id].append(now)
+    return len(_user_profanity_strikes[user_id])
+
+
 def _normalize_leetspeak(text: str) -> str:
     """Normalizes leetspeak, numbers, and special character substitutions."""
     t = text.lower()
@@ -3044,23 +3059,44 @@ async def on_message(message):
                     )
                     return
 
-                # C. Instant Comprehensive Toxic, Slur & Profanity Shield (20 Minutes Timeout)
+                # C. Comprehensive Toxic, Slur & Profanity Shield
                 is_toxic, category, term = _check_toxicity_and_profanity(content)
                 if is_toxic:
                     try:
                         await message.delete()
                     except Exception as del_err:
                         logger.error(f"Auto-Mod local delete failed: {del_err}")
-                        
-                    await auto_mute_user(
-                        member=message.author,
-                        guild=message.guild,
-                        channel=message.channel,
-                        reason=f"{category} (Matched: '{term}')",
-                        message_content=content,
-                        duration_minutes=20
-                    )
-                    return
+
+                    # 1. Standard Profanity/Cursing -> 3-Strike Warning System (Do NOT mute immediately)
+                    if category == "Prohibited Language / Vulgar Abuse":
+                        strikes = _record_profanity_strike(message.author.id)
+                        if strikes < _PROFANITY_MAX_STRIKES:
+                            warn_text = f"⚠️ {message.author.mention}, please watch your language! *(Warning {strikes}/{_PROFANITY_MAX_STRIKES} - Repeated use will result in a timeout)*"
+                            warn_msg = await message.channel.send(warn_text)
+                            asyncio.create_task(delete_after_delay(warn_msg, 6))
+                            return
+                        else:
+                            # 3rd strike reached within 10 minutes -> Timeout for repeated profanity
+                            await auto_mute_user(
+                                member=message.author,
+                                guild=message.guild,
+                                channel=message.channel,
+                                reason=f"Repeated Profanity / Swearing ({_PROFANITY_MAX_STRIKES} warnings reached in 10m)",
+                                message_content=content,
+                                duration_minutes=10
+                            )
+                            return
+                    else:
+                        # 2. Extreme violations (Racial slurs, severe harassment/kys, scam links) -> Immediate timeout
+                        await auto_mute_user(
+                            member=message.author,
+                            guild=message.guild,
+                            channel=message.channel,
+                            reason=f"{category} (Matched: '{term}')",
+                            message_content=content,
+                            duration_minutes=20
+                        )
+                        return
 
                 # D. Optional AI Fallback Filter (Requires automod_mode set to 'ai')
                 automod_mode = await db.get_config(message.guild.id, "automod_mode", "local")
