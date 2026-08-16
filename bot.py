@@ -238,6 +238,101 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
         raise ValueError("No valid GROQ_API_KEY or GEMINI_API_KEY found in environment variables.")
 
 
+# ── AI Real-Time Question Answering & Knowledge Search ─────────────────────
+
+async def answer_question_with_ai(query: str, author_name: str = "", server_name: str = "") -> str:
+    """Answers user questions using Gemini 2.5 with Google Search Grounding when available."""
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+    
+    server_info = f"in the Discord server '{server_name}'" if server_name else "on Discord"
+    author_info = f"from {author_name}" if author_name else ""
+    
+    system_instruction = (
+        f"You are a helpful, friendly, and knowledgeable AI assistant {server_info}. "
+        f"You are answering a question {author_info}. "
+        "Answer questions clearly, accurately, and concisely. "
+        "Search the web or use your real-time knowledge to provide up-to-date facts, information, solutions, and explanations. "
+        "Format your output cleanly using Discord markdown (bold headers, bullet points, and code blocks with syntax highlighting if code is requested). "
+        "Keep your response direct, helpful, and concise (under 1800 characters)."
+    )
+    
+    if gemini_key:
+        client = get_gemini_client()
+        if client:
+            try:
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.5,
+                    tools=[types.Tool(google_search=types.GoogleSearch())]
+                )
+                resp = await client.aio.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=query,
+                    config=config
+                )
+                if resp and resp.text:
+                    return resp.text.strip()
+            except Exception as e:
+                logger.warning(f"Gemini search grounding notice: {e}, falling back to standard AI model.")
+    
+    # Fallback to standard AI generation (Gemini standard or Groq)
+    return await call_ai_generation(query, system_instruction)
+
+
+def is_question_message(message: discord.Message) -> tuple[bool, str]:
+    """Detects if a user message is asking a question or querying the AI."""
+    content = message.content.strip()
+    if not content or len(content) < 3:
+        return False, ""
+        
+    # Ignore bot commands
+    if content.startswith(('!', '/', '$', '.', '-', '~', '>', ';')):
+        return False, ""
+        
+    # Case 1: The bot is directly mentioned (@Sweety) or replied to
+    is_mentioned = bot.user and bot.user in message.mentions
+    is_reply_to_bot = False
+    if message.reference and message.reference.resolved:
+        resolved = message.reference.resolved
+        if isinstance(resolved, discord.Message) and bot.user and resolved.author == bot.user:
+            is_reply_to_bot = True
+            
+    clean_text = content
+    if bot.user:
+        clean_text = re.sub(rf'<@!?{bot.user.id}>', '', clean_text).strip()
+        
+    if is_mentioned or is_reply_to_bot:
+        if len(clean_text) >= 2:
+            return True, clean_text
+
+    # Case 2: Natural question detection in chat
+    words = clean_text.lower().split()
+    if len(words) < 3:
+        return False, ""
+        
+    question_starters = (
+        "who", "what", "where", "when", "why", "how", "which", "whose", "whom",
+        "can", "could", "would", "should", "will", "is", "are", "was", "were",
+        "do", "does", "did", "have", "has", "had", "tell me", "explain", "search",
+        "find", "anyone know", "anybody know", "does anyone", "how do", "how can", "what is", "whats"
+    )
+    
+    ends_with_q = clean_text.endswith("?")
+    starts_with_q = clean_text.lower().startswith(question_starters)
+    
+    if ends_with_q and (starts_with_q or len(words) >= 4):
+        casual_filters = {"u know?", "you know?", "right?", "huh?", "really?", "are you sure?", "ok?", "okay?"}
+        if clean_text.lower() in casual_filters:
+            return False, ""
+        return True, clean_text
+        
+    if starts_with_q and len(words) >= 5 and clean_text.lower().startswith(("explain ", "tell me ", "how to ", "what is ", "who is ", "search for ", "find me ")):
+        return True, clean_text
+
+    return False, ""
+
+
+
 # Gemini permissions prompt for AI permission configurator
 SYSTEM_PERMS_PROMPT = """You are an expert Discord permissions manager.
 Analyze the user's description of channel/category permissions and output a JSON map of permission overrides for the server's roles and members.
@@ -2372,6 +2467,71 @@ async def embed_command(
         await interaction.followup.send(f"❌ Failed to send embed: {e}")
 
 
+@bot.tree.command(name="ask", description="Ask the AI any question and get an instant researched answer")
+@app_commands.describe(question="The question or topic you want to ask about")
+async def ask_command(interaction: discord.Interaction, question: str):
+    # 1. User cooldown
+    allowed, remaining = _check_user_cooldown(interaction.user.id)
+    if not allowed:
+        await interaction.response.send_message(
+            f"⏳ Please wait **{remaining}s** before asking another question.",
+            ephemeral=True
+        )
+        return
+
+    # 2. Server limit
+    if not _check_server_limit(interaction.guild.id):
+        await interaction.response.send_message(
+            "🚫 This server has reached its hourly AI limit. Please try again later.",
+            ephemeral=True
+        )
+        return
+
+    # 3. Sanitize
+    is_clean, clean_question = _sanitize_ai_input(question)
+    if not is_clean:
+        await interaction.response.send_message(
+            "⚠️ Your question was flagged for restricted keywords.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(thinking=True)
+
+    try:
+        server_name = interaction.guild.name if interaction.guild else ""
+        answer = await answer_question_with_ai(
+            query=clean_question,
+            author_name=interaction.user.display_name,
+            server_name=server_name
+        )
+        
+        embed = discord.Embed(
+            title=f"❓ {clean_question[:250]}",
+            description=answer[:4000] if len(answer) > 2000 else answer,
+            color=discord.Color.blue()
+        )
+        embed.set_author(name=f"Asked by {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+        embed.set_footer(text="Powered by Gemini AI • Real-time Grounding", icon_url=bot.user.display_avatar.url if bot.user else None)
+        embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Error in /ask command: {e}")
+        await interaction.followup.send(f"❌ Failed to answer question: {e}")
+
+
+@bot.tree.command(name="toggleaireply", description="Toggle automatic AI answers when users ask questions in chat")
+@app_commands.default_permissions(manage_guild=True)
+async def toggle_ai_reply_command(interaction: discord.Interaction):
+    current = await db.get_config(interaction.guild.id, "ai_auto_reply", True)
+    new_state = not current
+    await db.set_config(interaction.guild.id, "ai_auto_reply", new_state)
+    state_str = "🟢 **ENABLED** (The bot will automatically reply to questions in chat)" if new_state else "🔴 **DISABLED** (The bot will only reply when /ask is used or when tagged)"
+    await interaction.response.send_message(f"AI Auto-Reply has been set to: {state_str}")
+
+
+
 # ── Discord Event Listeners ─────────────────────────────────────────────────
 
 @bot.event
@@ -2601,7 +2761,39 @@ async def on_message(message):
                     except Exception as e:
                         logger.error(f"Auto-Mod AI evaluation error: {e}")
 
+    # ── AI Auto-Reply to Questions & User Mentions ───────────────────────────
+    if not message.author.bot and message.guild:
+        is_question, query = is_question_message(message)
+        if is_question and query:
+            ai_reply_enabled = await db.get_config(message.guild.id, "ai_auto_reply", True)
+            if ai_reply_enabled:
+                allowed, remaining = _check_user_cooldown(message.author.id)
+                if not allowed:
+                    logger.info(f"AI question rate limited for user {message.author.id} (wait {remaining}s)")
+                elif not _check_server_limit(message.guild.id):
+                    logger.info(f"AI question rate limited: server hourly limit reached for guild {message.guild.id}")
+                else:
+                    is_clean, clean_query = _sanitize_ai_input(query)
+                    if is_clean:
+                        try:
+                            async with message.channel.typing():
+                                answer = await answer_question_with_ai(
+                                    query=clean_query,
+                                    author_name=message.author.display_name,
+                                    server_name=message.guild.name
+                                )
+                                if answer:
+                                    if len(answer) <= 1900:
+                                        await message.reply(answer, mention_author=True)
+                                    else:
+                                        for i in range(0, len(answer), 1900):
+                                            chunk = answer[i:i+1900]
+                                            await message.channel.send(chunk)
+                        except Exception as ai_err:
+                            logger.error(f"Error answering question with AI in chat: {ai_err}")
+
     await bot.process_commands(message)
+
 
 
 # ── Main Entry Point ────────────────────────────────────────────────────────
