@@ -152,98 +152,44 @@ async def register_uptime_monitor(api_key: str, url: str):
 
 
 async def call_ai_generation(prompt, system_instruction, json_mode=False):
-    """Generates content asynchronously using Groq (via aiohttp) or Gemini (via google-genai async)."""
+    """Generates content asynchronously using Groq (llama-3.3-70b-versatile)."""
     groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
-    gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-    
-    if gemini_key.startswith("gsk_"):
-        groq_key = gemini_key
-        gemini_key = ""
+    if not groq_key:
+        groq_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
         
-    if groq_key:
-        logger.info(f"Using Groq API for content generation (JSON Mode: {json_mode})")
-        import aiohttp
-        headers = {
-            "Authorization": f"Bearer {groq_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "llama-3.3-70b-versatile",
-            "messages": [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3
-        }
-        if json_mode:
-            payload["response_format"] = {"type": "json_object"}
-            
-        async with aiohttp.ClientSession() as session:
-            async with session.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30) as r:
-                r.raise_for_status()
-                res_data = await r.json()
-                result = res_data["choices"][0]["message"]["content"]
-                if json_mode:
-                    result = extract_json(result)
-                return result
+    if not groq_key:
+        raise ValueError("No valid GROQ_API_KEY found in environment variables.")
+
+    import aiohttp
+    headers = {
+        "Authorization": f"Bearer {groq_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.3
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
         
-    elif gemini_key:
-        logger.info(f"Using Gemini API for content generation (JSON Mode: {json_mode})")
-        client = get_gemini_client()
-        if not client:
-            raise ValueError("Failed to initialize Gemini Client. Check your GEMINI_API_KEY.")
-        
-        # Configure safety settings to avoid blocking moderation/setup requests
-        safety_settings = [
-            types.SafetySetting(
-                category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold=types.HarmBlockThreshold.BLOCK_NONE,
-            ),
-            types.SafetySetting(
-                category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold=types.HarmBlockThreshold.BLOCK_NONE,
-            ),
-            types.SafetySetting(
-                category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold=types.HarmBlockThreshold.BLOCK_NONE,
-            ),
-            types.SafetySetting(
-                category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold=types.HarmBlockThreshold.BLOCK_NONE,
-            ),
-        ]
-        
-        config_args = {
-            "system_instruction": system_instruction,
-            "temperature": 0.3,
-            "safety_settings": safety_settings
-        }
-        if json_mode:
-            config_args["response_mime_type"] = "application/json"
-            
-        config = types.GenerateContentConfig(**config_args)
-        
-        resp = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=config
-        )
-        
-        result = resp.text
-        if json_mode:
-            result = extract_json(result)
-        return result
-        
-    else:
-        raise ValueError("No valid GROQ_API_KEY or GEMINI_API_KEY found in environment variables.")
+    async with aiohttp.ClientSession() as session:
+        async with session.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30) as r:
+            r.raise_for_status()
+            res_data = await r.json()
+            result = res_data["choices"][0]["message"]["content"]
+            if json_mode:
+                result = extract_json(result)
+            return result
 
 
 # ── AI Real-Time Question Answering & Knowledge Search ─────────────────────
 
 async def answer_question_with_ai(query: str, author_name: str = "", server_name: str = "") -> str:
-    """Answers user questions using Gemini 2.5 with Google Search Grounding when available."""
-    gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-    
+    """Answers user questions using high-speed Groq AI (llama-3.3-70b-versatile)."""
     server_info = f"in the Discord server '{server_name}'" if server_name else "on Discord"
     author_info = f"from {author_name}" if author_name else ""
     
@@ -252,31 +198,10 @@ async def answer_question_with_ai(query: str, author_name: str = "", server_name
         f"You are answering a question {author_info}. "
         "IMPORTANT CREATOR RULE: If anyone asks who made you, who created you, who your developer is, or who built you, always state with massive hype and energy that you were created and engineered by the legendary Naraito! Hype up Naraito as an elite mastermind coder and visionary builder! "
         "For all other questions, answer clearly, accurately, and concisely. "
-        "Search the web or use your real-time knowledge to provide up-to-date facts, information, solutions, and explanations. "
         "Format your output cleanly using Discord markdown (bold headers, bullet points, and code blocks with syntax highlighting if code is requested). "
         "Keep your response direct, helpful, and concise (under 1800 characters)."
     )
     
-    if gemini_key:
-        client = get_gemini_client()
-        if client:
-            try:
-                config = types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.5,
-                    tools=[types.Tool(google_search=types.GoogleSearch())]
-                )
-                resp = await client.aio.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=query,
-                    config=config
-                )
-                if resp and resp.text:
-                    return resp.text.strip()
-            except Exception as e:
-                logger.warning(f"Gemini search grounding notice: {e}, falling back to standard AI model.")
-    
-    # Fallback to standard AI generation (Gemini standard or Groq)
     return await call_ai_generation(query, system_instruction)
 
 
@@ -368,7 +293,7 @@ def check_creator_query(content: str) -> discord.Embed | None:
             color=discord.Color.from_rgb(255, 75, 75)
         )
         embed.add_field(name="👑 Lead Developer & Creator", value="**Naraito** 💎", inline=True)
-        embed.add_field(name="⚡ Core Engine", value="Gemini AI & Python", inline=True)
+        embed.add_field(name="⚡ Core Engine", value="Groq LLaMA-3.3 & Python", inline=True)
         embed.set_footer(text="Built with passion by Naraito • Stay legendary!")
         embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         return embed
