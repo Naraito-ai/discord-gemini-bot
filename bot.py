@@ -2991,7 +2991,7 @@ async def set_ai_reply_command(
         await db.set_config(guild_id, "ai_reply_require_qmark", require_question_mark)
 
     # Fetch current state
-    is_enabled = await db.get_config(guild_id, "ai_auto_reply", True)
+    is_enabled = await db.get_config(guild_id, "ai_auto_reply", False)
     chan_id = await db.get_config(guild_id, "ai_reply_channel_id", None)
     need_q = await db.get_config(guild_id, "ai_reply_require_qmark", False)
     
@@ -3015,7 +3015,7 @@ async def set_ai_reply_command(
 @bot.tree.command(name="showaireply", description="View current AI Auto-Reply channel & question mark settings")
 async def show_ai_reply_command(interaction: discord.Interaction):
     guild_id = interaction.guild.id
-    is_enabled = await db.get_config(guild_id, "ai_auto_reply", True)
+    is_enabled = await db.get_config(guild_id, "ai_auto_reply", False)
     chan_id = await db.get_config(guild_id, "ai_reply_channel_id", None)
     need_q = await db.get_config(guild_id, "ai_reply_require_qmark", False)
     
@@ -3039,7 +3039,7 @@ async def show_ai_reply_command(interaction: discord.Interaction):
 @bot.tree.command(name="toggleaireply", description="Quick toggle automatic AI answers in server chat")
 @app_commands.default_permissions(manage_guild=True)
 async def toggle_ai_reply_command(interaction: discord.Interaction):
-    current = await db.get_config(interaction.guild.id, "ai_auto_reply", True)
+    current = await db.get_config(interaction.guild.id, "ai_auto_reply", False)
     new_state = not current
     await db.set_config(interaction.guild.id, "ai_auto_reply", new_state)
     state_str = "🟢 **ENABLED** (The bot will automatically reply to questions in chat)" if new_state else "🔴 **DISABLED** (The bot will only reply when /ask is used or when tagged)"
@@ -3395,22 +3395,24 @@ async def on_message(message):
 
     # ── AI Auto-Reply to Questions & User Mentions ───────────────────────────
     if not message.author.bot and message.guild:
-        ai_reply_enabled = await db.get_config(message.guild.id, "ai_auto_reply", True)
-        if ai_reply_enabled:
+        # Check if bot is directly mentioned or replied to
+        is_direct = (bot.user and bot.user in message.mentions) or (
+            message.reference and 
+            message.reference.resolved and 
+            isinstance(message.reference.resolved, discord.Message) and 
+            bot.user and 
+            message.reference.resolved.author == bot.user
+        )
+
+        ai_reply_enabled = await db.get_config(message.guild.id, "ai_auto_reply", False)
+        
+        # Only process AI question if explicitly tagged/replied TO OR if server enabled ai_auto_reply
+        if is_direct or ai_reply_enabled:
             # Check configured channel lock (if any)
             target_channel_id = await db.get_config(message.guild.id, "ai_reply_channel_id", None)
             
             # Check question mark requirement (default: False)
             require_qmark = await db.get_config(message.guild.id, "ai_reply_require_qmark", False)
-            
-            # Is bot directly mentioned or replied to?
-            is_direct = (bot.user and bot.user in message.mentions) or (
-                message.reference and 
-                message.reference.resolved and 
-                isinstance(message.reference.resolved, discord.Message) and 
-                bot.user and 
-                message.reference.resolved.author == bot.user
-            )
 
             # If target_channel_id is set, only auto-reply in that channel (direct mentions work everywhere)
             if target_channel_id and message.channel.id != int(target_channel_id) and not is_direct:
