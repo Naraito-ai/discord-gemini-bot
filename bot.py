@@ -345,6 +345,111 @@ def is_question_message(message: discord.Message, require_qmark: bool = False) -
     return False, ""
 
 
+# ── Server Staff & Role Inquiry Helpers ────────────────────────────────────
+
+def get_staff_members(guild: discord.Guild):
+    """Finds owner, administrators, and moderators in a guild."""
+    owner = guild.owner
+    admins = []
+    mods = []
+    
+    for member in guild.members:
+        if member.bot or member.id == guild.owner_id:
+            continue
+        
+        # Check permissions & roles
+        if member.guild_permissions.administrator:
+            admins.append(member)
+        elif (
+            member.guild_permissions.manage_guild or 
+            member.guild_permissions.manage_messages or 
+            member.guild_permissions.kick_members or 
+            member.guild_permissions.ban_members or
+            member.guild_permissions.moderate_members or
+            any("mod" in r.name.lower() or "staff" in r.name.lower() for r in member.roles)
+        ):
+            mods.append(member)
+            
+    return owner, admins, mods
+
+
+def check_staff_query(content: str, guild: discord.Guild) -> discord.Embed | None:
+    """
+    Checks if a message asks 'who is owner', 'who is admin', or 'who is mod/staff'
+    and returns a formatted Discord Embed.
+    """
+    text = content.lower().strip()
+    text = re.sub(r'<@!?[0-9]+>', '', text).strip()
+    
+    owner_pattern = r'\b(who\s+(is|are)?\s*(the)?\s*owner|who\s+owns|who\s+created\s+(this|the)\s+server)\b'
+    admin_pattern = r'\b(who\s+(is|are)?\s*(the)?\s*admin(s)?|who\s+has\s+admin)\b'
+    mod_pattern = r'\b(who\s+(is|are)?\s*(the)?\s*(mod|mods|moderator|moderators))\b'
+    general_staff_pattern = r'\b(who\s+(is|are)?\s*(the)?\s*(staff|team|managers))\b'
+    
+    is_owner_q = bool(re.search(owner_pattern, text))
+    is_admin_q = bool(re.search(admin_pattern, text))
+    is_mod_q = bool(re.search(mod_pattern, text))
+    is_general_q = bool(re.search(general_staff_pattern, text))
+    
+    if not (is_owner_q or is_admin_q or is_mod_q or is_general_q):
+        return None
+        
+    owner, admins, mods = get_staff_members(guild)
+    owner_str = f"👑 {owner.mention} (`{owner.name}`)" if owner else f"👑 <@{guild.owner_id}>"
+    
+    # 1. Specifically asking for Owner
+    if is_owner_q and not is_admin_q and not is_mod_q:
+        embed = discord.Embed(
+            title=f"👑 Server Owner — {guild.name}",
+            description=f"The owner and founder of **{guild.name}** is {owner_str}.",
+            color=discord.Color.gold()
+        )
+        if owner and owner.display_avatar:
+            embed.set_thumbnail(url=owner.display_avatar.url)
+        embed.set_footer(text=f"Server ID: {guild.id}")
+        return embed
+
+    # 2. Specifically asking for Admins
+    if is_admin_q and not is_owner_q and not is_mod_q:
+        admin_list = ", ".join(m.mention for m in admins[:15]) if admins else "*No other administrators found.*"
+        embed = discord.Embed(
+            title=f"🛡️ Server Administrators — {guild.name}",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="👑 Server Owner", value=owner_str, inline=False)
+        embed.add_field(name=f"🛡️ Administrators ({len(admins)})", value=admin_list, inline=False)
+        embed.set_footer(text="Admins hold full server management permissions.")
+        return embed
+
+    # 3. Specifically asking for Moderators
+    if is_mod_q and not is_owner_q and not is_admin_q:
+        mod_list = ", ".join(m.mention for m in mods[:20]) if mods else "*No specific moderator roles assigned.*"
+        embed = discord.Embed(
+            title=f"⚔️ Server Moderators — {guild.name}",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name=f"⚔️ Moderators ({len(mods)})", value=mod_list, inline=False)
+        embed.set_footer(text="Need assistance? Feel free to message any available moderator.")
+        return embed
+
+    # 4. General Staff Team Directory
+    admin_list = ", ".join(m.mention for m in admins[:10]) if admins else "*None assigned*"
+    mod_list = ", ".join(m.mention for m in mods[:15]) if mods else "*None assigned*"
+    
+    embed = discord.Embed(
+        title=f"🛡️ Staff & Moderation Team — {guild.name}",
+        description=f"Official staff directory for **{guild.name}**:",
+        color=discord.Color.purple()
+    )
+    embed.add_field(name="👑 Server Owner", value=owner_str, inline=False)
+    embed.add_field(name=f"🛡️ Administrators ({len(admins)})", value=admin_list, inline=False)
+    embed.add_field(name=f"⚔️ Moderators ({len(mods)})", value=mod_list, inline=False)
+    embed.set_footer(text="Reach out to any staff member if you have questions or concerns!")
+    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+    return embed
+
+
+
 
 # Gemini permissions prompt for AI permission configurator
 SYSTEM_PERMS_PROMPT = """You are an expert Discord permissions manager.
@@ -2618,6 +2723,43 @@ async def toggle_ai_reply_command(interaction: discord.Interaction):
     await interaction.response.send_message(f"AI Auto-Reply has been set to: {state_str}")
 
 
+@bot.tree.command(name="staff", description="Display the complete server staff team (Owner, Admins, Mods)")
+async def staff_command(interaction: discord.Interaction):
+    embed = check_staff_query("who is staff", interaction.guild)
+    if embed:
+        await interaction.response.send_message(embed=embed)
+    else:
+        await interaction.response.send_message("❌ Could not retrieve staff information.")
+
+
+@bot.tree.command(name="owner", description="Show the server owner and founder")
+async def owner_command(interaction: discord.Interaction):
+    embed = check_staff_query("who is owner", interaction.guild)
+    if embed:
+        await interaction.response.send_message(embed=embed)
+    else:
+        await interaction.response.send_message("❌ Could not retrieve owner information.")
+
+
+@bot.tree.command(name="admins", description="List all server administrators")
+async def admins_command(interaction: discord.Interaction):
+    embed = check_staff_query("who is admin", interaction.guild)
+    if embed:
+        await interaction.response.send_message(embed=embed)
+    else:
+        await interaction.response.send_message("❌ Could not retrieve admin information.")
+
+
+@bot.tree.command(name="mods", description="List all server moderators and staff")
+async def mods_command(interaction: discord.Interaction):
+    embed = check_staff_query("who is moderator", interaction.guild)
+    if embed:
+        await interaction.response.send_message(embed=embed)
+    else:
+        await interaction.response.send_message("❌ Could not retrieve moderator information.")
+
+
+
 
 # ── Discord Event Listeners ─────────────────────────────────────────────────
 
@@ -2847,6 +2989,16 @@ async def on_message(message):
                                     return
                     except Exception as e:
                         logger.error(f"Auto-Mod AI evaluation error: {e}")
+
+    # ── Immediate Server Staff / Owner / Moderator Questions ─────────────────
+    if not message.author.bot and message.guild:
+        staff_embed = check_staff_query(message.content, message.guild)
+        if staff_embed is not None:
+            try:
+                await message.reply(embed=staff_embed, mention_author=True)
+                return
+            except Exception as staff_err:
+                logger.error(f"Error replying to staff query: {staff_err}")
 
     # ── AI Auto-Reply to Questions & User Mentions ───────────────────────────
     if not message.author.bot and message.guild:
