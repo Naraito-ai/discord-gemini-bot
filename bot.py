@@ -1022,7 +1022,11 @@ async def get_mod_log_channel(guild: discord.Guild):
            discord.utils.get(guild.text_channels, name="🚨-admin-chat")
 
 async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: discord.TextChannel, reason: str, message_content: str, duration_minutes: int = 20):
-    """Automatically times out (mutes) a user for duration_minutes (default 20 mins), notifies chat, and logs to mod log."""
+    """Automatically times out (mutes) a user for duration_minutes. Server owner and admins are immune."""
+    # Safety: Never mute server owner or administrators
+    if member.id == guild.owner_id or member.guild_permissions.administrator or member.guild_permissions.manage_guild:
+        return
+
     duration = datetime.timedelta(minutes=duration_minutes)
     mute_success = False
     err_msg = ""
@@ -3019,11 +3023,17 @@ async def on_message(message):
                 pass
             return
 
-    # ── Auto-Mod Security & Anti-Toxicity Shield (Enforced for Everyone) ─────
+    # ── Auto-Mod Security & Anti-Toxicity Shield (Owner & Admins Immune) ────
     if not message.author.bot and message.guild:
+        is_admin_or_owner = (
+            message.author.id == message.guild.owner_id or
+            message.author.guild_permissions.administrator or
+            message.author.guild_permissions.manage_guild
+        )
+        
         automod_enabled = await db.get_config(message.guild.id, "automod", True)
         
-        if automod_enabled:
+        if automod_enabled and not is_admin_or_owner:
             content = message.content.strip()
             if content:
                 # A. Porn GIF / NSFW link filter
