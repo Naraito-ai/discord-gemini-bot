@@ -3183,12 +3183,9 @@ async def on_message(message):
             except Exception:
                 pass
                 
-            if is_owner or (message.guild and message.author.id == message.guild.owner_id):
-                if message.guild:
-                    bot.tree.copy_global_to(guild=message.guild)
-                    await bot.tree.sync(guild=message.guild)
-                await bot.tree.sync()  # Global sync
-                await message.reply("⚡ **Commands synced instantly to this guild, and queued globally!**\nRestart your Discord app (Ctrl+R) if they don't appear.")
+            if is_owner or (message.guild and message.author.id == message.guild.owner_id) or message.author.id == 719932313919684670:
+                synced = await bot.tree.sync()
+                await message.reply(f"⚡ **Synced {len(synced)} slash commands globally!**\nRestart your Discord app (Ctrl+R) to refresh your command menu.")
                 return
         except Exception as e:
             try:
