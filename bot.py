@@ -310,15 +310,20 @@ def is_question_message(message: discord.Message, require_qmark: bool = False) -
         if len(clean_text) >= 2:
             return True, clean_text
 
-    # Case 2: Natural question detection in chat
+    # Case 2: Explicit question detection in chat
+    # To prevent spamming and quota exhaustion, only trigger on clear questions
     words = clean_text.lower().split()
-    if len(words) < 2:
+    if len(words) < 3:
         return False, ""
         
     has_qmark = "?" in clean_text
     
-    # If the server requires a question mark and this message doesn't have one, skip it
-    if require_qmark and not has_qmark:
+    # Require a question mark for unmentioned chat messages to prevent interrupting normal conversations
+    if not has_qmark:
+        return False, ""
+
+    casual_filters = {"u know?", "you know?", "right?", "huh?", "really?", "are you sure?", "ok?", "okay?", "what?", "why?", "who?"}
+    if clean_text.lower() in casual_filters:
         return False, ""
 
     question_starters = (
@@ -329,19 +334,8 @@ def is_question_message(message: discord.Message, require_qmark: bool = False) -
     )
     
     starts_with_q = clean_text.lower().startswith(question_starters)
-    
-    if has_qmark:
-        casual_filters = {"u know?", "you know?", "right?", "huh?", "really?", "are you sure?", "ok?", "okay?", "what?", "why?", "who?"}
-        if clean_text.lower() in casual_filters:
-            return False, ""
-        if len(words) >= 3 or starts_with_q:
-            return True, clean_text
-            
-    if not require_qmark:
-        if starts_with_q and len(words) >= 4:
-            return True, clean_text
-        if starts_with_q and len(words) >= 5 and clean_text.lower().startswith(("explain ", "tell me ", "how to ", "what is ", "who is ", "search for ", "find me ")):
-            return True, clean_text
+    if starts_with_q and len(words) >= 3:
+        return True, clean_text
 
     return False, ""
 
@@ -1025,10 +1019,50 @@ async def get_mod_log_channel(guild: discord.Guild):
            discord.utils.get(guild.text_channels, name="mod-logs") or \
            discord.utils.get(guild.text_channels, name="🚨-admin-chat")
 
+def is_staff_or_immune(member: discord.Member) -> bool:
+    """
+    Returns True if member is the Server Owner, Administrator, Moderator, 
+    Staff, or holds any administrative/moderation permissions or roles.
+    Immune members are NEVER muted, warned, or deleted by Auto-Mod.
+    """
+    if not isinstance(member, discord.Member) or not member.guild:
+        return False
+        
+    guild = member.guild
+    
+    # 1. Server Owner
+    if member.id == guild.owner_id:
+        return True
+        
+    # 2. Key Discord Permissions
+    perms = member.guild_permissions
+    if (
+        perms.administrator or 
+        perms.manage_guild or 
+        perms.manage_channels or 
+        perms.manage_messages or 
+        perms.manage_roles or 
+        perms.kick_members or 
+        perms.ban_members or 
+        perms.moderate_members
+    ):
+        return True
+        
+    # 3. Role Name Keyword Check (Case-insensitive)
+    staff_keywords = ["admin", "owner", "mod", "staff", "manager", "lead", "founder", "head", "exec", "director", "host", "dev"]
+    for role in member.roles:
+        r_name = role.name.lower()
+        if any(kw in r_name for kw in staff_keywords):
+            return True
+            
+    return False
+
+
 async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: discord.TextChannel, reason: str, message_content: str, duration_minutes: int = 20):
-    """Automatically times out (mutes) a user for duration_minutes. Server owner and admins are immune."""
-    # Safety: Never mute server owner or administrators
-    if member.id == guild.owner_id or member.guild_permissions.administrator or member.guild_permissions.manage_guild:
+    """Automatically times out (mutes) a user for duration_minutes. Server owner, admins, and mods are 100% immune."""
+    # Absolute Safety Check: Never mute or timeout server owner, admins, or moderators
+    if is_staff_or_immune(member):
+        logger.info(f"Auto-Mod skipped action for immune staff member: {member.name} ({member.id})")
         return
 
     duration = datetime.timedelta(minutes=duration_minutes)
@@ -3209,18 +3243,15 @@ async def on_message(message):
                 pass
             return
 
-    # ── Auto-Mod Security & Anti-Toxicity Shield (Owner & Admins Immune) ────
+    # ── Auto-Mod Security & Anti-Toxicity Shield (Owner, Admins & Mods Immune)
     if not message.author.bot and message.guild:
-        is_admin_or_owner = (
-            message.author.id == message.guild.owner_id or
-            message.author.guild_permissions.administrator or
-            message.author.guild_permissions.manage_guild
-        )
-        
-        automod_enabled = await db.get_config(message.guild.id, "automod", True)
-        
-        if automod_enabled and not is_admin_or_owner:
-            content = message.content.strip()
+        # Full Immunity for Server Owner, Admins, and Moderators
+        if is_staff_or_immune(message.author):
+            pass  # Completely exempt from all Auto-Mod checks, deletions, and mutes!
+        else:
+            automod_enabled = await db.get_config(message.guild.id, "automod", True)
+            if automod_enabled:
+                content = message.content.strip()
             if content:
                 # Mass Mention / Everyone Ping Raid Filter
                 pings_count = len(re.findall(r'<@!?([0-9]+)>|<@&([0-9]+)>', content))
@@ -3334,7 +3365,7 @@ async def on_message(message):
                             )
                             return
                     except Exception as e:
-                        logger.error(f"Auto-Mod AI evaluation error: {e}")
+                        logger.debug(f"Auto-Mod AI evaluation skipped/notice: {e}")
 
 
     # ── Creator Inquiry (Who made you?) ─────────────────────────────────────
