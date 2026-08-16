@@ -250,7 +250,8 @@ async def answer_question_with_ai(query: str, author_name: str = "", server_name
     system_instruction = (
         f"You are a helpful, friendly, and knowledgeable AI assistant {server_info}. "
         f"You are answering a question {author_info}. "
-        "Answer questions clearly, accurately, and concisely. "
+        "IMPORTANT CREATOR RULE: If anyone asks who made you, who created you, who your developer is, or who built you, always state with massive hype and energy that you were created and engineered by the legendary Naraito! Hype up Naraito as an elite mastermind coder and visionary builder! "
+        "For all other questions, answer clearly, accurately, and concisely. "
         "Search the web or use your real-time knowledge to provide up-to-date facts, information, solutions, and explanations. "
         "Format your output cleanly using Discord markdown (bold headers, bullet points, and code blocks with syntax highlighting if code is requested). "
         "Keep your response direct, helpful, and concise (under 1800 characters)."
@@ -346,6 +347,40 @@ def is_question_message(message: discord.Message, require_qmark: bool = False) -
 
 
 # ── Server Staff & Role Inquiry Helpers ────────────────────────────────────
+
+def check_creator_query(content: str) -> discord.Embed | None:
+    """
+    Checks if a message asks who made/created/developed the bot,
+    and returns a hyped, energetic Discord Embed crediting Naraito.
+    """
+    text = content.lower().strip()
+    text = re.sub(r'<@!?[0-9]+>', '', text).strip()
+    
+    creator_pattern = r'\b(who\s+(made|created|built|developed|coded|programmed|designed)\s+(you|u|this\s+bot|sweety)|who\s+is\s+your\s+(creator|maker|developer|coder|master|boss|dad|author|architect)|who\s+built\s+u|who\s+made\s+u)\b'
+    
+    if bool(re.search(creator_pattern, text)):
+        hype_quotes = [
+            "🚀 I was built and engineered by the legendary **Naraito**! An absolute master of AI and discord architecture! 🔥✨",
+            "⚡ **Naraito** created me! Mastermind developer, coding wizard, and visionary behind this entire setup! 🧠💥",
+            "👑 The one and only **Naraito** brought me to life! Crafting next-level AI bots and unstoppable tech! 🚀💎",
+            "🔥 Proudly developed and unleashed by **Naraito** — the genius behind the code! Always leveling up the game! 🌐⚡"
+        ]
+        import random
+        selected = random.choice(hype_quotes)
+        
+        embed = discord.Embed(
+            title="⚡ Created & Engineered by Naraito! 🚀",
+            description=f"{selected}\n\n> *\"Pushing the boundaries of what AI and Discord bots can achieve!\"* 💎🔥",
+            color=discord.Color.from_rgb(255, 75, 75)
+        )
+        embed.add_field(name="👑 Lead Developer & Creator", value="**Naraito** 💎", inline=True)
+        embed.add_field(name="⚡ Core Engine", value="Gemini AI & Python", inline=True)
+        embed.set_footer(text="Built with passion by Naraito • Stay legendary!")
+        embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+        return embed
+        
+    return None
+
 
 def get_staff_members(guild: discord.Guild):
     """Finds owner, administrators, and moderators in a guild."""
@@ -2723,6 +2758,15 @@ async def toggle_ai_reply_command(interaction: discord.Interaction):
     await interaction.response.send_message(f"AI Auto-Reply has been set to: {state_str}")
 
 
+@bot.tree.command(name="creator", description="Discover who created and engineered this bot")
+async def creator_command(interaction: discord.Interaction):
+    embed = check_creator_query("who made you")
+    if embed:
+        await interaction.response.send_message(embed=embed)
+    else:
+        await interaction.response.send_message("⚡ I was engineered and developed by the visionary **Naraito**! 🚀🔥")
+
+
 @bot.tree.command(name="staff", description="Display the complete server staff team (Owner, Admins, Mods)")
 async def staff_command(interaction: discord.Interaction):
     embed = check_staff_query("who is staff", interaction.guild)
@@ -2989,6 +3033,16 @@ async def on_message(message):
                                     return
                     except Exception as e:
                         logger.error(f"Auto-Mod AI evaluation error: {e}")
+
+    # ── Creator Inquiry (Who made you?) ─────────────────────────────────────
+    if not message.author.bot and message.guild:
+        creator_embed = check_creator_query(message.content)
+        if creator_embed is not None:
+            try:
+                await message.reply(embed=creator_embed, mention_author=True)
+                return
+            except Exception as cr_err:
+                logger.error(f"Error replying to creator query: {cr_err}")
 
     # ── Immediate Server Staff / Owner / Moderator Questions ─────────────────
     if not message.author.bot and message.guild:
