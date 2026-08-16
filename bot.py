@@ -902,6 +902,83 @@ def _check_spam(user_id: int, content: str) -> tuple[bool, str]:
         
     return False, ""
 
+
+def _normalize_leetspeak(text: str) -> str:
+    """Normalizes leetspeak, numbers, and special character substitutions."""
+    t = text.lower()
+    char_map = {
+        '@': 'a', '4': 'a',
+        '1': 'i', '!': 'i', '|': 'i',
+        '0': 'o',
+        '3': 'e',
+        '5': 's', '$': 's',
+        '7': 't', '+': 't',
+        '8': 'b',
+    }
+    for k, v in char_map.items():
+        t = t.replace(k, v)
+    return t
+
+
+def _check_toxicity_and_profanity(text: str) -> tuple[bool, str, str]:
+    """
+    Comprehensive multi-layer toxicity, racial slur, hate speech, and abuse scanner.
+    Returns (is_toxic, category_name, matched_word).
+    """
+    raw_lower = text.lower()
+    norm = _normalize_leetspeak(text)
+    no_punct = re.sub(r'[\.\-\_\,\*\~\`\:\;\|\/\\]', '', norm)
+    collapsed = re.sub(r'[^a-z0-9]', '', norm)
+
+    # 1. Racial Slurs & Hate Speech (Zero tolerance)
+    hate_slurs = [
+        "nigger", "nigga", "faggot", "fag", "retard", "chink", "kike", "spic",
+        "gook", "tranny", "wetback", "coon", "towelhead", "sandnigger"
+    ]
+    for slur in hate_slurs:
+        if re.search(rf"\b{re.escape(slur)}\b", raw_lower) or re.search(rf"\b{re.escape(slur)}\b", norm) or re.search(rf"\b{re.escape(slur)}\b", no_punct):
+            return True, "Hate Speech / Racial Slur", slur
+        if len(slur) >= 4 and slur in collapsed:
+            return True, "Hate Speech / Racial Slur", slur
+
+    # 2. Self-Harm & Extreme Harassment
+    if re.search(r"\bk\s*y\s*s\b", raw_lower) or re.search(r"\bkill\s+your\s*self\b", raw_lower) or "kys" in no_punct.split():
+        return True, "Severe Harassment / Self-Harm Encouragement", "kys"
+        
+    self_harm = [
+        "commit suicide", "hang yourself", "slit your wrists",
+        "drink bleach", "you should die", "die in a fire", "go kill yourself"
+    ]
+    for sh in self_harm:
+        if sh in raw_lower or sh in norm or sh in no_punct:
+            return True, "Severe Harassment / Self-Harm Encouragement", sh
+
+    # 3. Severe Profanity & Vulgar Abuse
+    profanities = [
+        "fuck", "motherfucker", "mother fucker", "bitch", "cunt", "asshole", 
+        "dickhead", "pussy", "whore", "slut", "bastard", "cocksucker", "blowjob", "stfu"
+    ]
+    for p in profanities:
+        if re.search(rf"\b{re.escape(p)}\b", raw_lower) or re.search(rf"\b{re.escape(p)}\b", norm) or re.search(rf"\b{re.escape(p)}\b", no_punct):
+            return True, "Prohibited Language / Vulgar Abuse", p
+        # Check spaced patterns (e.g. f u c k, b i t c h, c u n t)
+        spaced_pattern = r"\b" + r"\s+".join(list(p)) + r"\b"
+        if re.search(spaced_pattern, raw_lower) or re.search(spaced_pattern, norm):
+            return True, "Prohibited Language / Vulgar Abuse", p
+
+    # 4. Scam / Phishing Links
+    scams = [
+        "discord-gift", "free nitro", "steamcommunity-free", "free robux", 
+        "airdrop claim", "crypto giveaway", "@everyone click here", "claim your nitro",
+        "t.me/", "free-nitro", "nitro-free"
+    ]
+    for scam in scams:
+        if scam in raw_lower:
+            return True, "Prohibited Scam / Phishing Link", scam
+
+    return False, "", ""
+
+
 async def get_mod_log_channel(guild: discord.Guild):
     """Retrieves the configured mod log channel or falls back to name-based detection."""
     channel_id = await db.get_config(guild.id, "mod_log_channel_id")
@@ -2916,12 +2993,11 @@ async def on_message(message):
                 pass
             return
 
-    # Auto-Mod checks
+    # ── Auto-Mod Security & Anti-Toxicity Shield (Enforced for Everyone) ─────
     if not message.author.bot and message.guild:
-        is_staff = message.author.guild_permissions.administrator or message.author.guild_permissions.manage_guild
         automod_enabled = await db.get_config(message.guild.id, "automod", True)
         
-        if automod_enabled and not is_staff:
+        if automod_enabled:
             content = message.content.strip()
             if content:
                 # A. Porn GIF / NSFW link filter
@@ -2956,54 +3032,22 @@ async def on_message(message):
                     )
                     return
 
-                # C. Instant Local Filter (Free and uses ZERO API quota)
-                profanities = [
-                    "fuck", "bastard", "asshole", "bitch", "cunt", "motherfucker", "mother fucker", 
-                    "nigger", "faggot", "retard", "kys", "kill yourself", "dickhead", "pussy", 
-                    "whore", "slut", "crap", "bullshit", "jackass"
-                ]
-                scams = [
-                    "discord-gift", "free nitro", "steamcommunity-free", "free robux", 
-                    "airdrop claim", "crypto giveaway", "@everyone click here"
-                ]
-                
-                is_toxic_local = False
-                matched_reason = ""
-                content_lower = content.lower()
-                
-                for word in profanities:
-                    pattern = rf"\b{re.escape(word)}\b"
-                    if re.search(pattern, content_lower):
-                        is_toxic_local = True
-                        matched_reason = "Flagged as Prohibited Language (Profanity/Abuse)"
-                        break
-                        
-                if not is_toxic_local:
-                    for scam in scams:
-                        if scam in content_lower:
-                            is_toxic_local = True
-                            matched_reason = "Flagged as Prohibited Content (Spam/Scam/Phishing link)"
-                            break
-                            
-                if is_toxic_local:
+                # C. Instant Comprehensive Toxic, Slur & Profanity Shield
+                is_toxic, category, term = _check_toxicity_and_profanity(content)
+                if is_toxic:
                     try:
                         await message.delete()
-                        warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **Auto-Mod (Local Shield)** for violating community safety rules.")
-                        await asyncio.sleep(5)
-                        await warn_msg.delete()
-                        
-                        mod_log = await get_mod_log_channel(message.guild)
-                        if mod_log:
-                            log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message", color=discord.Color.red())
-                            log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
-                            log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
-                            log_embed.add_field(name="Deleted Content", value=content[:1000], inline=False)
-                            log_embed.add_field(name="Reason", value=matched_reason, inline=True)
-                            await mod_log.send(embed=log_embed)
-                        return
                     except Exception as del_err:
                         logger.error(f"Auto-Mod local delete failed: {del_err}")
-                        return
+                        
+                    await auto_mute_user(
+                        member=message.author,
+                        guild=message.guild,
+                        channel=message.channel,
+                        reason=f"{category} (Matched: '{term}')",
+                        message_content=content
+                    )
+                    return
 
                 # D. Optional AI Fallback Filter (Requires automod_mode set to 'ai')
                 automod_mode = await db.get_config(message.guild.id, "automod_mode", "local")
@@ -3013,26 +3057,21 @@ async def on_message(message):
                         text = await call_ai_generation(prompt, "You are an expert content moderator. Respond with ONLY the word SAFE or TOXIC. Do not add any other text.")
                         result = text.strip().upper()
                         if "TOXIC" in result:
-                                try:
-                                    await message.delete()
-                                    warn_msg = await message.channel.send(f"⚠️ {message.author.mention}, your message was deleted by **AI Auto-Mod** for violating community safety rules.")
-                                    await asyncio.sleep(5)
-                                    await warn_msg.delete()
-                                    
-                                    mod_log = await get_mod_log_channel(message.guild)
-                                    if mod_log:
-                                        log_embed = discord.Embed(title="🚨 Auto-Mod Flagged Message (AI)", color=discord.Color.red())
-                                        log_embed.add_field(name="Author", value=f"{message.author} ({message.author.id})", inline=True)
-                                        log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
-                                        log_embed.add_field(name="Deleted Content", value=content[:1000], inline=False)
-                                        log_embed.add_field(name="Reason", value="Flagged as TOXIC by AI", inline=True)
-                                        await mod_log.send(embed=log_embed)
-                                    return
-                                except Exception as del_err:
-                                    logger.error(f"Auto-Mod AI delete failed: {del_err}")
-                                    return
+                            try:
+                                await message.delete()
+                            except Exception:
+                                pass
+                            await auto_mute_user(
+                                member=message.author,
+                                guild=message.guild,
+                                channel=message.channel,
+                                reason="Flagged as TOXIC by AI Content Moderator",
+                                message_content=content
+                            )
+                            return
                     except Exception as e:
                         logger.error(f"Auto-Mod AI evaluation error: {e}")
+
 
     # ── Creator Inquiry (Who made you?) ─────────────────────────────────────
     if not message.author.bot and message.guild:
