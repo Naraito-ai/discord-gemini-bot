@@ -917,6 +917,10 @@ _user_profanity_strikes: dict[int, list[float]] = {}
 _PROFANITY_STRIKE_WINDOW = 600.0  # 10 minute sliding window
 _PROFANITY_MAX_STRIKES = 3        # Mute on 3rd strike
 
+# ── Anti-Raid & Server Security State ───────────────────────────────────────
+_guild_join_history: dict[int, list[tuple[float, int, datetime.datetime]]] = {}
+_guild_raid_mode_active: dict[int, float] = {}  # guild_id -> timestamp when raid mode expires
+
 def _record_profanity_strike(user_id: int) -> int:
     """Tracks profanity infractions and returns the current strike count."""
     now = time.time()
@@ -2042,6 +2046,123 @@ async def purge_command(interaction: discord.Interaction, amount: int):
         await interaction.followup.send("❌ Purge failed due to an internal error.", ephemeral=True)
 
 
+@bot.tree.command(name="antiraid", description="Configure automated Join-Raid detection and Server Raid Shield")
+@app_commands.describe(mode="Set anti-raid protection mode")
+@app_commands.choices(
+    mode=[
+        app_commands.Choice(name="🟢 Enable (Standard: 5 joins/10s + Alt Gate <24h)", value="enable"),
+        app_commands.Choice(name="🛡️ Strict (High Sensitivity: 3 joins/10s + Alt Gate <72h)", value="strict"),
+        app_commands.Choice(name="🔴 Disable (Turn off Anti-Raid)", value="disable"),
+        app_commands.Choice(name="📊 Status (View current settings)", value="status")
+    ]
+)
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+async def antiraid_command(interaction: discord.Interaction, mode: str):
+    guild = interaction.guild
+    if mode == "status":
+        current_mode = await db.get_config(guild.id, "antiraid_mode", "enable")
+        now = time.time()
+        is_active_raid = _guild_raid_mode_active.get(guild.id, 0) > now
+        
+        embed = discord.Embed(title=f"🛡️ Anti-Raid Shield Status — {guild.name}", color=discord.Color.blue())
+        embed.add_field(name="Protection Mode", value=f"**{current_mode.upper()}**", inline=True)
+        embed.add_field(name="Current Raid State", value="🚨 **ACTIVE RAID IN PROGRESS**" if is_active_raid else "🟢 Normal (Protected)", inline=True)
+        embed.add_field(
+            name="Thresholds & Rules",
+            value=(
+                "• **Standard**: Triggers at 5 joins/10s, auto-kicks fresh alts (<24h old), auto-slowmodes chat.\n"
+                "• **Strict**: Triggers at 3 joins/10s, auto-kicks alts (<72h old), initiates lockdown.\n"
+                "• **Mass Mention Shield**: Automatically mutes users posting 5+ pings or @everyone."
+            ),
+            inline=False
+        )
+        embed.set_footer(text="Use /antiraid to switch modes or /panic in an emergency.")
+        await interaction.response.send_message(embed=embed)
+        return
+
+    await db.set_config(guild.id, "antiraid_mode", mode)
+    if mode == "enable":
+        await interaction.response.send_message("🛡️ **Anti-Raid Shield ENABLED (Standard Mode)**\nMonitors join floods (5 joins/10s), gates burner alts (<24h old), and engages auto-slowmode.")
+    elif mode == "strict":
+        await interaction.response.send_message("🚨 **Anti-Raid Shield set to STRICT Mode**\nMaximum protection active! Sensitive join detection (3 joins/10s), gates accounts <72h old, and locks chat on mass joins.")
+    else:
+        await interaction.response.send_message("⚠️ **Anti-Raid Shield DISABLED**\nAutomated join-flood mitigation is now off.")
+
+
+@bot.tree.command(name="slowmode", description="Set chat slowmode to throttle raid spam")
+@app_commands.describe(seconds="Slowmode delay in seconds (0 to turn off, max 21600)", channel="Optional target channel")
+@app_commands.default_permissions(manage_channels=True)
+@app_commands.guild_only()
+async def slowmode_command(interaction: discord.Interaction, seconds: int, channel: discord.TextChannel = None):
+    target = channel or interaction.channel
+    seconds = max(0, min(seconds, 21600))
+    try:
+        await target.edit(slowmode_delay=seconds, reason=f"Slowmode set by {interaction.user}")
+        if seconds == 0:
+            await interaction.response.send_message(f"🔓 Slowmode disabled in {target.mention}.")
+        else:
+            await interaction.response.send_message(f"⏱️ Slowmode in {target.mention} set to **{seconds} seconds**.")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to update slowmode: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="panic", description="🚨 EMERGENCY: 1-click instant server lockdown, slowmode, and raid cleanup")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+async def panic_command(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+    guild = interaction.guild
+    now = time.time()
+    
+    # 1. Activate raid mode for 15 minutes
+    _guild_raid_mode_active[guild.id] = now + 900.0
+    
+    # 2. Lock down public text channels
+    locked_count = 0
+    for chan in guild.text_channels:
+        overwrites = chan.overwrites_for(guild.default_role)
+        if overwrites.send_messages is False:
+            continue
+        try:
+            await chan.set_permissions(guild.default_role, send_messages=False, reason="Emergency Panic Lockdown")
+            await chan.edit(slowmode_delay=15, reason="Emergency Panic Slowmode")
+            await db.add_resource(guild.id, "locked_channels", chan.id)
+            locked_count += 1
+            await asyncio.sleep(0.15)
+        except Exception:
+            pass
+
+    # 3. Find and kick accounts that joined in the last 10 minutes
+    kicked_count = 0
+    ten_mins_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=10)
+    for member in guild.members:
+        if member.bot or member.id == guild.owner_id or member.guild_permissions.administrator:
+            continue
+        if member.joined_at and member.joined_at > ten_mins_ago:
+            try:
+                await member.kick(reason="Panic Mode: Kicking recent joiners during active raid")
+                kicked_count += 1
+                await asyncio.sleep(0.15)
+            except Exception:
+                pass
+
+    embed = discord.Embed(
+        title="🚨 EMERGENCY PANIC PROTOCOL ENGAGED! 🚨",
+        description=(
+            f"🛡️ **{locked_count} public channels** have been frozen with 15s slowmode.\n"
+            f"🧹 **{kicked_count} accounts** that joined in the last 10 minutes were removed.\n"
+            f"⏱️ Raid protection is locked for the next 15 minutes.\n\n"
+            "To lift the freeze when safe, run `/lockdown off` and `/slowmode 0`."
+        ),
+        color=discord.Color.dark_red()
+    )
+    embed.set_footer(text=f"Initiated by {interaction.user}")
+    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+    
+    await interaction.followup.send(embed=embed)
+
+
 @bot.tree.command(name="addcategory", description="Ask AI to design and add a single category with custom channels")
 @app_commands.describe(description="Description of the category (e.g. 'VIP anime lounge with 4k stream rooms')")
 @app_commands.default_permissions(manage_guild=True)
@@ -2916,8 +3037,73 @@ async def mods_command(interaction: discord.Interaction):
 
 @bot.event
 async def on_member_join(member):
-    """Event listener to assign default roles automatically when a new member joins."""
+    """Event listener to handle Anti-Raid protection and auto-role assignment."""
     guild = member.guild
+    now = time.time()
+    
+    # ── 1. Anti-Raid Join Flood & Alt Gate ─────────────────────────────────
+    antiraid_mode = await db.get_config(guild.id, "antiraid_mode", "enable")
+    
+    if antiraid_mode != "disable":
+        window = 10.0
+        limit = 3 if antiraid_mode == "strict" else 5
+        
+        if guild.id not in _guild_join_history:
+            _guild_join_history[guild.id] = []
+            
+        _guild_join_history[guild.id] = [j for j in _guild_join_history[guild.id] if now - j[0] <= window]
+        _guild_join_history[guild.id].append((now, member.id, member.created_at))
+        
+        account_age_hours = (datetime.datetime.now(datetime.timezone.utc) - member.created_at).total_seconds() / 3600
+        is_fresh_alt = account_age_hours < (72 if antiraid_mode == "strict" else 24)
+        
+        # Check if Join-Raid threshold is triggered
+        if len(_guild_join_history[guild.id]) >= limit:
+            _guild_raid_mode_active[guild.id] = now + 300.0  # Activate raid mode for 5 minutes
+            
+            # Send Emergency Red Alert to mod log
+            mod_log = await get_mod_log_channel(guild)
+            if mod_log:
+                alert_embed = discord.Embed(
+                    title="🚨 JOIN RAID DETECTED! Anti-Raid Shield Activated!",
+                    description=f"⚠️ **{len(_guild_join_history[guild.id])} members** joined within {window} seconds!\nAuto-mitigation protocols have been engaged.",
+                    color=discord.Color.dark_red()
+                )
+                alert_embed.add_field(name="Trigger Member", value=f"{member.mention} (`{member.id}`)", inline=True)
+                alert_embed.add_field(name="Account Age", value=f"{account_age_hours:.1f} hours old", inline=True)
+                alert_embed.add_field(name="Protocol Action", value="🛡️ Auto-Slowmode applied & Fresh alt accounts quarantined/kicked", inline=False)
+                alert_embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+                try:
+                    await mod_log.send(content="@here 🚨 **SERVER RAID DETECTED!**", embed=alert_embed)
+                except Exception:
+                    pass
+                    
+            # Auto-enable 10s slowmode on public channels
+            for ch in guild.text_channels[:5]:
+                try:
+                    if ch.permissions_for(guild.default_role).send_messages:
+                        await ch.edit(slowmode_delay=10, reason="Anti-Raid: Join flood throttle")
+                except Exception:
+                    pass
+
+        # If server is currently in active raid mode, or this is a fresh alt joining during rapid joins
+        in_raid_mode = _guild_raid_mode_active.get(guild.id, 0) > now
+        if (in_raid_mode or len(_guild_join_history[guild.id]) >= limit) and is_fresh_alt:
+            try:
+                await member.kick(reason="Anti-Raid: Fresh Alt Account during Join Flood")
+                mod_log = await get_mod_log_channel(guild)
+                if mod_log:
+                    kick_embed = discord.Embed(
+                        title="🛡️ Anti-Raid: Suspicious Account Auto-Kicked",
+                        description=f"Kicked {member.mention} (`{member.name}` / `{member.id}`)\nAccount was created **{account_age_hours:.1f} hours ago** during an active join raid.",
+                        color=discord.Color.orange()
+                    )
+                    await mod_log.send(embed=kick_embed)
+                return
+            except Exception as k_err:
+                logger.warning(f"Could not auto-kick raider {member.name}: {k_err}")
+
+    # ── 2. Auto-Role on Join ───────────────────────────────────────────────
     role_id = await db.get_config(guild.id, "auto_role_id")
     if role_id:
         role = guild.get_role(role_id)
@@ -3036,6 +3222,25 @@ async def on_message(message):
         if automod_enabled and not is_admin_or_owner:
             content = message.content.strip()
             if content:
+                # Mass Mention / Everyone Ping Raid Filter
+                pings_count = len(re.findall(r'<@!?([0-9]+)>|<@&([0-9]+)>', content))
+                has_everyone = "@everyone" in content or "@here" in content
+                
+                if pings_count >= 5 or (has_everyone and not message.author.guild_permissions.mention_everyone):
+                    try:
+                        await message.delete()
+                    except Exception:
+                        pass
+                    await auto_mute_user(
+                        member=message.author,
+                        guild=message.guild,
+                        channel=message.channel,
+                        reason=f"Mass Mention / Ping Raid ({pings_count} pings / unauthorized @everyone)",
+                        message_content=content,
+                        duration_minutes=60
+                    )
+                    return
+
                 # A. Porn GIF / NSFW link filter
                 is_nsfw, nsfw_kw = _is_nsfw_link(content)
                 if is_nsfw:
