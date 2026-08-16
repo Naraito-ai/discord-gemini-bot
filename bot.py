@@ -2674,23 +2674,24 @@ async def autorole_command(interaction: discord.Interaction, status: str, role: 
 @app_commands.default_permissions(manage_roles=True)
 @app_commands.guild_only()
 async def addrole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+    await interaction.response.defer(ephemeral=True)
     if role.managed:
-        await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually assigned.", ephemeral=True)
+        await interaction.followup.send("❌ This is a managed/integration role and cannot be manually assigned.", ephemeral=True)
         return
         
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
-        await interaction.response.send_message("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
+        await interaction.followup.send("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
         return
     if role.position >= interaction.guild.me.top_role.position:
-        await interaction.response.send_message("❌ I cannot assign this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
+        await interaction.followup.send("❌ I cannot assign this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
         return
         
     try:
         await member.add_roles(role, reason=f"Assigned by {interaction.user.display_name}")
-        await interaction.response.send_message(f"✅ Successfully added role **{role.name}** to **{member.display_name}**.")
+        await interaction.followup.send(f"✅ Successfully added role **{role.name}** to **{member.display_name}**.", ephemeral=True)
     except Exception as e:
         logger.error(f"Addrole command failed: {e}", exc_info=True)
-        await interaction.response.send_message("❌ Failed to assign role due to an internal error.", ephemeral=True)
+        await interaction.followup.send("❌ Failed to assign role due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="removerole", description="Remove a role from a member")
@@ -2698,23 +2699,24 @@ async def addrole_command(interaction: discord.Interaction, member: discord.Memb
 @app_commands.default_permissions(manage_roles=True)
 @app_commands.guild_only()
 async def removerole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+    await interaction.response.defer(ephemeral=True)
     if role.managed:
-        await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually removed.", ephemeral=True)
+        await interaction.followup.send("❌ This is a managed/integration role and cannot be manually removed.", ephemeral=True)
         return
         
     if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
-        await interaction.response.send_message("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
+        await interaction.followup.send("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
         return
     if role.position >= interaction.guild.me.top_role.position:
-        await interaction.response.send_message("❌ I cannot remove this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
+        await interaction.followup.send("❌ I cannot remove this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
         return
         
     try:
         await member.remove_roles(role, reason=f"Removed by {interaction.user.display_name}")
-        await interaction.response.send_message(f"✅ Successfully removed role **{role.name}** from **{member.display_name}**.")
+        await interaction.followup.send(f"✅ Successfully removed role **{role.name}** from **{member.display_name}**.", ephemeral=True)
     except Exception as e:
         logger.error(f"Removerole command failed: {e}", exc_info=True)
-        await interaction.response.send_message("❌ Failed to remove role due to an internal error.", ephemeral=True)
+        await interaction.followup.send("❌ Failed to remove role due to an internal error.", ephemeral=True)
 
 
 @bot.tree.command(name="roleall", description="Assign a role to every member in the server")
