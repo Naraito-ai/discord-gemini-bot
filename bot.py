@@ -1025,25 +1025,28 @@ def is_staff_or_immune(member: discord.Member) -> bool:
     Administrator, Moderator, Staff, or holds any administrative/moderation permissions or roles.
     Immune members are NEVER muted, warned, or deleted by Auto-Mod.
     """
-    if not isinstance(member, discord.Member):
+    if member is None:
         return False
         
-    # 0. Bot Developer / Master Creator (Naraito) — Global Absolute Immunity
-    if member.id == 719932313919684670:
+    # 1. Hardcoded User ID check FIRST (719932313919684670 -> always return True)
+    member_id = member if isinstance(member, int) else getattr(member, "id", None)
+    if member_id == 719932313919684670:
         return True
 
-    if not member.guild:
+    # Ensure member has guild context for server-specific checks
+    guild = getattr(member, "guild", None)
+    if not guild:
         return False
-        
-    guild = member.guild
-    
-    # 1. Server Owner
+
+    # 2. Guild owner check (member.id == guild.owner_id -> always return True)
     if member.id == guild.owner_id:
         return True
-        
-    # 2. Key Discord Permissions
-    perms = member.guild_permissions
-    if (
+
+    # 3. ANY of these discord.Permissions -> return True:
+    #    administrator, manage_guild, manage_channels, manage_messages, 
+    #    manage_roles, kick_members, ban_members, moderate_members
+    perms = getattr(member, "guild_permissions", None)
+    if perms and (
         perms.administrator or 
         perms.manage_guild or 
         perms.manage_channels or 
@@ -1054,14 +1057,16 @@ def is_staff_or_immune(member: discord.Member) -> bool:
         perms.moderate_members
     ):
         return True
-        
-    # 3. Role Name Keyword Check (Case-insensitive)
-    staff_keywords = ["admin", "owner", "mod", "staff", "manager", "lead", "founder", "head", "exec", "director", "host", "dev"]
-    for role in member.roles:
-        r_name = role.name.lower()
+
+    # 4. Role name substring check (case-insensitive) -> return True if any role name contains:
+    #    admin, mod, staff, owner, founder, manager, lead, dev
+    staff_keywords = ["admin", "mod", "staff", "owner", "founder", "manager", "lead", "dev"]
+    roles = getattr(member, "roles", [])
+    for role in roles:
+        r_name = getattr(role, "name", "").lower()
         if any(kw in r_name for kw in staff_keywords):
             return True
-            
+
     return False
 
 
@@ -1069,7 +1074,7 @@ async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: 
     """Automatically times out (mutes) a user for duration_minutes. Server owner, admins, and mods are 100% immune."""
     # Absolute Safety Check: Never mute or timeout server owner, admins, or moderators
     if is_staff_or_immune(member):
-        logger.info(f"Auto-Mod skipped action for immune staff member: {member.name} ({member.id})")
+        logger.info(f"Auto-Mod skipped action for immune staff member: {getattr(member, 'name', member)} ({getattr(member, 'id', member)})")
         return
 
     duration = datetime.timedelta(minutes=duration_minutes)
@@ -2448,6 +2453,10 @@ async def nuke_command(interaction: discord.Interaction):
 @app_commands.default_permissions(kick_members=True)
 @app_commands.guild_only()
 async def kick_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if is_staff_or_immune(member):
+        await interaction.response.send_message("❌ This member is staff/immune and cannot be kicked.", ephemeral=True)
+        return
+        
     if member.id == interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot kick the Server Owner!", ephemeral=True)
         return
@@ -2484,6 +2493,11 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
 @app_commands.default_permissions(ban_members=True)
 @app_commands.guild_only()
 async def ban_command(interaction: discord.Interaction, member: discord.User, reason: str = "No reason provided", delete_message_days: int = 0):
+    guild_member = interaction.guild.get_member(member.id)
+    if is_staff_or_immune(guild_member or member.id):
+        await interaction.response.send_message("❌ This user is staff/immune and cannot be banned.", ephemeral=True)
+        return
+        
     if member.id == interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot ban the Server Owner!", ephemeral=True)
         return
@@ -2536,6 +2550,9 @@ async def unban_command(interaction: discord.Interaction, user_id: str, reason: 
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
 async def mute_command(interaction: discord.Interaction, member: discord.Member, duration_minutes: int, reason: str = "No reason provided"):
+    if is_staff_or_immune(member):
+        await interaction.response.send_message("❌ This member is staff/immune and cannot be muted.", ephemeral=True)
+        return
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot mute this member because they have a higher or equal role than you.", ephemeral=True)
         return
@@ -3081,6 +3098,9 @@ async def mods_command(interaction: discord.Interaction):
 @bot.event
 async def on_member_join(member):
     """Event listener to handle Anti-Raid protection and auto-role assignment."""
+    if is_staff_or_immune(member):
+        return
+        
     guild = member.guild
     now = time.time()
     
