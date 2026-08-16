@@ -279,8 +279,12 @@ async def answer_question_with_ai(query: str, author_name: str = "", server_name
     return await call_ai_generation(query, system_instruction)
 
 
-def is_question_message(message: discord.Message) -> tuple[bool, str]:
-    """Detects if a user message is asking a question or querying the AI."""
+def is_question_message(message: discord.Message, require_qmark: bool = False) -> tuple[bool, str]:
+    """
+    Detects if a user message is asking a question or querying the AI.
+    - require_qmark=True: Message MUST contain '?' (unless bot is directly mentioned/replied to).
+    - require_qmark=False: Message can contain '?' OR start with question/inquiry words (e.g. how, what, why, explain).
+    """
     content = message.content.strip()
     if not content or len(content) < 3:
         return False, ""
@@ -307,9 +311,15 @@ def is_question_message(message: discord.Message) -> tuple[bool, str]:
 
     # Case 2: Natural question detection in chat
     words = clean_text.lower().split()
-    if len(words) < 3:
+    if len(words) < 2:
         return False, ""
         
+    has_qmark = "?" in clean_text
+    
+    # If the server requires a question mark and this message doesn't have one, skip it
+    if require_qmark and not has_qmark:
+        return False, ""
+
     question_starters = (
         "who", "what", "where", "when", "why", "how", "which", "whose", "whom",
         "can", "could", "would", "should", "will", "is", "are", "was", "were",
@@ -317,17 +327,20 @@ def is_question_message(message: discord.Message) -> tuple[bool, str]:
         "find", "anyone know", "anybody know", "does anyone", "how do", "how can", "what is", "whats"
     )
     
-    ends_with_q = clean_text.endswith("?")
     starts_with_q = clean_text.lower().startswith(question_starters)
     
-    if ends_with_q and (starts_with_q or len(words) >= 4):
-        casual_filters = {"u know?", "you know?", "right?", "huh?", "really?", "are you sure?", "ok?", "okay?"}
+    if has_qmark:
+        casual_filters = {"u know?", "you know?", "right?", "huh?", "really?", "are you sure?", "ok?", "okay?", "what?", "why?", "who?"}
         if clean_text.lower() in casual_filters:
             return False, ""
-        return True, clean_text
-        
-    if starts_with_q and len(words) >= 5 and clean_text.lower().startswith(("explain ", "tell me ", "how to ", "what is ", "who is ", "search for ", "find me ")):
-        return True, clean_text
+        if len(words) >= 3 or starts_with_q:
+            return True, clean_text
+            
+    if not require_qmark:
+        if starts_with_q and len(words) >= 4:
+            return True, clean_text
+        if starts_with_q and len(words) >= 5 and clean_text.lower().startswith(("explain ", "tell me ", "how to ", "what is ", "who is ", "search for ", "find me ")):
+            return True, clean_text
 
     return False, ""
 
@@ -2521,7 +2534,81 @@ async def ask_command(interaction: discord.Interaction, question: str):
         await interaction.followup.send(f"❌ Failed to answer question: {e}")
 
 
-@bot.tree.command(name="toggleaireply", description="Toggle automatic AI answers when users ask questions in chat")
+@bot.tree.command(name="setaireply", description="Configure AI Auto-Reply: set target channel and question mark mode")
+@app_commands.describe(
+    enabled="Turn AI Auto-Reply on or off",
+    channel="Channel to restrict AI replies to (leave blank to allow all channels)",
+    require_question_mark="Require messages to contain '?' to trigger AI auto-reply",
+    reset_channel="Set to True to remove channel lock and allow in all channels"
+)
+@app_commands.default_permissions(manage_guild=True)
+async def set_ai_reply_command(
+    interaction: discord.Interaction,
+    enabled: bool = None,
+    channel: discord.TextChannel = None,
+    require_question_mark: bool = None,
+    reset_channel: bool = False
+):
+    guild_id = interaction.guild.id
+    
+    if enabled is not None:
+        await db.set_config(guild_id, "ai_auto_reply", enabled)
+        
+    if reset_channel:
+        await db.set_config(guild_id, "ai_reply_channel_id", None)
+    elif channel is not None:
+        await db.set_config(guild_id, "ai_reply_channel_id", channel.id)
+        
+    if require_question_mark is not None:
+        await db.set_config(guild_id, "ai_reply_require_qmark", require_question_mark)
+
+    # Fetch current state
+    is_enabled = await db.get_config(guild_id, "ai_auto_reply", True)
+    chan_id = await db.get_config(guild_id, "ai_reply_channel_id", None)
+    need_q = await db.get_config(guild_id, "ai_reply_require_qmark", False)
+    
+    chan_str = f"<#{chan_id}>" if chan_id else "🌐 **All Channels**"
+    q_str = "❓ **Required** (Only answers messages with `?`)" if need_q else "💬 **Optional** (Answers `?` and phrases like *how to*, *what is*, etc.)"
+    status_str = "🟢 **Enabled**" if is_enabled else "🔴 **Disabled**"
+
+    embed = discord.Embed(
+        title="⚙️ AI Auto-Reply Configuration Updated",
+        color=discord.Color.green() if is_enabled else discord.Color.red()
+    )
+    embed.add_field(name="Auto-Reply Status", value=status_str, inline=False)
+    embed.add_field(name="Active Channel", value=chan_str, inline=True)
+    embed.add_field(name="Question Mark Mode", value=q_str, inline=True)
+    embed.set_footer(text="Tip: Tagging @Sweety will always work in any channel!")
+    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="showaireply", description="View current AI Auto-Reply channel & question mark settings")
+async def show_ai_reply_command(interaction: discord.Interaction):
+    guild_id = interaction.guild.id
+    is_enabled = await db.get_config(guild_id, "ai_auto_reply", True)
+    chan_id = await db.get_config(guild_id, "ai_reply_channel_id", None)
+    need_q = await db.get_config(guild_id, "ai_reply_require_qmark", False)
+    
+    chan_str = f"<#{chan_id}>" if chan_id else "🌐 **All Channels**"
+    q_str = "❓ **Required** (Must contain `?`)" if need_q else "💬 **Optional** (Answers `?` or phrases like *explain*, *what is*)"
+    status_str = "🟢 **Enabled**" if is_enabled else "🔴 **Disabled**"
+
+    embed = discord.Embed(
+        title="🤖 AI Auto-Reply Settings",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="Status", value=status_str, inline=False)
+    embed.add_field(name="Channel Filter", value=chan_str, inline=True)
+    embed.add_field(name="Question Mark Mode", value=q_str, inline=True)
+    embed.set_footer(text="Use /setaireply to customize active channel & '?' requirement")
+    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="toggleaireply", description="Quick toggle automatic AI answers in server chat")
 @app_commands.default_permissions(manage_guild=True)
 async def toggle_ai_reply_command(interaction: discord.Interaction):
     current = await db.get_config(interaction.guild.id, "ai_auto_reply", True)
@@ -2763,34 +2850,53 @@ async def on_message(message):
 
     # ── AI Auto-Reply to Questions & User Mentions ───────────────────────────
     if not message.author.bot and message.guild:
-        is_question, query = is_question_message(message)
-        if is_question and query:
-            ai_reply_enabled = await db.get_config(message.guild.id, "ai_auto_reply", True)
-            if ai_reply_enabled:
-                allowed, remaining = _check_user_cooldown(message.author.id)
-                if not allowed:
-                    logger.info(f"AI question rate limited for user {message.author.id} (wait {remaining}s)")
-                elif not _check_server_limit(message.guild.id):
-                    logger.info(f"AI question rate limited: server hourly limit reached for guild {message.guild.id}")
-                else:
-                    is_clean, clean_query = _sanitize_ai_input(query)
-                    if is_clean:
-                        try:
-                            async with message.channel.typing():
-                                answer = await answer_question_with_ai(
-                                    query=clean_query,
-                                    author_name=message.author.display_name,
-                                    server_name=message.guild.name
-                                )
-                                if answer:
-                                    if len(answer) <= 1900:
-                                        await message.reply(answer, mention_author=True)
-                                    else:
-                                        for i in range(0, len(answer), 1900):
-                                            chunk = answer[i:i+1900]
-                                            await message.channel.send(chunk)
-                        except Exception as ai_err:
-                            logger.error(f"Error answering question with AI in chat: {ai_err}")
+        ai_reply_enabled = await db.get_config(message.guild.id, "ai_auto_reply", True)
+        if ai_reply_enabled:
+            # Check configured channel lock (if any)
+            target_channel_id = await db.get_config(message.guild.id, "ai_reply_channel_id", None)
+            
+            # Check question mark requirement (default: False)
+            require_qmark = await db.get_config(message.guild.id, "ai_reply_require_qmark", False)
+            
+            # Is bot directly mentioned or replied to?
+            is_direct = (bot.user and bot.user in message.mentions) or (
+                message.reference and 
+                message.reference.resolved and 
+                isinstance(message.reference.resolved, discord.Message) and 
+                bot.user and 
+                message.reference.resolved.author == bot.user
+            )
+
+            # If target_channel_id is set, only auto-reply in that channel (direct mentions work everywhere)
+            if target_channel_id and message.channel.id != int(target_channel_id) and not is_direct:
+                pass
+            else:
+                is_question, query = is_question_message(message, require_qmark=require_qmark)
+                if is_question and query:
+                    allowed, remaining = _check_user_cooldown(message.author.id)
+                    if not allowed:
+                        logger.info(f"AI question rate limited for user {message.author.id} (wait {remaining}s)")
+                    elif not _check_server_limit(message.guild.id):
+                        logger.info(f"AI question rate limited: server hourly limit reached for guild {message.guild.id}")
+                    else:
+                        is_clean, clean_query = _sanitize_ai_input(query)
+                        if is_clean:
+                            try:
+                                async with message.channel.typing():
+                                    answer = await answer_question_with_ai(
+                                        query=clean_query,
+                                        author_name=message.author.display_name,
+                                        server_name=message.guild.name
+                                    )
+                                    if answer:
+                                        if len(answer) <= 1900:
+                                            await message.reply(answer, mention_author=True)
+                                        else:
+                                            for i in range(0, len(answer), 1900):
+                                                chunk = answer[i:i+1900]
+                                                await message.channel.send(chunk)
+                            except Exception as ai_err:
+                                logger.error(f"Error answering question with AI in chat: {ai_err}")
 
     await bot.process_commands(message)
 
