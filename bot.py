@@ -3243,129 +3243,105 @@ async def on_message(message):
                 pass
             return
 
-    # ── Auto-Mod Security & Anti-Toxicity Shield (Owner, Admins & Mods Immune)
+    # ── Auto-Mod Security & Anti-Toxicity Shield (Owner, Admins & Mods 100% Immune)
     if not message.author.bot and message.guild:
         # Full Immunity for Server Owner, Admins, and Moderators
-        if is_staff_or_immune(message.author):
-            pass  # Completely exempt from all Auto-Mod checks, deletions, and mutes!
-        else:
+        if not is_staff_or_immune(message.author):
             automod_enabled = await db.get_config(message.guild.id, "automod", True)
             if automod_enabled:
                 content = message.content.strip()
-            if content:
-                # Mass Mention / Everyone Ping Raid Filter
-                pings_count = len(re.findall(r'<@!?([0-9]+)>|<@&([0-9]+)>', content))
-                has_everyone = "@everyone" in content or "@here" in content
-                
-                if pings_count >= 5 or (has_everyone and not message.author.guild_permissions.mention_everyone):
-                    try:
-                        await message.delete()
-                    except Exception:
-                        pass
-                    await auto_mute_user(
-                        member=message.author,
-                        guild=message.guild,
-                        channel=message.channel,
-                        reason=f"Mass Mention / Ping Raid ({pings_count} pings / unauthorized @everyone)",
-                        message_content=content,
-                        duration_minutes=60
-                    )
-                    return
-
-                # A. Porn GIF / NSFW link filter
-                is_nsfw, nsfw_kw = _is_nsfw_link(content)
-                if is_nsfw:
-                    try:
-                        await message.delete()
-                    except Exception:
-                        pass
-                    await auto_mute_user(
-                        member=message.author,
-                        guild=message.guild,
-                        channel=message.channel,
-                        reason=f"sending NSFW/Porn link (contains keyword: '{nsfw_kw}')",
-                        message_content=content
-                    )
-                    return
-
-                # B. Chat Spam / Rate Limit Filter (20 Minutes Timeout)
-                is_spam, spam_reason = _check_spam(message.author.id, content)
-                if is_spam:
-                    try:
-                        await message.delete()
-                    except Exception:
-                        pass
-                    await auto_mute_user(
-                        member=message.author,
-                        guild=message.guild,
-                        channel=message.channel,
-                        reason=f"Severe Chat Spam / Flooding ({spam_reason})",
-                        message_content=content,
-                        duration_minutes=20
-                    )
-                    return
-
-                # C. Comprehensive Toxic, Slur & Profanity Shield
-                is_toxic, category, term = _check_toxicity_and_profanity(content)
-                if is_toxic:
-                    try:
-                        await message.delete()
-                    except Exception as del_err:
-                        logger.error(f"Auto-Mod local delete failed: {del_err}")
-
-                    # 1. Standard Profanity/Cursing -> 3-Strike Warning System (Do NOT mute immediately)
-                    if category == "Prohibited Language / Vulgar Abuse":
-                        strikes = _record_profanity_strike(message.author.id)
-                        if strikes < _PROFANITY_MAX_STRIKES:
-                            warn_text = f"⚠️ {message.author.mention}, please watch your language! *(Warning {strikes}/{_PROFANITY_MAX_STRIKES} - Repeated use will result in a timeout)*"
-                            warn_msg = await message.channel.send(warn_text)
-                            asyncio.create_task(delete_after_delay(warn_msg, 6))
-                            return
-                        else:
-                            # 3rd strike reached within 10 minutes -> Timeout for repeated profanity
-                            await auto_mute_user(
-                                member=message.author,
-                                guild=message.guild,
-                                channel=message.channel,
-                                reason=f"Repeated Profanity / Swearing ({_PROFANITY_MAX_STRIKES} warnings reached in 10m)",
-                                message_content=content,
-                                duration_minutes=10
-                            )
-                            return
-                    else:
-                        # 2. Extreme violations (Racial slurs, severe harassment/kys, scam links) -> Immediate timeout
+                if content:
+                    # 1. Mass Mention / Everyone Ping Raid Filter
+                    pings_count = len(re.findall(r'<@!?([0-9]+)>|<@&([0-9]+)>', content))
+                    has_everyone = "@everyone" in content or "@here" in content
+                    
+                    if pings_count >= 5 or (has_everyone and not message.author.guild_permissions.mention_everyone):
+                        try:
+                            await message.delete()
+                        except Exception:
+                            pass
                         await auto_mute_user(
                             member=message.author,
                             guild=message.guild,
                             channel=message.channel,
-                            reason=f"{category} (Matched: '{term}')",
+                            reason=f"Mass Mention / Ping Raid ({pings_count} pings / unauthorized @everyone)",
+                            message_content=content,
+                            duration_minutes=60
+                        )
+                        return
+
+                    # 2. Porn GIF / NSFW link filter
+                    is_nsfw, nsfw_kw = _is_nsfw_link(content)
+                    if is_nsfw:
+                        try:
+                            await message.delete()
+                        except Exception:
+                            pass
+                        await auto_mute_user(
+                            member=message.author,
+                            guild=message.guild,
+                            channel=message.channel,
+                            reason=f"sending NSFW/Porn link (contains keyword: '{nsfw_kw}')",
                             message_content=content,
                             duration_minutes=20
                         )
                         return
 
-                # D. Optional AI Fallback Filter (Requires automod_mode set to 'ai')
-                automod_mode = await db.get_config(message.guild.id, "automod_mode", "local")
-                if automod_mode == "ai":
-                    try:
-                        prompt = f"Analyze if this chat message contains extreme toxicity, slurs, hate speech, severe harassment, or scam/phishing links: '{content}'."
-                        text = await call_ai_generation(prompt, "You are an expert content moderator. Respond with ONLY the word SAFE or TOXIC. Do not add any other text.")
-                        result = text.strip().upper()
-                        if "TOXIC" in result:
-                            try:
-                                await message.delete()
-                            except Exception:
-                                pass
+                    # 3. Chat Spam / Rate Limit Filter
+                    is_spam, spam_reason = _check_spam(message.author.id, content)
+                    if is_spam:
+                        try:
+                            await message.delete()
+                        except Exception:
+                            pass
+                        await auto_mute_user(
+                            member=message.author,
+                            guild=message.guild,
+                            channel=message.channel,
+                            reason=f"Severe Chat Spam / Flooding ({spam_reason})",
+                            message_content=content,
+                            duration_minutes=20
+                        )
+                        return
+
+                    # 4. Comprehensive Toxic, Slur & Profanity Shield
+                    is_toxic, category, term = _check_toxicity_and_profanity(content)
+                    if is_toxic:
+                        try:
+                            await message.delete()
+                        except Exception as del_err:
+                            logger.error(f"Auto-Mod local delete failed: {del_err}")
+
+                        # A. Standard Profanity/Cursing -> 3-Strike Warning System (Do NOT mute immediately)
+                        if category == "Prohibited Language / Vulgar Abuse":
+                            strikes = _record_profanity_strike(message.author.id)
+                            if strikes < _PROFANITY_MAX_STRIKES:
+                                warn_text = f"⚠️ {message.author.mention}, please watch your language! *(Warning {strikes}/{_PROFANITY_MAX_STRIKES} - Repeated use will result in a timeout)*"
+                                warn_msg = await message.channel.send(warn_text)
+                                asyncio.create_task(delete_after_delay(warn_msg, 6))
+                                return
+                            else:
+                                # 3rd strike reached within 10 minutes -> Timeout for repeated profanity
+                                await auto_mute_user(
+                                    member=message.author,
+                                    guild=message.guild,
+                                    channel=message.channel,
+                                    reason=f"Repeated Profanity / Swearing ({_PROFANITY_MAX_STRIKES} warnings reached in 10m)",
+                                    message_content=content,
+                                    duration_minutes=10
+                                )
+                                return
+                        else:
+                            # B. Extreme violations (Racial slurs, severe harassment/kys, scam links) -> Immediate timeout
                             await auto_mute_user(
                                 member=message.author,
                                 guild=message.guild,
                                 channel=message.channel,
-                                reason="Flagged as TOXIC by AI Content Moderator",
-                                message_content=content
+                                reason=f"{category} (Matched: '{term}')",
+                                message_content=content,
+                                duration_minutes=20
                             )
                             return
-                    except Exception as e:
-                        logger.debug(f"Auto-Mod AI evaluation skipped/notice: {e}")
 
 
     # ── Creator Inquiry (Who made you?) ─────────────────────────────────────
