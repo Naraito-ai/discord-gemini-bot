@@ -879,18 +879,27 @@ def _is_nsfw_link(text: str) -> tuple[bool, str]:
     return False, ""
 
 def _check_spam(user_id: int, content: str) -> tuple[bool, str]:
-    """Checks rapid messaging rate and duplicate messaging content."""
+    """Checks rapid messaging rate, duplicate content, mention spam, and character flood."""
     now = time.time()
     
-    # 1. Check rapid message limit (spamming)
+    # 1. Mention spam (> 5 user/role mentions)
+    mentions_count = len(re.findall(r'<@!?([0-9]+)>|<@&([0-9]+)>', content))
+    if mentions_count >= 5:
+        return True, f"Mass Mention Spam ({mentions_count} mentions in one message)"
+
+    # 2. Character repetition flood (e.g. 40+ identical characters in a row)
+    if re.search(r'(.)\1{40,}', content):
+        return True, "Character Flooding / Wall of Text Spam"
+
+    # 3. Rapid message burst
     if user_id not in _user_message_timestamps:
         _user_message_timestamps[user_id] = []
     _user_message_timestamps[user_id] = [t for t in _user_message_timestamps[user_id] if now - t <= _SPAM_WINDOW]
     _user_message_timestamps[user_id].append(now)
     if len(_user_message_timestamps[user_id]) >= _SPAM_LIMIT:
-        return True, f"sending messages too rapidly ({_SPAM_LIMIT} messages in {_SPAM_WINDOW}s)"
+        return True, f"Rapid Flooding ({_SPAM_LIMIT} messages in {_SPAM_WINDOW}s)"
 
-    # 2. Check identical message limit (duplicate spam)
+    # 4. Duplicate identical messages
     if user_id not in _user_message_contents:
         _user_message_contents[user_id] = []
     _user_message_contents[user_id] = [mc for mc in _user_message_contents[user_id] if now - mc[0] <= _DUPLICATE_WINDOW]
@@ -898,7 +907,7 @@ def _check_spam(user_id: int, content: str) -> tuple[bool, str]:
     
     duplicates = [mc for mc in _user_message_contents[user_id] if mc[1] == content]
     if len(duplicates) >= _DUPLICATE_LIMIT:
-        return True, f"repeating the same message ({_DUPLICATE_LIMIT} times in {_DUPLICATE_WINDOW}s)"
+        return True, f"Repeating Duplicate Messages ({_DUPLICATE_LIMIT} times in {_DUPLICATE_WINDOW}s)"
         
     return False, ""
 
@@ -997,9 +1006,9 @@ async def get_mod_log_channel(guild: discord.Guild):
            discord.utils.get(guild.text_channels, name="mod-logs") or \
            discord.utils.get(guild.text_channels, name="🚨-admin-chat")
 
-async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: discord.TextChannel, reason: str, message_content: str):
-    """Automatically times out (mutes) a user for 10 minutes, notifies chat, and logs to mod log."""
-    duration = datetime.timedelta(minutes=10)
+async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: discord.TextChannel, reason: str, message_content: str, duration_minutes: int = 20):
+    """Automatically times out (mutes) a user for duration_minutes (default 20 mins), notifies chat, and logs to mod log."""
+    duration = datetime.timedelta(minutes=duration_minutes)
     mute_success = False
     err_msg = ""
     
@@ -1010,9 +1019,9 @@ async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: 
         err_msg = str(e)
         logger.error(f"Failed to auto-mute user {member.name}: {e}")
         
-    warn_text = f"⚠️ {member.mention} has been timed out for 10 minutes for {reason}."
+    warn_text = f"⚠️ {member.mention} has been timed out for **{duration_minutes} minutes** for {reason}."
     if not mute_success:
-        warn_text = f"⚠️ {member.mention} had their message flagged for {reason}, but I couldn't mute them (Role Hierarchy/Permissions)."
+        warn_text = f"⚠️ {member.mention} had their message deleted for {reason}, but could not be timed out (Role Hierarchy / Admin Permissions)."
         
     warn_msg = await channel.send(warn_text)
     asyncio.create_task(delete_after_delay(warn_msg, 10))
@@ -1020,19 +1029,21 @@ async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: 
     mod_log = await get_mod_log_channel(guild)
     if mod_log:
         log_embed = discord.Embed(
-            title="🚨 Auto-Mod Action: Automatic Timeout", 
+            title=f"🚨 Auto-Mod Action: {duration_minutes}-Minute Timeout", 
             color=discord.Color.red()
         )
-        log_embed.add_field(name="User", value=f"{member} ({member.id})", inline=True)
+        log_embed.add_field(name="User", value=f"{member.mention} (`{member.name}` / `{member.id}`)", inline=True)
         log_embed.add_field(name="Channel", value=channel.mention, inline=True)
-        log_embed.add_field(name="Flagged Message", value=message_content[:1000] or "[Empty]", inline=False)
-        log_embed.add_field(name="Violation", value=reason, inline=True)
-        log_embed.add_field(name="Action Taken", value="Timed out for 10 minutes" if mute_success else f"Failed to mute: {err_msg}", inline=True)
+        log_embed.add_field(name="Duration", value=f"⏱️ **{duration_minutes} Minutes**", inline=True)
+        log_embed.add_field(name="Flagged Message Content", value=f"```{message_content[:900]}```" if message_content else "*[Empty / Attachment]*", inline=False)
+        log_embed.add_field(name="Violation / Reason", value=f"⚠️ **{reason}**", inline=False)
+        log_embed.add_field(name="Action Result", value=f"✅ User timed out for {duration_minutes} minutes" if mute_success else f"⚠️ Message deleted (Mute failed: {err_msg})", inline=False)
         log_embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         try:
             await mod_log.send(embed=log_embed)
         except Exception as e:
             logger.error(f"Failed to send Auto-Mod log embed: {e}")
+
 
 async def delete_after_delay(msg, delay):
     await asyncio.sleep(delay)
@@ -3016,7 +3027,7 @@ async def on_message(message):
                     )
                     return
 
-                # B. Chat Spam / Rate Limit Filter
+                # B. Chat Spam / Rate Limit Filter (20 Minutes Timeout)
                 is_spam, spam_reason = _check_spam(message.author.id, content)
                 if is_spam:
                     try:
@@ -3027,12 +3038,13 @@ async def on_message(message):
                         member=message.author,
                         guild=message.guild,
                         channel=message.channel,
-                        reason=f"chat spam ({spam_reason})",
-                        message_content=content
+                        reason=f"Severe Chat Spam / Flooding ({spam_reason})",
+                        message_content=content,
+                        duration_minutes=20
                     )
                     return
 
-                # C. Instant Comprehensive Toxic, Slur & Profanity Shield
+                # C. Instant Comprehensive Toxic, Slur & Profanity Shield (20 Minutes Timeout)
                 is_toxic, category, term = _check_toxicity_and_profanity(content)
                 if is_toxic:
                     try:
@@ -3045,7 +3057,8 @@ async def on_message(message):
                         guild=message.guild,
                         channel=message.channel,
                         reason=f"{category} (Matched: '{term}')",
-                        message_content=content
+                        message_content=content,
+                        duration_minutes=20
                     )
                     return
 

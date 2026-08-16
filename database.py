@@ -302,13 +302,13 @@ class DatabaseManager:
     # ── Guild Configuration Queries ──────────────────────────────────────────
 
     async def set_config(self, guild_id: int, key: str, value: str):
-        """Sets a configuration option."""
-        # Upsert logic (different for SQLite vs Postgres, but we can do a DELETE then INSERT for simplicity and cross-compatibility)
-        query_del = "DELETE FROM guild_config WHERE guild_id = ? AND key = ?"
-        await self.execute(query_del, str(guild_id), key)
-        
-        query_ins = "INSERT INTO guild_config (guild_id, key, value) VALUES (?, ?, ?)"
-        await self.execute(query_ins, str(guild_id), key, str(value))
+        """Sets a configuration option with atomic upsert."""
+        query = """
+            INSERT INTO guild_config (guild_id, key, value) 
+            VALUES (?, ?, ?) 
+            ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
+        """
+        await self.execute(query, str(guild_id), key, str(value))
         
         # Update cache
         self._config_cache[(str(guild_id), key)] = str(value)
