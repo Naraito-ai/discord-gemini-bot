@@ -1848,6 +1848,7 @@ async def backup_command(interaction: discord.Interaction):
         filename = f"backup_{safe_name}.json"
         
         json_bytes = io.BytesIO(json.dumps(backup_data, indent=2, ensure_ascii=False).encode('utf-8'))
+        json_bytes.seek(0)
         discord_file = discord.File(json_bytes, filename=filename)
         
         embed = discord.Embed(
