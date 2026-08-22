@@ -90,11 +90,21 @@ _flask_app = Flask(__name__)
 
 @_flask_app.route('/')
 def _home():
-    return "✅ Discord Gemini Bot is alive and running!"
+    return "✅ Discord Bot is alive and running!"
+
+@_flask_app.route('/health')
+def _health():
+    return {"status": "ok", "bot": str(bot.user) if bot.user else "connecting"}
 
 def keep_alive():
     port = int(os.getenv("PORT", 8080))
-    t = Thread(target=lambda: _flask_app.run(host='0.0.0.0', port=port), daemon=True)
+    logger.info(f"Starting keep-alive web server on 0.0.0.0:{port}...")
+    def _run_server():
+        try:
+            _flask_app.run(host='0.0.0.0', port=port, use_reloader=False)
+        except Exception as e:
+            logger.error(f"Keep-alive server error: {e}")
+    t = Thread(target=_run_server, daemon=True)
     t.start()
 
 # ───────────────────────────────────────────────────────────────────────────
