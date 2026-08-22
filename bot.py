@@ -9,8 +9,6 @@ import datetime
 import discord
 from discord.ext import commands
 from discord import app_commands
-from google import genai
-from google.genai import types
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
@@ -112,18 +110,7 @@ def keep_alive():
 # Load environment variables from .env
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Global Gemini Client and helpers
-_gemini_client = None
-
-def get_gemini_client():
-    global _gemini_client
-    if _gemini_client is None:
-        gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-        if gemini_key and not gemini_key.startswith("gsk_"):
-            _gemini_client = genai.Client(api_key=gemini_key)
-    return _gemini_client
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 def extract_json(text: str) -> str:
     """Robustly extracts a JSON object from text, ignoring surrounding text or code fences."""
@@ -3386,8 +3373,8 @@ async def on_message(message):
 if __name__ == "__main__":
     if not DISCORD_TOKEN or DISCORD_TOKEN == "your_token_here":
         print("❌ STARTUP BLOCKED: DISCORD_TOKEN is not set in .env file.")
-    elif not GEMINI_API_KEY and not os.getenv("GROQ_API_KEY"):
-        print("❌ STARTUP BLOCKED: Neither GEMINI_API_KEY nor GROQ_API_KEY is set in environment variables.")
+    elif not GROQ_API_KEY and not os.getenv("GROQ_API_KEY"):
+        print("❌ STARTUP BLOCKED: GROQ_API_KEY is not set in environment variables.")
     else:
         logger.info("🔒 Security layer active: rate limiting, input sanitization, and prompt injection resistance enabled.")
         logger.info(f"🔒 Per-user AI cooldown: {_USER_COOLDOWN_SECONDS}s | Per-server hourly AI limit: {_SERVER_HOURLY_LIMIT} calls")

@@ -1,11 +1,6 @@
 discord.py
-google-genai
 python-dotenv
-fastapi
-uvicorn
 aiosqlite
 asyncpg
 aiohttp
-pyjwt
 flask
-
