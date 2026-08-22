@@ -105,6 +105,9 @@ def keep_alive():
     t = Thread(target=_run_server, daemon=True)
     t.start()
 
+# Start keep-alive web server immediately for instant Render port check
+keep_alive()
+
 # ───────────────────────────────────────────────────────────────────────────
 
 # Load environment variables from .env
