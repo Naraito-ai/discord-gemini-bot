@@ -102,8 +102,26 @@ def keep_alive():
             _flask_app.run(host='0.0.0.0', port=port, use_reloader=False)
         except Exception as e:
             logger.error(f"Keep-alive server error: {e}")
+            
+    def _self_pinger():
+        time.sleep(30)
+        url = os.getenv("RENDER_EXTERNAL_URL", "https://discord-gemini-bot-x3sm.onrender.com")
+        logger.info(f"Self-pinger active. Keeping {url} awake 24/7...")
+        while True:
+            try:
+                import urllib.request
+                req = urllib.request.Request(url, headers={"User-Agent": "RenderKeepAlive/1.0"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    pass
+            except Exception:
+                pass
+            time.sleep(180)  # Ping every 3 minutes so Render never sleeps
+            
     t = Thread(target=_run_server, daemon=True)
     t.start()
+    
+    t_ping = Thread(target=_self_pinger, daemon=True)
+    t_ping.start()
 
 # Start keep-alive web server immediately for instant Render port check
 keep_alive()
@@ -3414,7 +3432,19 @@ if __name__ == "__main__":
     else:
         logger.info("🔒 Security layer active: rate limiting, input sanitization, and prompt injection resistance enabled.")
         logger.info(f"🔒 Per-user AI cooldown: {_USER_COOLDOWN_SECONDS}s | Per-server hourly AI limit: {_SERVER_HOURLY_LIMIT} calls")
-        print("[OK] Starting Discord bot...")
-        keep_alive()  # Runs lightweight Flask server on $PORT for Render health checks
-        bot.run(DISCORD_TOKEN)
+        print("[OK] Starting Discord bot with Cloudflare rate limit resilience...")
+        
+        while True:
+            try:
+                bot.run(DISCORD_TOKEN)
+            except discord.errors.HTTPException as http_err:
+                if http_err.status == 429:
+                    logger.warning("⚠️ Discord Cloudflare 429 Rate Limit (Error 1015) detected. Keeping container alive and waiting 3 minutes before clean retry...")
+                    time.sleep(180)
+                else:
+                    logger.error(f"HTTP error: {http_err}. Retrying in 15 seconds...")
+                    time.sleep(15)
+            except Exception as e:
+                logger.error(f"Bot session disconnected: {e}. Retrying in 10 seconds...")
+                time.sleep(10)
 
