@@ -1500,6 +1500,7 @@ class GeminiBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
+        intents.presences = True
         intents.voice_states = True  # Required for Join-to-Create dynamic voice
         super().__init__(command_prefix="!", intents=intents)
         self.temp_voice_channel_ids = set()
@@ -1517,35 +1518,61 @@ class GeminiBot(commands.Bot):
         else:
             logger.info("FastAPI web server skipped (DISABLE_API=true). Memory usage minimized.")
 
+    async def broadcast_presence(self):
+        """Reliably broadcasts online presence with retries."""
+        for attempt in range(3):
+            try:
+                await self.change_presence(
+                    status=discord.Status.online,
+                    activity=discord.Activity(
+                        type=discord.ActivityType.watching,
+                        name="/help | @Sweety"
+                    )
+                )
+                logger.info("✅ Presence broadcast: Online (Watching /help | @Sweety)")
+                return
+            except Exception as p_err:
+                logger.warning(f"Presence attempt {attempt+1}/3 failed: {p_err}")
+                await asyncio.sleep(2)
 
-        
+    async def on_connect(self):
+        logger.info("Gateway connected. Broadcasting presence...")
+        await self.broadcast_presence()
+
+    async def on_resumed(self):
+        logger.info("Gateway session resumed. Re-broadcasting presence...")
+        await self.broadcast_presence()
+
     async def on_ready(self):
         logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
-        try:
-            await self.change_presence(
-                status=discord.Status.online,
-                activity=discord.Activity(
-                    type=discord.ActivityType.watching,
-                    name="/help | @Sweety"
-                )
-            )
-            logger.info("Presence set to Online: Watching /help | @Sweety")
-        except Exception as p_err:
-            logger.warning(f"Failed to set presence: {p_err}")
-            
+        
+        # 1. Slash command sync to all guilds and globally
         try:
             for guild in self.guilds:
                 try:
                     self.tree.copy_global_to(guild=guild)
-                    await self.tree.sync(guild=guild)
+                    synced = await self.tree.sync(guild=guild)
+                    logger.info(f"Synced {len(synced)} slash commands to guild: {guild.name} ({guild.id})")
                 except Exception as g_err:
                     logger.warning(f"Guild sync skipped for {guild.id}: {g_err}")
-            synced = await self.tree.sync()
-            logger.info(f"Synced {len(synced)} slash commands to all guilds and globally.")
+            synced_global = await self.tree.sync()
+            logger.info(f"Synced {len(synced_global)} slash commands globally.")
         except Exception as e:
             logger.error(f"Failed to sync slash commands: {e}")
             
-        # Automatic UptimeRobot self-registration
+        # 2. Wait 2 seconds for gateway to stabilize and broadcast presence with retry
+        await asyncio.sleep(2)
+        await self.broadcast_presence()
+
+        # 3. Restore temporary voice channel cache
+        try:
+            rows = await db.fetch("SELECT resource_id FROM guild_resources WHERE resource_type = 'temp_voice_channels'")
+            self.temp_voice_channel_ids = {int(r["resource_id"]) for r in rows}
+            logger.info(f"Loaded {len(self.temp_voice_channel_ids)} temp voice channels into cache.")
+        except Exception as e:
+            logger.error(f"Failed to cache temp voice channels: {e}")
+            
+        # 4. Automatic UptimeRobot self-registration
         uptime_key = os.getenv("UPTIME_API_KEY", "").strip()
         render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
         if not render_url and os.getenv("RENDER_SERVICE_NAME"):
@@ -1761,7 +1788,7 @@ async def stylechannels_command(interaction: discord.Interaction, style: str):
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.guild_only()
 async def backup_command(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True)
+    await interaction.response.defer(thinking=True, ephemeral=False)
     guild = interaction.guild
     if not guild:
         await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
@@ -1867,7 +1894,8 @@ async def backup_command(interaction: discord.Interaction):
         
         await interaction.followup.send(
             embed=embed,
-            file=discord_file
+            file=discord_file,
+            ephemeral=False
         )
     except Exception as e:
         logger.error(f"Failed to generate backup: {e}", exc_info=True)
