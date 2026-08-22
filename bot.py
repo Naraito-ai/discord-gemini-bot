@@ -1512,8 +1512,14 @@ class GeminiBot(commands.Bot):
             logger.error(f"Failed to cache temp voice channels: {e}")
             
         try:
+            for guild in self.guilds:
+                try:
+                    self.tree.copy_global_to(guild=guild)
+                    await self.tree.sync(guild=guild)
+                except Exception as g_err:
+                    logger.warning(f"Guild sync skipped for {guild.id}: {g_err}")
             synced = await self.tree.sync()
-            logger.info(f"Synced {len(synced)} slash commands globally.")
+            logger.info(f"Synced {len(synced)} slash commands to all guilds and globally.")
         except Exception as e:
             logger.error(f"Failed to sync slash commands: {e}")
             
