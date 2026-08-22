@@ -7,10 +7,10 @@ import io
 import time
 import datetime
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify
 from threading import Thread
 from database import db
 
@@ -91,8 +91,20 @@ def _home():
     return "✅ Discord Bot is alive and running!"
 
 @_flask_app.route('/health')
-def _health():
-    return {"status": "ok", "bot": str(bot.user) if bot.user else "connecting"}
+def health():
+    bot_status = "unknown"
+    bot_latency = None
+    if 'bot' in globals() and bot and bot.is_ready():
+        bot_status = "online"
+        bot_latency = round(bot.latency * 1000, 2)
+    elif 'bot' in globals() and bot and not bot.is_ready():
+        bot_status = "connecting"
+    return jsonify({
+        "status": "ok",
+        "bot": str(bot.user) if ('bot' in globals() and bot and bot.user) else "not_initialized",
+        "gateway": bot_status,
+        "latency_ms": bot_latency
+    })
 
 def keep_alive():
     port = int(os.getenv("PORT", 8080))
@@ -1498,10 +1510,11 @@ async def build_server_structure(guild, data, response_channel):
 class GeminiBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.message_content = True
-        intents.members = True
         intents.presences = True
-        intents.voice_states = True  # Required for Join-to-Create dynamic voice
+        intents.members = True
+        intents.guilds = True
+        intents.message_content = True
+        intents.voice_states = True
         super().__init__(command_prefix="!", intents=intents)
         self.temp_voice_channel_ids = set()
         
@@ -1518,61 +1531,99 @@ class GeminiBot(commands.Bot):
         else:
             logger.info("FastAPI web server skipped (DISABLE_API=true). Memory usage minimized.")
 
-    async def broadcast_presence(self):
-        """Reliably broadcasts online presence with retries."""
-        for attempt in range(3):
-            try:
-                await self.change_presence(
-                    status=discord.Status.online,
-                    activity=discord.Activity(
-                        type=discord.ActivityType.watching,
-                        name="/help | @Sweety"
-                    )
+    @tasks.loop(minutes=30)
+    async def presence_keepalive(self):
+        try:
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name="/help | @Sweety"
                 )
-                logger.info("✅ Presence broadcast: Online (Watching /help | @Sweety)")
-                return
-            except Exception as p_err:
-                logger.warning(f"Presence attempt {attempt+1}/3 failed: {p_err}")
-                await asyncio.sleep(2)
+            )
+            logger.info("🔄 Presence keepalive ping sent")
+        except Exception as e:
+            logger.warning(f"Keepalive failed: {e}")
 
     async def on_connect(self):
-        logger.info("Gateway connected. Broadcasting presence...")
-        await self.broadcast_presence()
+        logger.info("Gateway connected — broadcasting presence")
+        try:
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name="/help | @Sweety"
+                )
+            )
+        except Exception as e:
+            logger.warning(f"on_connect presence failed: {e}")
 
     async def on_resumed(self):
-        logger.info("Gateway session resumed. Re-broadcasting presence...")
-        await self.broadcast_presence()
+        logger.info("Gateway resumed — re-broadcasting presence")
+        try:
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name="/help | @Sweety"
+                )
+            )
+        except Exception as e:
+            logger.warning(f"on_resumed presence failed: {e}")
+
+    async def on_disconnect(self):
+        logger.warning("⚠️ Gateway disconnected — will attempt reconnect")
 
     async def on_ready(self):
-        logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
+        logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         
-        # 1. Slash command sync to all guilds and globally
+        # Step 1: Wait for gateway to fully stabilize
+        await asyncio.sleep(3)
+        
+        # Step 2: Set presence FIRST before anything else
+        try:
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name="/help | @Sweety"
+                )
+            )
+            logger.info("✅ Presence set to Online")
+        except Exception as e:
+            logger.error(f"❌ Presence failed: {e}")
+        
+        # Step 3: Restore temp voice channel cache
+        try:
+            rows = await db.fetch(
+                "SELECT resource_id FROM guild_resources WHERE resource_type = 'temp_voice_channels'"
+            )
+            self.temp_voice_channel_ids = {int(r["resource_id"]) for r in rows}
+            logger.info(f"✅ Loaded {len(self.temp_voice_channel_ids)} temp voice channels")
+        except Exception as e:
+            logger.error(f"❌ Cache load failed: {e}")
+        
+        # Step 4: Sync slash commands
         try:
             for guild in self.guilds:
                 try:
                     self.tree.copy_global_to(guild=guild)
-                    synced = await self.tree.sync(guild=guild)
-                    logger.info(f"Synced {len(synced)} slash commands to guild: {guild.name} ({guild.id})")
+                    await self.tree.sync(guild=guild)
                 except Exception as g_err:
                     logger.warning(f"Guild sync skipped for {guild.id}: {g_err}")
-            synced_global = await self.tree.sync()
-            logger.info(f"Synced {len(synced_global)} slash commands globally.")
+            synced = await self.tree.sync()
+            logger.info(f"✅ Synced {len(synced)} global commands")
         except Exception as e:
-            logger.error(f"Failed to sync slash commands: {e}")
-            
-        # 2. Wait 2 seconds for gateway to stabilize and broadcast presence with retry
-        await asyncio.sleep(2)
-        await self.broadcast_presence()
+            logger.error(f"❌ Sync failed: {e}")
 
-        # 3. Restore temporary voice channel cache
+        # Step 5: Start presence keepalive loop
         try:
-            rows = await db.fetch("SELECT resource_id FROM guild_resources WHERE resource_type = 'temp_voice_channels'")
-            self.temp_voice_channel_ids = {int(r["resource_id"]) for r in rows}
-            logger.info(f"Loaded {len(self.temp_voice_channel_ids)} temp voice channels into cache.")
+            if not self.presence_keepalive.is_running():
+                self.presence_keepalive.start()
         except Exception as e:
-            logger.error(f"Failed to cache temp voice channels: {e}")
+            logger.warning(f"Could not start presence keepalive: {e}")
             
-        # 4. Automatic UptimeRobot self-registration
+        # Automatic UptimeRobot self-registration
         uptime_key = os.getenv("UPTIME_API_KEY", "").strip()
         render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
         if not render_url and os.getenv("RENDER_SERVICE_NAME"):
