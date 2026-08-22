@@ -1617,14 +1617,8 @@ class GeminiBot(commands.Bot):
         except Exception as e:
             logger.error(f"❌ Cache load failed: {e}")
         
-        # Step 4: Sync slash commands
+        # Step 4: Sync slash commands globally
         try:
-            for guild in self.guilds:
-                try:
-                    self.tree.copy_global_to(guild=guild)
-                    await self.tree.sync(guild=guild)
-                except Exception as g_err:
-                    logger.warning(f"Guild sync skipped for {guild.id}: {g_err}")
             synced = await self.tree.sync()
             logger.info(f"✅ Synced {len(synced)} global commands")
         except Exception as e:
