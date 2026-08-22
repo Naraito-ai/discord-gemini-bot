@@ -1528,6 +1528,21 @@ class GeminiBot(commands.Bot):
 
 bot = GeminiBot()
 
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Global handler for slash command errors to ensure the bot always responds."""
+    cmd_name = interaction.command.name if interaction.command else "command"
+    logger.error(f"Error in /{cmd_name}: {error}")
+    
+    msg = f"❌ An error occurred while executing `/{cmd_name}`: {error}"
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+    except Exception as resp_err:
+        logger.error(f"Failed to send error response to user: {resp_err}")
+
 
 
 
@@ -2848,18 +2863,20 @@ async def embed_command(
 @bot.tree.command(name="ask", description="Ask the AI any question and get an instant researched answer")
 @app_commands.describe(question="The question or topic you want to ask about")
 async def ask_command(interaction: discord.Interaction, question: str):
+    await interaction.response.defer(thinking=True)
+    
     # 1. User cooldown
     allowed, remaining = _check_user_cooldown(interaction.user.id)
     if not allowed:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"⏳ Please wait **{remaining}s** before asking another question.",
             ephemeral=True
         )
         return
 
     # 2. Server limit
-    if not _check_server_limit(interaction.guild.id):
-        await interaction.response.send_message(
+    if interaction.guild and not _check_server_limit(interaction.guild.id):
+        await interaction.followup.send(
             "🚫 This server has reached its hourly AI limit. Please try again later.",
             ephemeral=True
         )
@@ -2868,13 +2885,11 @@ async def ask_command(interaction: discord.Interaction, question: str):
     # 3. Sanitize
     is_clean, clean_question = _sanitize_ai_input(question)
     if not is_clean:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "⚠️ Your question was flagged for restricted keywords.",
             ephemeral=True
         )
         return
-
-    await interaction.response.defer(thinking=True)
 
     try:
         server_name = interaction.guild.name if interaction.guild else ""
@@ -2890,13 +2905,13 @@ async def ask_command(interaction: discord.Interaction, question: str):
             color=discord.Color.blue()
         )
         embed.set_author(name=f"Asked by {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
-        embed.set_footer(text="Powered by Gemini AI • Real-time Grounding", icon_url=bot.user.display_avatar.url if bot.user else None)
+        embed.set_footer(text="Powered by Groq • LPU AI Engine", icon_url=bot.user.display_avatar.url if bot.user else None)
         embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         
         await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.error(f"Error in /ask command: {e}")
-        await interaction.followup.send(f"❌ Failed to answer question: {e}")
+        await interaction.followup.send(f"❌ Failed to answer question: {e}", ephemeral=True)
 
 
 @bot.tree.command(name="setaireply", description="Configure AI Auto-Reply: set target channel and question mark mode")
