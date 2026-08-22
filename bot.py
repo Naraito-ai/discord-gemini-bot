@@ -152,7 +152,7 @@ async def register_uptime_monitor(api_key: str, url: str):
 
 
 async def call_ai_generation(prompt, system_instruction, json_mode=False):
-    """Generates content asynchronously using Groq (llama-3.3-70b-versatile)."""
+    """Generates content asynchronously using Groq (openai/gpt-oss-120b)."""
     groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
     if not groq_key:
         groq_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
@@ -163,27 +163,39 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
     import aiohttp
     headers = {
         "Authorization": f"Bearer {groq_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0"
     }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.3
-    }
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
-        
-    async with aiohttp.ClientSession() as session:
-        async with session.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30) as r:
-            r.raise_for_status()
-            res_data = await r.json()
-            result = res_data["choices"][0]["message"]["content"]
-            if json_mode:
-                result = extract_json(result)
-            return result
+    
+    models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"]
+    last_err = None
+    
+    for model_name in models:
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+            
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30) as r:
+                    r.raise_for_status()
+                    res_data = await r.json()
+                    result = res_data["choices"][0]["message"]["content"]
+                    if json_mode:
+                        result = extract_json(result)
+                    return result
+        except Exception as e:
+            last_err = e
+            logger.warning(f"Groq model {model_name} failed: {e}, attempting next available model...")
+            
+    raise last_err or ValueError("Failed to generate content with Groq.")
 
 
 # ── AI Real-Time Question Answering & Knowledge Search ─────────────────────
