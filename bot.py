@@ -1522,12 +1522,16 @@ class GeminiBot(commands.Bot):
     async def on_ready(self):
         logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
         try:
-            # Query all temp voice channels from database into memory cache
-            rows = await db.fetch("SELECT resource_id FROM guild_resources WHERE resource_type = 'temp_voice_channels'")
-            self.temp_voice_channel_ids = {int(r["resource_id"]) for r in rows}
-            logger.info(f"Loaded {len(self.temp_voice_channel_ids)} temporary voice channels into memory cache.")
-        except Exception as e:
-            logger.error(f"Failed to cache temp voice channels: {e}")
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name="/help | @Sweety"
+                )
+            )
+            logger.info("Presence set to Online: Watching /help | @Sweety")
+        except Exception as p_err:
+            logger.warning(f"Failed to set presence: {p_err}")
             
         try:
             for guild in self.guilds:
