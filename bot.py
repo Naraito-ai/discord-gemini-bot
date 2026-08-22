@@ -1534,16 +1534,21 @@ class GeminiBot(commands.Bot):
         
     async def setup_hook(self):
         # Connect database & create tables
-        await db.initialize()
+        try:
+            await db.initialize()
+            logger.info("Database initialized successfully.")
+        except Exception as db_err:
+            logger.error(f"Database initialization error: {db_err}")
         
-        # Start FastAPI web server unless explicitly disabled (e.g. on DisCloud)
-        disable_api = os.getenv("DISABLE_API", "false").lower() in ("true", "1", "yes")
+        # Optional FastAPI dashboard (disabled by default on cloud web hosts)
+        disable_api = os.getenv("DISABLE_API", "true").lower() in ("true", "1", "yes")
         if not disable_api:
-            port = int(os.getenv("PORT", 8080))
-            from api import start_fastapi
-            asyncio.create_task(start_fastapi(self, db, port))
-        else:
-            logger.info("FastAPI web server skipped (DISABLE_API=true). Memory usage minimized.")
+            try:
+                from api import start_fastapi
+                port = int(os.getenv("PORT", 8080))
+                asyncio.create_task(start_fastapi(self, db, port))
+            except Exception as api_err:
+                logger.warning(f"FastAPI optional dashboard skipped: {api_err}")
 
     @tasks.loop(minutes=30)
     async def presence_keepalive(self):
