@@ -1757,8 +1757,11 @@ async def stylechannels_command(interaction: discord.Interaction, style: str):
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.guild_only()
 async def backup_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(thinking=True)
     guild = interaction.guild
+    if not guild:
+        await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
+        return
     
     try:
         # 1. Export Roles
@@ -1785,7 +1788,7 @@ async def backup_command(interaction: discord.Interaction):
             
             default_overwrite = cat.overwrites_for(guild.default_role)
             if default_overwrite.read_messages is False or default_overwrite.connect is False:
-                for target, overwrite in cat.overwrites:
+                for target, overwrite in cat.overwrites.items() if hasattr(cat.overwrites, 'items') else cat.overwrites:
                     if isinstance(target, discord.Role) and target != guild.default_role:
                         if overwrite.read_messages is True or overwrite.connect is True:
                             cat_data["private_for"].append(target.name)
@@ -1804,7 +1807,7 @@ async def backup_command(interaction: discord.Interaction):
                 chan_default_overwrite = chan.overwrites_for(guild.default_role)
                 if chan_default_overwrite.read_messages is False or chan_default_overwrite.connect is False:
                     chan_data["private_for"] = []
-                    for target, overwrite in chan.overwrites:
+                    for target, overwrite in chan.overwrites.items() if hasattr(chan.overwrites, 'items') else chan.overwrites:
                         if isinstance(target, discord.Role) and target != guild.default_role:
                             if overwrite.read_messages is True or overwrite.connect is True:
                                 chan_data["private_for"].append(target.name)
@@ -1829,7 +1832,7 @@ async def backup_command(interaction: discord.Interaction):
                 chan_default_overwrite = chan.overwrites_for(guild.default_role)
                 if chan_default_overwrite.read_messages is False or chan_default_overwrite.connect is False:
                     chan_data["private_for"] = []
-                    for target, overwrite in chan.overwrites:
+                    for target, overwrite in chan.overwrites.items() if hasattr(chan.overwrites, 'items') else chan.overwrites:
                         if isinstance(target, discord.Role) and target != guild.default_role:
                             if overwrite.read_messages is True or overwrite.connect is True:
                                 chan_data["private_for"].append(target.name)
@@ -1841,17 +1844,29 @@ async def backup_command(interaction: discord.Interaction):
             "uncategorized": uncategorized_list
         }
         
+        safe_name = re.sub(r'[^a-zA-Z0-9_]', '', guild.name.replace(' ', '_')) or "server"
+        filename = f"backup_{safe_name}.json"
+        
         json_bytes = io.BytesIO(json.dumps(backup_data, indent=2, ensure_ascii=False).encode('utf-8'))
-        discord_file = discord.File(json_bytes, filename=f"backup_{guild.name.replace(' ', '_')}.json")
+        discord_file = discord.File(json_bytes, filename=filename)
+        
+        embed = discord.Embed(
+            title="💾 Server Backup Generated",
+            description=f"Successfully exported layout for **{guild.name}**!\nKeep this file safe — you can restore or clone this entire layout at any time using `/restore`.",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="🎭 Roles", value=f"`{len(roles_list)}` roles", inline=True)
+        embed.add_field(name="📁 Categories", value=f"`{len(categories_list)}` categories", inline=True)
+        embed.add_field(name="💬 Uncategorized", value=f"`{len(uncategorized_list)}` channels", inline=True)
+        embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         
         await interaction.followup.send(
-            content="✅ **Server layout successfully exported!** Save this file to restore or clone this layout later using `/restore`.",
-            file=discord_file,
-            ephemeral=True
+            embed=embed,
+            file=discord_file
         )
     except Exception as e:
         logger.error(f"Failed to generate backup: {e}", exc_info=True)
-        await interaction.followup.send("❌ Failed to generate server backup due to an internal error.", ephemeral=True)
+        await interaction.followup.send(f"❌ Failed to generate server backup: {e}")
 
 
 @bot.tree.command(name="restore", description="Restore or clone a server structure from a backup JSON file")
