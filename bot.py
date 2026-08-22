@@ -90,15 +90,29 @@ _flask_app = Flask(__name__)
 def _home():
     return "✅ Discord Bot is alive and running!"
 
+import math
+
 @_flask_app.route('/health')
 def health():
     bot_status = "unknown"
     bot_latency = None
-    if 'bot' in globals() and bot and bot.is_ready():
-        bot_status = "online"
-        bot_latency = round(bot.latency * 1000, 2)
-    elif 'bot' in globals() and bot and not bot.is_ready():
-        bot_status = "connecting"
+    try:
+        if 'bot' in globals() and bot:
+            if bot.is_ready():
+                bot_status = "online"
+                lat = getattr(bot, "latency", None)
+                if lat is not None and not math.isinf(lat) and not math.isnan(lat):
+                    bot_latency = round(lat * 1000, 2)
+            elif bot.user:
+                bot_status = "online"
+                lat = getattr(bot, "latency", None)
+                if lat is not None and not math.isinf(lat) and not math.isnan(lat):
+                    bot_latency = round(lat * 1000, 2)
+            else:
+                bot_status = "connecting"
+    except Exception as e:
+        bot_status = f"error: {e}"
+
     return jsonify({
         "status": "ok",
         "bot": str(bot.user) if ('bot' in globals() and bot and bot.user) else "not_initialized",
