@@ -1669,7 +1669,7 @@ async def help_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
@@ -2871,6 +2871,194 @@ async def roleallremove_command(interaction: discord.Interaction, role: discord.
             fail += 1
             
     await interaction.followup.send(f"✅ **Bulk Role Removal Complete!**\nRemoved **{role.name}** from `{success}` members. (Failed: `{fail}`)")
+
+
+# ── User Profile & Comprehensive Server Audit (/whois & /userinfo) ──────────
+
+class UserProfileView(discord.ui.View):
+    def __init__(self, target_user: discord.User, target_member: discord.Member):
+        super().__init__(timeout=120.0)
+        self.target_user = target_user
+        self.target_member = target_member
+        
+        if target_member.display_avatar:
+            self.add_item(discord.ui.Button(label="🖼️ View Avatar", url=target_member.display_avatar.url, style=discord.ButtonStyle.link))
+        
+        if getattr(target_user, 'banner', None):
+            self.add_item(discord.ui.Button(label="🎨 View Banner", url=target_user.banner.url, style=discord.ButtonStyle.link))
+
+
+@bot.tree.command(name="whois", description="🔍 Deep audit of a member — bio, roles, permissions, activity & moderation history")
+@app_commands.describe(member="The server member to inspect (defaults to yourself)")
+@app_commands.guild_only()
+async def whois_command(interaction: discord.Interaction, member: discord.Member = None):
+    target = member or interaction.user
+    await interaction.response.defer(thinking=True)
+    
+    # 1. Fetch full Discord user profile (gets bio, banner, accent color)
+    try:
+        user_profile = await bot.fetch_user(target.id)
+    except Exception:
+        user_profile = target
+
+    # 2. Roles Overview
+    roles = [r for r in target.roles if r != interaction.guild.default_role]
+    roles.reverse()
+    roles_count = len(roles)
+    if roles_count > 0:
+        roles_str = ", ".join([r.mention for r in roles[:15]])
+        if roles_count > 15:
+            roles_str += f" ...and `{roles_count - 15}` more"
+    else:
+        roles_str = "`No custom roles`"
+
+    # 3. Key Permissions ("What he can do / permissions")
+    perms = target.guild_permissions
+    key_perms = []
+    if perms.administrator:
+        key_perms.append("👑 Administrator (Full Control)")
+    else:
+        if perms.manage_guild: key_perms.append("⚙️ Manage Server")
+        if perms.manage_roles: key_perms.append("🛡️ Manage Roles")
+        if perms.manage_channels: key_perms.append("📁 Manage Channels")
+        if perms.ban_members: key_perms.append("🔨 Ban Members")
+        if perms.kick_members: key_perms.append("👢 Kick Members")
+        if perms.moderate_members: key_perms.append("⏳ Timeout Members")
+        if perms.manage_messages: key_perms.append("🗑️ Manage Messages")
+        if perms.mention_everyone: key_perms.append("📢 Mention Everyone")
+        if perms.view_audit_log: key_perms.append("📜 View Audit Log")
+        if perms.manage_webhooks: key_perms.append("🔗 Manage Webhooks")
+        if perms.mute_members: key_perms.append("🔇 Voice Mute")
+        if perms.deafen_members: key_perms.append("🙉 Voice Deafen")
+        if perms.move_members: key_perms.append("🔀 Move Members")
+
+    if not key_perms:
+        perms_str = "👤 `Standard Member (No elevated permissions)`"
+    else:
+        perms_str = "\n".join([f"• {p}" for p in key_perms[:10]])
+        if len(key_perms) > 10:
+            perms_str += f"\n• ...and `{len(key_perms) - 10}` more permissions"
+
+    # 4. Moderation & Server Activity Record ("What he did")
+    warn_count = 0
+    timeout_count = 0
+    cmd_count = 0
+    try:
+        w_row = await db.fetch("SELECT COUNT(*) as c FROM warnings WHERE guild_id = $1 AND user_id = $2", str(interaction.guild.id), str(target.id))
+        if w_row:
+            warn_count = w_row[0]['c'] if isinstance(w_row[0], dict) else w_row[0][0]
+            
+        t_row = await db.fetch("SELECT COUNT(*) as c FROM timeouts WHERE guild_id = $1 AND user_id = $2", str(interaction.guild.id), str(target.id))
+        if t_row:
+            timeout_count = t_row[0]['c'] if isinstance(t_row[0], dict) else t_row[0][0]
+
+        c_row = await db.fetch("SELECT COUNT(*) as c FROM commands WHERE guild_id = $1 AND user_id = $2", str(interaction.guild.id), str(target.id))
+        if c_row:
+            cmd_count = c_row[0]['c'] if isinstance(c_row[0], dict) else c_row[0][0]
+    except Exception as db_err:
+        logger.warning(f"Error fetching DB stats for whois: {db_err}")
+
+    # Immunity tier
+    if target.id == interaction.guild.owner_id:
+        immunity_status = "👑 **Server Owner (Absolute Immunity)**"
+    elif perms.administrator:
+        immunity_status = "🛡️ **Server Administrator (Immune)**"
+    elif perms.manage_guild or perms.manage_messages or perms.kick_members:
+        immunity_status = "⚔️ **Server Moderator (Immune)**"
+    else:
+        immunity_status = "👤 **Standard Member**"
+
+    # Join Position calculation
+    sorted_members = sorted([m for m in interaction.guild.members if m.joined_at is not None], key=lambda m: m.joined_at)
+    join_pos = next((idx + 1 for idx, m in enumerate(sorted_members) if m.id == target.id), None)
+    join_pos_str = f" (#{join_pos} of {interaction.guild.member_count})" if join_pos else ""
+
+    # Booster status
+    booster_str = f"🚀 Boosting since <t:{int(target.premium_since.timestamp())}:R>" if target.premium_since else "❌ Not boosting"
+
+    # Badges / Flags
+    flags = [flag.name.replace("_", " ").title() for flag, value in target.public_flags if value]
+    flags_str = ", ".join(flags) if flags else "`None`"
+
+    # User Bio (About Me)
+    bio_str = user_profile.bio if (hasattr(user_profile, 'bio') and user_profile.bio) else None
+
+    # Build Embed
+    embed = discord.Embed(
+        title=f"🔍 Member Dossier & Audit — {target.display_name}",
+        color=target.color if target.color.value != 0 else discord.Color.blurple()
+    )
+    if bio_str:
+        embed.description = f"💬 **About Me:**\n> {bio_str}\n"
+
+    embed.set_thumbnail(url=target.display_avatar.url)
+    if hasattr(user_profile, 'banner') and user_profile.banner:
+        embed.set_image(url=user_profile.banner.url)
+
+    # General Identity
+    embed.add_field(
+        name="👤 **User Identity**",
+        value=(
+            f"• **Username:** {target.name} (`{target.id}`)\n"
+            f"• **Mention:** {target.mention}\n"
+            f"• **Account Type:** `{'🤖 Bot' if target.bot else '🧑 Human'}`\n"
+            f"• **Badges:** {flags_str}\n"
+            f"• **Immunity Tier:** {immunity_status}"
+        ),
+        inline=False
+    )
+
+    # Server Timeline
+    created_ts = int(target.created_at.timestamp())
+    joined_ts = int(target.joined_at.timestamp()) if target.joined_at else created_ts
+    embed.add_field(
+        name="📅 **Server Timeline & History**",
+        value=(
+            f"• **Account Created:** <t:{created_ts}:F> (<t:{created_ts}:R>)\n"
+            f"• **Joined Server:** <t:{joined_ts}:F> (<t:{joined_ts}:R>){join_pos_str}\n"
+            f"• **Server Booster:** {booster_str}"
+        ),
+        inline=False
+    )
+
+    # Roles
+    embed.add_field(
+        name=f"🎭 **Roles ({roles_count})**",
+        value=f"• **Highest Role:** {target.top_role.mention}\n• **Assigned Roles:** {roles_str}",
+        inline=False
+    )
+
+    # Permissions
+    embed.add_field(
+        name="🛡️ **Key Permissions & Abilities**",
+        value=perms_str,
+        inline=False
+    )
+
+    # Moderation & Bot Usage Record
+    mod_status_str = (
+        f"• **Bot Commands Used:** `{cmd_count}` commands\n"
+        f"• **Warnings Received:** `{warn_count}`\n"
+        f"• **Timeouts Received:** `{timeout_count}`\n"
+        f"• **Record Status:** `{'✅ Clean Record' if (warn_count == 0 and timeout_count == 0) else '⚠️ Infractions on file'}`"
+    )
+    embed.add_field(
+        name="📊 **Server Activity & Mod Record**",
+        value=mod_status_str,
+        inline=False
+    )
+
+    embed.set_footer(text=f"Requested by {interaction.user.display_name} • Sweety Deep Audit", icon_url=interaction.user.display_avatar.url)
+    
+    view = UserProfileView(user_profile, target)
+    await interaction.followup.send(embed=embed, view=view)
+
+
+@bot.tree.command(name="userinfo", description="🔍 Comprehensive member profile, roles, permissions & server audit")
+@app_commands.describe(member="The member to inspect (defaults to yourself)")
+@app_commands.guild_only()
+async def userinfo_command(interaction: discord.Interaction, member: discord.Member = None):
+    await whois_command(interaction, member)
 
 
 # ── Premium Feature Commands ────────────────────────────────────────────────
