@@ -1616,10 +1616,16 @@ class GeminiBot(commands.Bot):
         except Exception as e:
             logger.error(f"❌ Cache load failed: {e}")
         
-        # Step 4: Sync slash commands globally
+        # Step 4: Sync slash commands globally & to active guilds for instant 0s availability
         try:
+            for g in self.guilds:
+                try:
+                    self.tree.copy_global_to(guild=g)
+                    await self.tree.sync(guild=g)
+                except Exception:
+                    pass
             synced = await self.tree.sync()
-            logger.info(f"✅ Synced {len(synced)} global commands")
+            logger.info(f"✅ Synced {len(synced)} commands instantly across all guilds")
         except Exception as e:
             logger.error(f"❌ Sync failed: {e}")
 
@@ -3059,6 +3065,125 @@ async def whois_command(interaction: discord.Interaction, member: discord.Member
 @app_commands.guild_only()
 async def userinfo_command(interaction: discord.Interaction, member: discord.Member = None):
     await whois_command(interaction, member)
+
+
+@bot.command(name="whois", aliases=["userinfo", "profile", "user"])
+@commands.guild_only()
+async def whois_prefix_cmd(ctx: commands.Context, member: discord.Member = None):
+    """Deep audit and profile information for a member: !whois [@member]"""
+    target = member or ctx.author
+    async with ctx.typing():
+        # 1. Fetch full Discord user profile
+        try:
+            user_profile = await bot.fetch_user(target.id)
+        except Exception:
+            user_profile = target
+
+        # 2. Roles Overview
+        roles = [r for r in target.roles if r != ctx.guild.default_role]
+        roles.reverse()
+        roles_count = len(roles)
+        if roles_count > 0:
+            roles_str = ", ".join([r.mention for r in roles[:15]])
+            if roles_count > 15:
+                roles_str += f" ...and `{roles_count - 15}` more"
+        else:
+            roles_str = "`No custom roles`"
+
+        # 3. Key Permissions
+        perms = target.guild_permissions
+        key_perms = []
+        if perms.administrator:
+            key_perms.append("👑 Administrator (Full Control)")
+        else:
+            if perms.manage_guild: key_perms.append("⚙️ Manage Server")
+            if perms.manage_roles: key_perms.append("🛡️ Manage Roles")
+            if perms.manage_channels: key_perms.append("📁 Manage Channels")
+            if perms.ban_members: key_perms.append("🔨 Ban Members")
+            if perms.kick_members: key_perms.append("👢 Kick Members")
+            if perms.moderate_members: key_perms.append("⏳ Timeout Members")
+            if perms.manage_messages: key_perms.append("🗑️ Manage Messages")
+            if perms.mention_everyone: key_perms.append("📢 Mention Everyone")
+            if perms.view_audit_log: key_perms.append("📜 View Audit Log")
+
+        perms_str = "\n".join([f"• {p}" for p in key_perms[:10]]) if key_perms else "👤 `Standard Member (No elevated permissions)`"
+
+        # 4. Moderation & Server Activity Record
+        warn_count = 0
+        timeout_count = 0
+        cmd_count = 0
+        try:
+            w_row = await db.fetch("SELECT COUNT(*) as c FROM warnings WHERE guild_id = $1 AND user_id = $2", str(ctx.guild.id), str(target.id))
+            if w_row:
+                warn_count = w_row[0]['c'] if isinstance(w_row[0], dict) else w_row[0][0]
+            t_row = await db.fetch("SELECT COUNT(*) as c FROM timeouts WHERE guild_id = $1 AND user_id = $2", str(ctx.guild.id), str(target.id))
+            if t_row:
+                timeout_count = t_row[0]['c'] if isinstance(t_row[0], dict) else t_row[0][0]
+            c_row = await db.fetch("SELECT COUNT(*) as c FROM commands WHERE guild_id = $1 AND user_id = $2", str(ctx.guild.id), str(target.id))
+            if c_row:
+                cmd_count = c_row[0]['c'] if isinstance(c_row[0], dict) else c_row[0][0]
+        except Exception:
+            pass
+
+        # Immunity
+        if target.id == ctx.guild.owner_id:
+            immunity_status = "👑 **Server Owner (Absolute Immunity)**"
+        elif perms.administrator:
+            immunity_status = "🛡️ **Server Administrator (Immune)**"
+        elif perms.manage_guild or perms.manage_messages or perms.kick_members:
+            immunity_status = "⚔️ **Server Moderator (Immune)**"
+        else:
+            immunity_status = "👤 **Standard Member**"
+
+        sorted_members = sorted([m for m in ctx.guild.members if m.joined_at is not None], key=lambda m: m.joined_at)
+        join_pos = next((idx + 1 for idx, m in enumerate(sorted_members) if m.id == target.id), None)
+        join_pos_str = f" (#{join_pos} of {ctx.guild.member_count})" if join_pos else ""
+        booster_str = f"🚀 Boosting since <t:{int(target.premium_since.timestamp())}:R>" if target.premium_since else "❌ Not boosting"
+        flags = [flag.name.replace("_", " ").title() for flag, value in target.public_flags if value]
+        flags_str = ", ".join(flags) if flags else "`None`"
+        bio_str = user_profile.bio if (hasattr(user_profile, 'bio') and user_profile.bio) else None
+
+        embed = discord.Embed(
+            title=f"🔍 Member Dossier & Audit — {target.display_name}",
+            color=target.color if target.color.value != 0 else discord.Color.blurple()
+        )
+        if bio_str:
+            embed.description = f"💬 **About Me:**\n> {bio_str}\n"
+
+        embed.set_thumbnail(url=target.display_avatar.url)
+        if getattr(user_profile, 'banner', None):
+            embed.set_image(url=user_profile.banner.url)
+
+        embed.add_field(
+            name="👤 **User Identity**",
+            value=f"• **Username:** {target.name} (`{target.id}`)\n• **Mention:** {target.mention}\n• **Account Type:** `{'🤖 Bot' if target.bot else '🧑 Human'}`\n• **Badges:** {flags_str}\n• **Immunity Tier:** {immunity_status}",
+            inline=False
+        )
+        created_ts = int(target.created_at.timestamp())
+        joined_ts = int(target.joined_at.timestamp()) if target.joined_at else created_ts
+        embed.add_field(
+            name="📅 **Server Timeline & History**",
+            value=f"• **Account Created:** <t:{created_ts}:F> (<t:{created_ts}:R>)\n• **Joined Server:** <t:{joined_ts}:F> (<t:{joined_ts}:R>){join_pos_str}\n• **Server Booster:** {booster_str}",
+            inline=False
+        )
+        embed.add_field(
+            name=f"🎭 **Roles ({roles_count})**",
+            value=f"• **Highest Role:** {target.top_role.mention}\n• **Assigned Roles:** {roles_str}",
+            inline=False
+        )
+        embed.add_field(
+            name="🛡️ **Key Permissions & Abilities**",
+            value=perms_str,
+            inline=False
+        )
+        embed.add_field(
+            name="📊 **Server Activity & Mod Record**",
+            value=f"• **Bot Commands Used:** `{cmd_count}` commands\n• **Warnings Received:** `{warn_count}`\n• **Timeouts Received:** `{timeout_count}`\n• **Record Status:** `{'✅ Clean Record' if (warn_count == 0 and timeout_count == 0) else '⚠️ Infractions on file'}`",
+            inline=False
+        )
+        embed.set_footer(text=f"Requested by {ctx.author.display_name} • Sweety Deep Audit", icon_url=ctx.author.display_avatar.url)
+        view = UserProfileView(user_profile, target)
+        await ctx.send(embed=embed, view=view)
 
 
 # ── Premium Feature Commands ────────────────────────────────────────────────
