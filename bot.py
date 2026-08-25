@@ -1610,6 +1610,18 @@ class GeminiBot(commands.Bot):
             logger.info("Database initialized successfully.")
         except Exception as db_err:
             logger.error(f"Database initialization error: {db_err}")
+
+        # Dynamically load all cogs from ./cogs directory
+        cogs_dir = os.path.join(os.path.dirname(__file__), "cogs")
+        if os.path.exists(cogs_dir):
+            for filename in os.listdir(cogs_dir):
+                if filename.endswith(".py") and not filename.startswith("_"):
+                    cog_name = f"cogs.{filename[:-3]}"
+                    try:
+                        await self.load_extension(cog_name)
+                        logger.info(f"[SWEETY] Successfully loaded cog: {filename}")
+                    except Exception as cog_err:
+                        logger.error(f"[SWEETY] Failed to load cog {filename}: {cog_err}", exc_info=True)
         
         # Optional FastAPI dashboard (disabled by default on cloud web hosts)
         disable_api = os.getenv("DISABLE_API", "true").lower() in ("true", "1", "yes")
