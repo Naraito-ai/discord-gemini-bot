@@ -120,6 +120,77 @@ def health():
         "latency_ms": bot_latency
     })
 
+@_flask_app.route('/terms')
+def terms_page():
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Terms of Service - Sweety Bot</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; padding: 40px 20px; max-width: 800px; margin: auto; }
+        h1, h2 { color: #38bdf8; }
+        a { color: #818cf8; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .card { background: #1e293b; padding: 24px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; }
+    </style>
+</head>
+<body>
+    <h1>Terms of Service — Sweety Bot</h1>
+    <p><em>Last Updated: August 2026</em></p>
+    <div class="card">
+        <h2>1. Acceptance of Terms</h2>
+        <p>By adding <strong>Sweety</strong> to your Discord server or using any of its features, you agree to these Terms, as well as Discord's Terms of Service and Community Guidelines.</p>
+        
+        <h2>2. Permitted Usage</h2>
+        <p>You agree not to exploit, spam, reverse-engineer, or use the bot to generate abusive, illegal, or harmful content.</p>
+        
+        <h2>3. Availability & Disclaimers</h2>
+        <p>Sweety is provided on an "as-is" basis. The developers are not liable for server changes resulting from administrative commands executed by server staff.</p>
+        
+        <h2>4. Contact</h2>
+        <p>Developer: <strong>Naraito</strong> (<a href="https://github.com/Naraito-ai/discord-gemini-bot" target="_blank">GitHub Repository</a>)</p>
+    </div>
+</body>
+</html>"""
+
+@_flask_app.route('/privacy')
+def privacy_page():
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Privacy Policy - Sweety Bot</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; padding: 40px 20px; max-width: 800px; margin: auto; }
+        h1, h2 { color: #38bdf8; }
+        a { color: #818cf8; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .card { background: #1e293b; padding: 24px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; }
+    </style>
+</head>
+<body>
+    <h1>Privacy Policy — Sweety Bot</h1>
+    <p><em>Last Updated: August 2026</em></p>
+    <div class="card">
+        <h2>1. Data We Collect</h2>
+        <p>Sweety processes Discord Server IDs, Channel IDs, Role IDs, and User IDs solely to deliver moderation, role management, and AI responses.</p>
+        
+        <h2>2. Data We Do NOT Collect</h2>
+        <p>We do not collect private passwords, emails, financial information, or personal direct messages (DMs). We never sell or share user data.</p>
+        
+        <h2>3. AI Processing</h2>
+        <p>User queries sent via <code>/ask</code> or direct mentions are transmitted securely via API to generate answers and are not stored for training.</p>
+        
+        <h2>4. Data Deletion</h2>
+        <p>Server owners may request complete deletion of server settings and logs at any time by contacting the developer or removing the bot.</p>
+        
+        <h2>5. Contact</h2>
+        <p>Developer: <strong>Naraito</strong> (<a href="https://github.com/Naraito-ai/discord-gemini-bot" target="_blank">GitHub Repository</a>)</p>
+    </div>
+</body>
+</html>"""
+
 def keep_alive():
     port = int(os.getenv("PORT", 8080))
     logger.info(f"Starting keep-alive web server on 0.0.0.0:{port}...")
