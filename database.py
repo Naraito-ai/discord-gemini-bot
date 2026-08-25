@@ -380,6 +380,19 @@ class DatabaseManager:
         await self.execute(query, str(guild_id), str(user_id), str(moderator_id), reason)
         await self.increment_analytics(guild_id, "warnings_count")
 
+    async def get_warnings(self, guild_id: int, user_id: int) -> list:
+        """Retrieves all warnings for a user in a guild."""
+        query = "SELECT id, moderator_id, reason, timestamp FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY timestamp DESC"
+        return await self.fetch(query, str(guild_id), str(user_id))
+
+    async def clear_warnings(self, guild_id: int, user_id: int) -> int:
+        """Deletes all warnings for a user in a guild and returns count."""
+        rows = await self.fetch("SELECT COUNT(*) as count FROM warnings WHERE guild_id = ? AND user_id = ?", str(guild_id), str(user_id))
+        count = rows[0]["count"] if rows and isinstance(rows[0], dict) and "count" in rows[0] else (rows[0][0] if rows else 0)
+        query = "DELETE FROM warnings WHERE guild_id = ? AND user_id = ?"
+        await self.execute(query, str(guild_id), str(user_id))
+        return count
+
     async def add_timeout(self, guild_id: int, user_id: int, moderator_id: int, duration_seconds: int, reason: str):
         """Logs a member timeout."""
         query = "INSERT INTO timeouts (guild_id, user_id, moderator_id, duration_seconds, reason) VALUES (?, ?, ?, ?, ?)"

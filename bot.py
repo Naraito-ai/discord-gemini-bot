@@ -1675,7 +1675,7 @@ async def help_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/clearwarns <user>` — Reset a member's warnings to clean\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
@@ -2610,6 +2610,211 @@ async def unban_command(interaction: discord.Interaction, user_id: str, reason: 
     except Exception as e:
         logger.error(f"Unban command failed: {e}", exc_info=True)
         await interaction.response.send_message("❌ Failed to unban user due to an internal error.", ephemeral=True)
+
+
+# ── Formal Warning & Auto-Escalation System ──────────────────────────────────
+
+async def issue_warning_logic(guild: discord.Guild, member: discord.Member, moderator: discord.Member, reason: str) -> tuple[int, str]:
+    """Issues a formal warning, calculates total warnings, and applies auto-escalation timeouts."""
+    await db.add_warning(guild.id, member.id, moderator.id, reason)
+    
+    # Get total warnings count
+    warnings = await db.get_warnings(guild.id, member.id)
+    total_warns = len(warnings)
+    
+    escalation_action = ""
+    # Auto-escalation thresholds
+    if total_warns == 3:
+        try:
+            await member.timeout(datetime.timedelta(minutes=15), reason=f"Auto-Escalation: 3 Warnings Reached ({reason})")
+            escalation_action = "\n⚠️ **Auto-Escalation:** Member has reached **3 warnings** and was automatically timed out for **15 minutes**."
+        except Exception:
+            pass
+    elif total_warns == 4:
+        try:
+            await member.timeout(datetime.timedelta(hours=1), reason=f"Auto-Escalation: 4 Warnings Reached ({reason})")
+            escalation_action = "\n🚨 **Auto-Escalation:** Member has reached **4 warnings** and was automatically timed out for **1 hour**."
+        except Exception:
+            pass
+    elif total_warns >= 5:
+        try:
+            await member.timeout(datetime.timedelta(hours=24), reason=f"Auto-Escalation: 5+ Warnings Reached ({reason})")
+            escalation_action = "\n🛑 **Auto-Escalation:** Member has reached **5+ warnings** and was automatically timed out for **24 hours**."
+        except Exception:
+            pass
+
+    # Attempt to DM the user
+    try:
+        dm_embed = discord.Embed(
+            title=f"⚠️ Warning Received in {guild.name}",
+            description=f"You have been formally warned by **{moderator.display_name}**.",
+            color=discord.Color.gold()
+        )
+        dm_embed.add_field(name="Reason", value=reason, inline=False)
+        dm_embed.add_field(name="Total Warnings on File", value=f"`{total_warns}` warnings", inline=True)
+        if escalation_action:
+            dm_embed.add_field(name="Penalty", value=escalation_action.strip(), inline=False)
+        dm_embed.set_footer(text=f"Please adhere to {guild.name} server rules to avoid further timeouts or bans.")
+        await member.send(embed=dm_embed)
+    except Exception:
+        pass
+
+    # Log to moderation channel
+    await log_mod_action(guild, moderator, member, "Warning Issued", reason, f"Total Warnings: {total_warns}{escalation_action}")
+    return total_warns, escalation_action
+
+
+@bot.tree.command(name="warn", description="Issue a formal warning to a member with auto-escalation")
+@app_commands.describe(member="The member to warn", reason="Reason for the warning")
+@app_commands.default_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def warn_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if is_staff_or_immune(member):
+        await interaction.response.send_message("❌ This member is staff/immune and cannot be warned.", ephemeral=True)
+        return
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot warn this member because they have a higher or equal role than you.", ephemeral=True)
+        return
+    if member.id == interaction.guild.owner_id:
+        await interaction.response.send_message("❌ You cannot warn the Server Owner!", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    total_warns, escalation = await issue_warning_logic(interaction.guild, member, interaction.user, reason)
+    
+    embed = discord.Embed(
+        title="⚠️ Member Formally Warned",
+        description=f"**{member.mention}** has been issued a warning.{escalation}",
+        color=discord.Color.gold()
+    )
+    embed.add_field(name="User", value=f"{member.name} (`{member.id}`)", inline=True)
+    embed.add_field(name="Moderator", value=interaction.user.mention, inline=True)
+    embed.add_field(name="Total Warnings", value=f"`{total_warns}`", inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    await interaction.followup.send(embed=embed)
+
+
+@bot.tree.command(name="warnings", description="View all active warnings and infraction history for a member")
+@app_commands.describe(member="The member to check (defaults to yourself)")
+@app_commands.guild_only()
+async def warnings_command(interaction: discord.Interaction, member: discord.Member = None):
+    target = member or interaction.user
+    await interaction.response.defer()
+    
+    warns = await db.get_warnings(interaction.guild.id, target.id)
+    if not warns:
+        embed = discord.Embed(
+            title=f"📜 Warning History — {target.display_name}",
+            description=f"✅ **{target.mention} has a clean record with 0 warnings!**",
+            color=discord.Color.green()
+        )
+        embed.set_thumbnail(url=target.display_avatar.url)
+        await interaction.followup.send(embed=embed)
+        return
+
+    embed = discord.Embed(
+        title=f"⚠️ Infraction Record — {target.display_name}",
+        description=f"Total Warnings on file: **`{len(warns)}`**",
+        color=discord.Color.orange()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    
+    for idx, w in enumerate(warns[:10], 1):
+        mod_id = w.get("moderator_id") if isinstance(w, dict) else w[1]
+        reason = w.get("reason") if isinstance(w, dict) else w[2]
+        ts = w.get("timestamp") if isinstance(w, dict) else w[3]
+        embed.add_field(
+            name=f"Warning #{idx} • {ts or 'Recently'}",
+            value=f"• **Reason:** {reason}\n• **Moderator:** <@{mod_id}>",
+            inline=False
+        )
+    if len(warns) > 10:
+        embed.set_footer(text=f"Showing top 10 of {len(warns)} total warnings.")
+    else:
+        embed.set_footer(text="Sweety Moderation Shield")
+        
+    await interaction.followup.send(embed=embed)
+
+
+@bot.tree.command(name="clearwarns", description="Clear all warnings for a member and reset their record")
+@app_commands.describe(member="The member whose warnings will be cleared")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+async def clearwarns_command(interaction: discord.Interaction, member: discord.Member):
+    await interaction.response.defer()
+    count = await db.clear_warnings(interaction.guild.id, member.id)
+    embed = discord.Embed(
+        title="🧹 Warnings Cleared",
+        description=f"Successfully removed **`{count}`** warning(s) for **{member.mention}**.\nTheir record has been reset to clean.",
+        color=discord.Color.green()
+    )
+    await interaction.followup.send(embed=embed)
+    await log_mod_action(interaction.guild, interaction.user, member, "Warnings Cleared", f"Cleared {count} warnings")
+
+
+@bot.command(name="warn")
+@commands.has_permissions(moderate_members=True)
+@commands.guild_only()
+async def warn_prefix_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
+    """Issue a warning to a member: !warn @member [reason]"""
+    if is_staff_or_immune(member):
+        await ctx.send("❌ This member is staff/immune and cannot be warned.")
+        return
+    if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+        await ctx.send("❌ You cannot warn this member because they have a higher or equal role than you.")
+        return
+    if member.id == ctx.guild.owner_id:
+        await ctx.send("❌ You cannot warn the Server Owner!")
+        return
+
+    total_warns, escalation = await issue_warning_logic(ctx.guild, member, ctx.author, reason)
+    embed = discord.Embed(
+        title="⚠️ Member Formally Warned",
+        description=f"**{member.mention}** has been issued a warning.{escalation}",
+        color=discord.Color.gold()
+    )
+    embed.add_field(name="User", value=f"{member.name} (`{member.id}`)", inline=True)
+    embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Total Warnings", value=f"`{total_warns}`", inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="warnings", aliases=["warns"])
+@commands.guild_only()
+async def warnings_prefix_cmd(ctx: commands.Context, member: discord.Member = None):
+    """Check active warnings for a member: !warnings [@member]"""
+    target = member or ctx.author
+    warns = await db.get_warnings(ctx.guild.id, target.id)
+    if not warns:
+        await ctx.send(f"✅ **{target.mention} has a clean record with 0 warnings!**")
+        return
+
+    embed = discord.Embed(
+        title=f"⚠️ Infraction Record — {target.display_name}",
+        description=f"Total Warnings on file: **`{len(warns)}`**",
+        color=discord.Color.orange()
+    )
+    for idx, w in enumerate(warns[:10], 1):
+        mod_id = w.get("moderator_id") if isinstance(w, dict) else w[1]
+        reason = w.get("reason") if isinstance(w, dict) else w[2]
+        ts = w.get("timestamp") if isinstance(w, dict) else w[3]
+        embed.add_field(
+            name=f"Warning #{idx} • {ts or 'Recently'}",
+            value=f"• **Reason:** {reason}\n• **Moderator:** <@{mod_id}>",
+            inline=False
+        )
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="clearwarns", aliases=["clearwarnings"])
+@commands.has_permissions(administrator=True)
+@commands.guild_only()
+async def clearwarns_prefix_cmd(ctx: commands.Context, member: discord.Member):
+    """Clear all warnings for a member: !clearwarns @member"""
+    count = await db.clear_warnings(ctx.guild.id, member.id)
+    await ctx.send(f"🧹 Successfully cleared **`{count}`** warnings for **{member.mention}**!")
+    await log_mod_action(ctx.guild, ctx.author, member, "Warnings Cleared", f"Cleared {count} warnings")
 
 
 @bot.tree.command(name="mute", description="Timeout (mute) a member in the server")
