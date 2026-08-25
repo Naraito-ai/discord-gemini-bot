@@ -53,6 +53,8 @@ if not sports_logger.handlers:
 IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 
 LEAGUE_NAMES = {
+    "PL": "Premier League (England)",
+    "CL": "UEFA Champions League",
     "PD": "La Liga (Spain)",
     "SA": "Serie A (Italy)",
     "BL1": "Bundesliga (Germany)",
@@ -60,6 +62,8 @@ LEAGUE_NAMES = {
 }
 
 LEAGUE_COLORS = {
+    "PL": 0x38003C,   # Premier League Purple
+    "CL": 0x001489,   # Champions League Navy
     "PD": 0xEE1E46,   # La Liga Red
     "SA": 0x024494,   # Serie A Blue
     "BL1": 0xD20515,  # Bundesliga Red

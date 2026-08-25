@@ -2,10 +2,10 @@
   "fc_mobile_channel_id": null,
   "esports_channel_id": null,
   "scores_channel_id": null,
-  "football_data_api_key": null,
-  "pandascore_api_key": null,
+  "football_data_api_key": "58e0707cf8ce4dc3af8300429d617dba",
+  "pandascore_api_key": "xQ5xqw1X7ItL32p_eWYYDuSDBzXU_iFI00ty9jBmjcLg_rT1qy0",
   "check_interval_minutes": 30,
-  "leagues": ["PD", "SA", "BL1", "FL1"],
+  "leagues": ["PL", "CL", "PD", "SA", "BL1", "FL1"],
   "posted_news_ids": [],
   "posted_match_ids": []
 }
