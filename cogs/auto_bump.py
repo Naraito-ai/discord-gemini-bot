@@ -30,6 +30,8 @@ DEFAULT_CONFIG = {
     "enabled": True,
     "channel_id": None,
     "fallback_channel_id": None,
+    "mode": "embed",  # "embed" (Rich Reminder Card) or "text" (Raw text e.g. !d bump)
+    "ping_role_id": None,  # Optional role ID to mention (or None)
     "interval_hours": 2,
     "retry_on_fail": True,
     "retry_delay_minutes": 5,
@@ -37,7 +39,7 @@ DEFAULT_CONFIG = {
     "last_bump_timestamp": None,
     "next_bump_timestamp": None,
     "total_bumps_sent": 0,
-    "bump_command": "!d bump"
+    "bump_text": "!d bump"
 }
 
 
@@ -126,24 +128,43 @@ class AutoBump(commands.Cog):
             bump_logger.error(f"[ERROR] {msg}")
             return False, msg
 
-        # Execute Bump Action
-        bump_cmd = self.config.get("bump_command", "!d bump")
+        # Prepare Content based on configured Mode
+        mode = self.config.get("mode", "embed")
+        ping_role_id = self.config.get("ping_role_id")
+        mention_str = f"<@&{ping_role_id}> " if ping_role_id else ""
         now = datetime.datetime.now(datetime.timezone.utc)
         
         try:
-            # 1. Send the bump command / reminder
-            await target_channel.send(bump_cmd)
+            if mode == "text":
+                bump_text = self.config.get("bump_text", "!d bump")
+                content = f"{mention_str}{bump_text}".strip()
+                await target_channel.send(content)
+            else:
+                embed = discord.Embed(
+                    title="🚀 Time to Bump the Server!",
+                    description=(
+                        "The 2-hour Disboard cooldown has refreshed!\n\n"
+                        "👉 **Please type `/bump` in this channel to boost our server to the top of discovery lists!**"
+                    ),
+                    color=discord.Color.from_rgb(88, 101, 242)
+                )
+                embed.add_field(name="⏱️ Cooldown", value="2 Hours", inline=True)
+                embed.add_field(name="📈 Growth", value="Boosts server visibility", inline=True)
+                embed.set_footer(text="Sweety Auto-Bump Reminder • Bump regularly for maximum members!")
+                
+                content = mention_str.strip() if mention_str else None
+                await target_channel.send(content=content, embed=embed)
             
-            # 2. Update config stats
+            # Update stats
             self.config["last_bump_timestamp"] = int(now.timestamp())
             next_time = now + datetime.timedelta(hours=self.config.get("interval_hours", 2))
             self.config["next_bump_timestamp"] = int(next_time.timestamp())
             self.config["total_bumps_sent"] = self.config.get("total_bumps_sent", 0) + 1
             save_config(self.config)
 
-            success_msg = f"[SUCCESS] Bump sent to #{target_channel.name} in {target_channel.guild.name}"
+            success_msg = f"[SUCCESS] Bump dispatched to #{target_channel.name} in {target_channel.guild.name} (Mode: {mode})"
             bump_logger.info(success_msg)
-            return True, f"✅ Successfully sent bump to {target_channel.mention}!"
+            return True, f"✅ Successfully dispatched bump to {target_channel.mention}!"
             
         except Exception as e:
             err_msg = f"Failed to send bump: {e}"
@@ -211,10 +232,67 @@ class AutoBump(commands.Cog):
             color=discord.Color.green()
         )
         embed.add_field(name="📍 Channel", value=target.mention, inline=True)
-        embed.add_field(name="⏱️ Interval", value=f"Every {self.config.get('interval_hours', 2)} Hours", inline=True)
+        embed.add_field(name="🎨 Mode", value=f"`{self.config.get('mode', 'embed').capitalize()}`", inline=True)
         embed.add_field(name="⏰ Next Scheduled Bump", value=f"<t:{int(next_time.timestamp())}:R>", inline=True)
-        embed.set_footer(text="Use /manualbump to trigger an instant bump or /bumpstatus for live stats")
+        embed.set_footer(text="Use /setbumpmode to change format or /manualbump to test")
 
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="setbumpmode", description="Choose between a rich reminder embed or raw text command for auto-bump")
+    @app_commands.describe(
+        mode="The bump dispatch mode",
+        raw_text="Custom text to send if mode is 'raw text' (defaults to '!d bump')"
+    )
+    @app_commands.choices(
+        mode=[
+            app_commands.Choice(name="Rich Reminder Embed (Recommended for /bump)", value="embed"),
+            app_commands.Choice(name="Raw Text Command (!d bump)", value="text")
+        ]
+    )
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guild_only()
+    async def setbumpmode(self, interaction: discord.Interaction, mode: app_commands.Choice[str], raw_text: str = None):
+        """Switches bump mode between rich embed reminder and raw text."""
+        self.config = load_config()
+        self.config["mode"] = mode.value
+        if raw_text:
+            self.config["bump_text"] = raw_text.strip()
+            
+        save_config(self.config)
+        
+        embed = discord.Embed(
+            title="⚙️ Bump Mode Updated",
+            description=f"Auto-bump format set to: **{mode.name}**",
+            color=discord.Color.blue()
+        )
+        if mode.value == "text":
+            embed.add_field(name="📝 Text Command", value=f"`{self.config.get('bump_text', '!d bump')}`", inline=False)
+        else:
+            embed.add_field(name="💡 Why Embed?", value="Discord prevents bots from running other bots' slash commands directly, so the rich embed reminds your community to type `/bump`.", inline=False)
+            
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="setbumpping", description="Configure a role to ping when it's time to bump")
+    @app_commands.describe(role="The role to mention (leave empty to disable pings)")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.guild_only()
+    async def setbumpping(self, interaction: discord.Interaction, role: discord.Role = None):
+        """Sets or clears the auto-bump mention role."""
+        self.config = load_config()
+        if role:
+            self.config["ping_role_id"] = role.id
+            desc = f"Sweety will now mention {role.mention} on each 2-hour bump reminder."
+        else:
+            self.config["ping_role_id"] = None
+            desc = "Role mentions for auto-bump have been **disabled**."
+            
+        save_config(self.config)
+        
+        embed = discord.Embed(
+            title="🔔 Bump Ping Configuration",
+            description=desc,
+            color=discord.Color.gold()
+        )
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="bumpstatus", description="View current auto-bump status, next scheduled bump, and statistics")
@@ -228,10 +306,12 @@ class AutoBump(commands.Cog):
         channel = self.bot.get_channel(int(channel_id)) if channel_id else None
         
         enabled = self.config.get("enabled", True)
+        mode = self.config.get("mode", "embed")
         interval = self.config.get("interval_hours", 2)
         total_bumps = self.config.get("total_bumps_sent", 0)
         last_bump = self.config.get("last_bump_timestamp")
         next_bump = self.config.get("next_bump_timestamp")
+        ping_role_id = self.config.get("ping_role_id")
 
         embed = discord.Embed(
             title="📊 Sweety Auto-Bump Status",
@@ -239,8 +319,8 @@ class AutoBump(commands.Cog):
         )
         
         embed.add_field(name="⚙️ Status", value="🟢 **Active & Running**" if enabled else "🔴 **Disabled**", inline=True)
-        embed.add_field(name="📍 Bump Channel", value=channel.mention if channel else "`Not configured`", inline=True)
-        embed.add_field(name="⏱️ Interval", value=f"Every {interval}h", inline=True)
+        embed.add_field(name="📍 Channel", value=channel.mention if channel else "`Not configured`", inline=True)
+        embed.add_field(name="🎨 Format", value=f"`{mode.capitalize()}`", inline=True)
         
         last_str = f"<t:{last_bump}:R>" if last_bump else "`Never`"
         next_str = f"<t:{next_bump}:R> (<t:{next_bump}:T>)" if next_bump else "`Pending next loop`"
@@ -249,6 +329,9 @@ class AutoBump(commands.Cog):
         embed.add_field(name="⏳ Next Bump", value=next_str, inline=True)
         embed.add_field(name="📈 Total Bumps", value=f"`{total_bumps}` sent", inline=True)
         
+        if ping_role_id:
+            embed.add_field(name="🔔 Ping Role", value=f"<@&{ping_role_id}>", inline=True)
+            
         embed.set_footer(text="Sweety Auto-Bump Module • Use /manualbump to test")
         await interaction.response.send_message(embed=embed)
 
@@ -281,17 +364,17 @@ class AutoBump(commands.Cog):
         """Displays help and usage guide for Auto-Bump."""
         embed = discord.Embed(
             title="🚀 Sweety Auto-Bump Integration Guide",
-            description="Sweety can automatically send server bumps every **2 hours** to keep your community active on bot discovery lists!",
+            description="Sweety keeps your server active on Discord discovery lists every **2 hours** automatically!",
             color=discord.Color.gold()
         )
         embed.add_field(
-            name="🛠️ Quick 1-Minute Setup",
-            value="1. Run **`/setbumpchannel #channel`** in your bump or bot-commands channel.\n2. Ensure Sweety has **Send Messages** and **View Channel** permissions.\n3. That's it! Sweety will handle bumps every 2 hours automatically.",
+            name="🛠️ Quick Setup",
+            value="1. **`/setbumpchannel #channel`** — Select your bump channel.\n2. **`/setbumpmode`** — Choose between **Rich Reminder Embed** or **Raw Text** (`!d bump`).\n3. **`/setbumpping [role]`** — Optionally ping a `@Bumper` or `@here` role.\n4. **`/manualbump`** — Test an instant bump dispatch.",
             inline=False
         )
         embed.add_field(
-            name="📋 Available Commands",
-            value="• `/setbumpchannel [channel]` — Set active bump channel (Admin)\n• `/bumpstatus` — Check next bump countdown and stats (Admin)\n• `/manualbump` — Trigger an immediate test bump (Admin)\n• `/bumphelp` — View this setup guide (Everyone)",
+            name="💡 Why Embed vs Text?",
+            value="Discord's security API forbids bots from triggering other bots' slash commands directly. The **Rich Embed** reminds your members to run `/bump`, while **Raw Text** sends text commands like `!d bump` for classic bots.",
             inline=False
         )
         embed.set_footer(text="Sweety 24/7 Cloud Engine")
