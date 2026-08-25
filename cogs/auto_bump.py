@@ -30,8 +30,8 @@ DEFAULT_CONFIG = {
     "enabled": True,
     "channel_id": None,
     "fallback_channel_id": None,
-    "mode": "embed",  # "embed" (Rich Reminder Card) or "text" (Raw text e.g. !d bump)
-    "ping_role_id": None,  # Optional role ID to mention (or None)
+    "mode": "text",  # "text" sends "/bump" directly
+    "ping_role_id": None,  # Optional role ID to mention
     "interval_hours": 2,
     "retry_on_fail": True,
     "retry_delay_minutes": 5,
@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "last_bump_timestamp": None,
     "next_bump_timestamp": None,
     "total_bumps_sent": 0,
-    "bump_text": "!d bump"
+    "bump_text": "/bump"
 }
 
 
@@ -55,6 +55,10 @@ def load_config() -> dict:
             for k, v in DEFAULT_CONFIG.items():
                 if k not in data:
                     data[k] = v
+            # If still on old !d bump default, update to /bump
+            if data.get("bump_text") == "!d bump":
+                data["bump_text"] = "/bump"
+                data["mode"] = "text"
             return data
     except Exception as e:
         bump_logger.error(f"Failed to load config: {e}")
