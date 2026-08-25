@@ -1242,51 +1242,6 @@ async def teardown_guild(guild):
     await db.clear_resources(guild.id)
     return stats
 
-async def nuke_guild(guild):
-    """Deletes ALL roles, categories, and channels in the guild to start completely fresh."""
-    stats = {"roles": 0, "categories": 0, "channels": 0}
-    logger.info(f"Starting TOTAL NUKE for guild {guild.name} ({guild.id})...")
-
-    clean_channel = None
-    try:
-        clean_channel = await guild.create_text_channel(
-            name="💥-server-nuked",
-            topic="Server wiped clean by Gemini Bot. Ready for /setup!",
-            reason="Gemini Bot Complete Nuke"
-        )
-    except Exception as e:
-        logger.error(f"Could not create clean channel during nuke: {e}")
-
-    # 1. Delete all channels and categories (except clean_channel)
-    for channel in list(guild.channels):
-        if clean_channel and channel.id == clean_channel.id:
-            continue
-        try:
-            await channel.delete(reason="Gemini Bot Complete Nuke")
-            if isinstance(channel, discord.CategoryChannel):
-                stats["categories"] += 1
-            else:
-                stats["channels"] += 1
-            await asyncio.sleep(0.2)  # Avoid rate limiting
-        except Exception as e:
-            logger.warning(f"Could not delete channel/category {channel.name}: {e}")
-
-    # 2. Delete all roles (except default, managed, and higher than bot)
-    for role in list(guild.roles):
-        if role == guild.default_role or role.managed:
-            continue
-        if guild.me.top_role <= role:
-            continue
-        try:
-            await role.delete(reason="Gemini Bot Complete Nuke")
-            stats["roles"] += 1
-            await asyncio.sleep(0.2)  # Avoid rate limiting
-        except Exception as e:
-            logger.warning(f"Could not delete role {role.name}: {e}")
-
-    await db.clear_resources(guild.id)
-    return stats, clean_channel
-
 # ── Interactive UI Views ───────────────────────────────────────────────────
 
 class SetupConfirmView(discord.ui.View):
@@ -1353,50 +1308,6 @@ class TeardownConfirmView(discord.ui.View):
         for b in self.children:
             b.disabled = True
         await interaction.response.edit_message(content="🚫 **Teardown cancelled.**", embed=None, view=self)
-        self.stop()
-
-
-class NukeConfirmView(discord.ui.View):
-    def __init__(self, author, guild):
-        super().__init__(timeout=60.0)
-        self.author = author
-        self.guild = guild
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author.id:
-            await interaction.response.send_message("❌ Only the command author can perform server nuke.", ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label="💥 YES, NUKE ENTIRE SERVER", style=discord.ButtonStyle.danger, emoji="⚠️")
-    async def nuke_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.guild.owner_id:
-            await interaction.response.send_message("❌ This action is restricted to the Server Owner only.", ephemeral=True)
-            return
-
-        for b in self.children:
-            b.disabled = True
-        await interaction.response.edit_message(content="💥 **NUKING ENTIRE SERVER... Deleting all channels, categories, and roles!**", embed=None, view=self)
-
-        
-        stats, clean_channel = await nuke_guild(self.guild)
-        
-        embed = discord.Embed(title="💥 Server Completely Nuked", description="All old channels, categories, and roles have been wiped clean!", color=discord.Color.red())
-        embed.add_field(name="Channels Deleted", value=str(stats['channels']), inline=True)
-        embed.add_field(name="Categories Deleted", value=str(stats['categories']), inline=True)
-        embed.add_field(name="Roles Deleted", value=str(stats['roles']), inline=True)
-        embed.add_field(name="Next Step", value="Use `/setup` or select a preset theme to build your new layout on a clean slate!", inline=False)
-        embed.set_footer(text="Powered by AI")
-        
-        if clean_channel:
-            await clean_channel.send(embed=embed)
-        self.stop()
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
-    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        for b in self.children:
-            b.disabled = True
-        await interaction.response.edit_message(content="🚫 **Server nuke cancelled.**", embed=None, view=self)
         self.stop()
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -1757,7 +1668,7 @@ async def help_command(interaction: discord.Interaction):
         description="An all-in-one AI Architect, Auto-Mod, and Community Restorer Bot powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
-    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items\n• `/nuke` — **DANGER:** Wipe entire server clean", inline=False)
+    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
@@ -2595,24 +2506,7 @@ async def teardown_command(interaction: discord.Interaction):
         color=discord.Color.orange()
     )
     view = TeardownConfirmView(interaction.user, interaction.guild)
-    await interaction.response.send_message(embed=embed, view=view)
 
-
-@bot.tree.command(name="nuke", description="⚠️ COMPLETE SERVER NUKE — Wipes all channels, categories, and roles")
-@app_commands.default_permissions(administrator=True)
-@app_commands.guild_only()
-async def nuke_command(interaction: discord.Interaction):
-    if interaction.user.id != interaction.guild.owner_id:
-        await interaction.response.send_message("❌ This command is restricted to the Server Owner only.", ephemeral=True)
-        return
-
-    embed = discord.Embed(
-        title="⚠️ DANGER: COMPLETE SERVER NUKE ⚠️",
-        description="Are you sure you want to delete **EVERY SINGLE CHANNEL, CATEGORY, AND ROLE** in this entire server?\n\nThis will wipe all existing rooms and create a fresh `#💥-server-nuked` channel so you can run `/setup` on a clean slate.\n\n**THIS CANNOT BE UNDONE!**",
-        color=discord.Color.red()
-    )
-    view = NukeConfirmView(interaction.user, interaction.guild)
-    await interaction.response.send_message(embed=embed, view=view)
 
 
 
