@@ -1,0 +1,11 @@
+{
+  "fc_mobile_channel_id": null,
+  "esports_channel_id": null,
+  "scores_channel_id": null,
+  "football_data_api_key": null,
+  "pandascore_api_key": null,
+  "check_interval_minutes": 30,
+  "leagues": ["PD", "SA", "BL1", "FL1"],
+  "posted_news_ids": [],
+  "posted_match_ids": []
+}
