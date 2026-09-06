@@ -5,13 +5,15 @@ SPACEYT BASKETBALL DEBATES & ENGAGEMENT COG
 Features:
 1. Daily & on-demand spicy NBA/Basketball debates & hot takes
 2. Interactive real-time voting buttons with dynamic multi-option support (2, 3, or 4 players)
-3. Live percentage bars for all choices
-4. "Start, Bench, Cut" challenges
-5. Automated debate threads to drive server chat and retention
-6. Slash commands + instant prefix commands
+3. Bulletproof persistent interaction listener (buttons NEVER fail across bot restarts)
+4. Live percentage bars for all choices
+5. "Start, Bench, Cut" challenges
+6. Automated debate threads to drive server chat and retention
+7. Slash commands + instant prefix commands
 """
 
 import os
+import re
 import json
 import random
 import logging
@@ -47,7 +49,8 @@ DEFAULT_CONFIG = {
     "post_interval_hours": 12,
     "auto_create_thread": True,
     "mention_everyone": False,
-    "history": []
+    "history": [],
+    "user_votes": {}  # message_id -> {user_id: option_idx}
 }
 
 def load_config() -> Dict[str, Any]:
@@ -74,7 +77,7 @@ def save_config(cfg: Dict[str, Any]) -> None:
 # ── Curated Bank of High-Engagement Basketball Debates ────────────────────────
 
 DEBATES_BANK: List[Dict[str, Any]] = [
-    # ── 3-Way Clutch Showdown (Fixed with all 3 players) ──
+    # ── 3-Way Clutch Showdown ──
     {
         "id": "clutch_final_shot_3way",
         "category": "🎯 CLUTCH GENE",
@@ -156,6 +159,38 @@ DEBATES_BANK: List[Dict[str, Any]] = [
         "hot_take": "Jokic's offensive genius vs Giannis's two-way dominance — who do you choose?"
     },
     {
+        "id": "pure_shooter_3way",
+        "category": "🎯 GREATEST SNIPERS",
+        "title": "Best Pure Shooter: Steph Curry, Klay Thompson, or Ray Allen?",
+        "description": "Game on the line, catch-and-shoot 3-pointer with a hand in their face.\n\n**Steph Curry:** Off-the-dribble god, limitless range.\n**Klay Thompson:** Fastest release in history, 37 pts in a quarter.\n**Ray Allen:** Picture-perfect mechanics, iconic Game 6 miracle.\n\nWho has the purest jumper?",
+        "options": ["👨‍🍳 Steph Curry", "🎯 Klay Thompson", "☄️ Ray Allen"],
+        "hot_take": "Steph has the range, but in a stationary catch-and-shoot contest, who wins?"
+    },
+    {
+        "id": "greatest_dunker_3way",
+        "category": "✈️ IN-GAME DUNK KINGS",
+        "title": "Greatest In-Game Dunker: Vince Carter, Michael Jordan, or LeBron James?",
+        "description": "Driving down the lane with a 7-footer waiting at the rim.\n\n**Vince Carter:** Dunk of Death over 7'2\" Weis, unmatched bounce and creativity.\n**Michael Jordan:** Free throw line liftoff, suspended in mid-air.\n**LeBron James:** Unstoppable freight train posterizing everyone for 20 straight years.\n\nWho is the true King of the Dunk?",
+        "options": ["✈️ Vince Carter", "🐐 Michael Jordan", "👑 LeBron James"],
+        "hot_take": "Can anyone top Vince Carter's 2000 Dunk Contest and Olympic poster?"
+    },
+    {
+        "id": "derrick_rose_vs_kyrie_1v1",
+        "category": "⚔️ 1v1 TO 21",
+        "title": "1v1 to 21 (Make-it-Take-it): Prime D-Rose vs. Prime Kyrie Irving",
+        "description": "No double teams. Pure ISO basketball. Winners ball.\n\n**Prime Derrick Rose (2011 MVP):** Blinding first-step speed, violent change of direction, impossible acrobatics.\n**Prime Kyrie Irving:** The deepest scoring bag in history, both hands, unguardable handles and finishing.\n\nFirst to 21 wins. Who takes it?",
+        "options": ["🌹 Prime Derrick Rose", "🪄 Prime Kyrie Irving"],
+        "hot_take": "Kyrie has the better handles, but could he stay in front of 2011 MVP Rose?"
+    },
+    {
+        "id": "best_euro_alltime_3way",
+        "category": "🌍 BEST EUROPEAN PLAYER EVER",
+        "title": "Greatest European Player: Dirk Nowitzki, Giannis, or Nikola Jokić?",
+        "description": "Europe has taken over the NBA. Who ranks highest all-time when all is said and done?\n\n**Dirk Nowitzki:** 2011 legendary championship run beating LeBron/Wade/Bosh, one-legged fadeaway pioneer.\n**Giannis Antetokounmpo:** 2x MVP, DPOY, 50-point Finals closeout.\n**Nikola Jokić:** 3x MVP, Finals MVP, most complete offensive center in history.\n\nWho holds European basketball crown?",
+        "options": ["🇩🇪 Dirk Nowitzki", "🇬🇷 Giannis Antetokounmpo", "🇷🇸 Nikola Jokić"],
+        "hot_take": "Does Dirk's 2011 solo ring still hold more weight than Jokic's 3 MVPs?"
+    },
+    {
         "id": "three_point_revolution",
         "category": "📢 CONTROVERSIAL HOT TAKE",
         "title": "Has the 3-Point Era Ruined the NBA?",
@@ -221,31 +256,57 @@ SBC_CHALLENGES: List[Dict[str, Any]] = [
 
 # ── Helper: Dynamic Multi-Option Vote Tally Formatter ─────────────────────────
 
-def format_vote_tally(options: List[str], votes: Dict[int, int]) -> str:
+def format_vote_tally(options: List[str], counts: Dict[int, int]) -> str:
     """Dynamically calculates and formats live vote bars for 2, 3, or 4 options."""
-    total = len(votes)
+    total = sum(counts.values())
     lines = []
     for idx, opt_label in enumerate(options):
-        count = sum(1 for v in votes.values() if v == idx)
-        pct = int((count / total) * 100) if total > 0 else 0
+        cnt = counts.get(idx, 0)
+        pct = int((cnt / total) * 100) if total > 0 else 0
         filled = min(10, max(0, pct // 10))
         bar = "█" * filled + "░" * (10 - filled)
-        lines.append(f"**{opt_label}**\n`[{bar}]` **{pct}%** ({count} votes)")
+        lines.append(f"**{opt_label}**\n`[{bar}]` **{pct}%** ({cnt} votes)")
 
     lines.append(f"\n👥 *Total Votes Cast: `{total}`*")
     return "\n\n".join(lines)
 
+def parse_existing_tally(embed: discord.Embed, options: List[str]) -> Dict[int, int]:
+    """Parses existing vote counts from the embed text so votes are never lost on restart."""
+    counts = {i: 0 for i in range(len(options))}
+    if not embed or not embed.fields:
+        return counts
 
-# ── Interactive Voting View (Supports ANY Number of Options) ──────────────────
+    field_text = ""
+    for f in embed.fields:
+        if "Live Server Vote" in f.name:
+            field_text = f.value
+            break
+
+    if not field_text:
+        return counts
+
+    # Regex search for: **Option Name** ... (X votes)
+    for idx, opt in enumerate(options):
+        # Escape option text for regex matching
+        clean_opt = re.escape(opt)
+        pattern = rf"\*\*{clean_opt}\*\*.*?\((\d+)\s+votes\)"
+        match = re.search(pattern, field_text, re.DOTALL)
+        if match:
+            try:
+                counts[idx] = int(match.group(1))
+            except Exception:
+                pass
+    return counts
+
+
+# ── Interactive Voting View ───────────────────────────────────────────────────
 
 class DebateVoteView(discord.ui.View):
     def __init__(self, debate_data: Dict[str, Any]):
         super().__init__(timeout=None)  # Persistent view
         self.debate_data = debate_data
-        self.votes: Dict[int, int] = {}  # user_id -> option_index
         self.options = debate_data.get("options", ["Option A", "Option B"])
 
-        # Button styles cycling cleanly across options
         styles = [
             discord.ButtonStyle.primary,    # Blurple
             discord.ButtonStyle.success,    # Green
@@ -253,77 +314,25 @@ class DebateVoteView(discord.ui.View):
             discord.ButtonStyle.secondary   # Grey
         ]
 
-        # Add a vote button for EVERY option in the debate
+        # Row 0: Player option buttons (max 4)
         for idx, opt_label in enumerate(self.options):
             style = styles[idx % len(styles)]
             btn = discord.ui.Button(
                 label=opt_label[:80],
                 style=style,
-                custom_id=f"vote_{debate_data['id']}_{idx}"
+                custom_id=f"vote_{debate_data['id']}_{idx}",
+                row=0
             )
-            btn.callback = self.make_callback(idx)
             self.add_item(btn)
 
-        # Discuss in thread button
+        # Row 1: Dedicated discussion thread button
         thread_btn = discord.ui.Button(
             label="💬 Join Debate in Thread",
             style=discord.ButtonStyle.secondary,
-            custom_id=f"thread_{debate_data['id']}"
+            custom_id=f"thread_{debate_data['id']}",
+            row=1
         )
-        thread_btn.callback = self.thread_callback
         self.add_item(thread_btn)
-
-    def make_callback(self, option_index: int):
-        async def callback(interaction: discord.Interaction):
-            user_id = interaction.user.id
-            prev_vote = self.votes.get(user_id)
-            self.votes[user_id] = option_index
-            chosen_name = self.options[option_index]
-
-            # Recalculate dynamic vote tally across all options
-            tally_text = format_vote_tally(self.options, self.votes)
-
-            # Update embed fields
-            msg = interaction.message
-            if msg and msg.embeds:
-                embed = msg.embeds[0]
-                field_index = None
-                for i, f in enumerate(embed.fields):
-                    if "Live Server Vote" in f.name:
-                        field_index = i
-                        break
-
-                if field_index is not None:
-                    embed.set_field_at(field_index, name="📊 Live Server Vote Tally", value=tally_text, inline=False)
-                else:
-                    embed.add_field(name="📊 Live Server Vote Tally", value=tally_text, inline=False)
-
-                await msg.edit(embed=embed, view=self)
-
-            if prev_vote is not None and prev_vote != option_index:
-                await interaction.response.send_message(f"🔄 You switched your vote to **{chosen_name}**!", ephemeral=True)
-            else:
-                await interaction.response.send_message(f"✅ You voted for **{chosen_name}**! Join the thread to defend your take!", ephemeral=True)
-
-        return callback
-
-    async def thread_callback(self, interaction: discord.Interaction):
-        msg = interaction.message
-        if msg.thread:
-            await interaction.response.send_message(f"👉 Jump into the debate here: {msg.thread.mention}", ephemeral=True)
-            return
-
-        try:
-            thread_name = f"🏀・{self.debate_data.get('title', 'Basketball Debate')[:80]}"
-            thread = await msg.create_thread(name=thread_name, auto_archive_duration=1440)
-            await thread.send(
-                f"🔥 **Welcome to the SpaceYT Basketball Debate Floor!**\n\n"
-                f"> **Today's Topic:** {self.debate_data.get('title')}\n"
-                f"Drop your takes, back up your player, and trash talk respectfully! Tag `@Sweety` if you want AI analysis."
-            )
-            await interaction.response.send_message(f"🚀 Thread created! Join here: {thread.mention}", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Could not create thread: {e}", ephemeral=True)
 
 
 # ── Main Cog Implementation ───────────────────────────────────────────────────
@@ -340,6 +349,117 @@ class BasketballDebates(commands.Cog):
     def cog_unload(self):
         self.daily_debate_loop.cancel()
         logger.info("BasketballDebates Cog unloaded and loop cancelled.")
+
+    # ── Bulletproof Persistent Interaction Listener ───────────────────────────
+    # Catches all button clicks even if the bot restarted or view is not in memory!
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if interaction.type != discord.InteractionType.component:
+            return
+
+        custom_id = interaction.data.get("custom_id", "")
+        if not (custom_id.startswith("vote_") or custom_id.startswith("thread_")):
+            return
+
+        # 1. Handle Thread Button Click
+        if custom_id.startswith("thread_"):
+            msg = interaction.message
+            if not msg:
+                await interaction.response.send_message("❌ Message not found.", ephemeral=True)
+                return
+
+            if msg.thread:
+                await interaction.response.send_message(f"👉 Jump into the debate here: {msg.thread.mention}", ephemeral=True)
+                return
+
+            try:
+                topic_title = msg.embeds[0].title if msg.embeds else "Basketball Debate"
+                thread = await msg.create_thread(name=topic_title[:80], auto_archive_duration=1440)
+                await thread.send(
+                    f"🔥 **SpaceYT Debate Floor is OPEN!**\n"
+                    f"Drop your takes, back up your player, and trash talk respectfully! Tag `@Sweety` if you want AI analysis."
+                )
+                await interaction.response.send_message(f"🚀 Thread created! Join here: {thread.mention}", ephemeral=True)
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Could not create thread: {e}", ephemeral=True)
+            return
+
+        # 2. Handle Vote Button Click
+        if custom_id.startswith("vote_"):
+            msg = interaction.message
+            if not msg or not msg.embeds:
+                await interaction.response.send_message("❌ Cannot record vote on this message.", ephemeral=True)
+                return
+
+            parts = custom_id.split("_")
+            try:
+                selected_idx = int(parts[-1])
+            except ValueError:
+                await interaction.response.send_message("❌ Invalid vote action.", ephemeral=True)
+                return
+
+            embed = msg.embeds[0]
+
+            # Extract option names from message buttons
+            options = []
+            if msg.components:
+                for row in msg.components:
+                    for comp in row.children:
+                        if comp.custom_id and comp.custom_id.startswith("vote_"):
+                            options.append(comp.label)
+
+            if not options or selected_idx >= len(options):
+                await interaction.response.send_message("❌ Option index out of range.", ephemeral=True)
+                return
+
+            chosen_player = options[selected_idx]
+            msg_id_str = str(msg.id)
+            user_id_str = str(interaction.user.id)
+
+            # Check persistent memory of user votes
+            user_votes = self.config.setdefault("user_votes", {}).setdefault(msg_id_str, {})
+            prev_vote_idx = user_votes.get(user_id_str)
+
+            # Parse existing tally from embed
+            counts = parse_existing_tally(embed, options)
+
+            # If user already voted for this exact option, no change needed
+            if prev_vote_idx == selected_idx:
+                await interaction.response.send_message(f"✅ You already voted for **{chosen_player}**!", ephemeral=True)
+                return
+
+            # If user changed their vote, decrement previous option
+            if prev_vote_idx is not None and prev_vote_idx < len(options):
+                counts[prev_vote_idx] = max(0, counts.get(prev_vote_idx, 1) - 1)
+
+            # Increment selected option
+            counts[selected_idx] = counts.get(selected_idx, 0) + 1
+            user_votes[user_id_str] = selected_idx
+            save_config(self.config)
+
+            # Update embed with new tally
+            new_tally_text = format_vote_tally(options, counts)
+
+            field_index = None
+            for i, f in enumerate(embed.fields):
+                if "Live Server Vote" in f.name:
+                    field_index = i
+                    break
+
+            if field_index is not None:
+                embed.set_field_at(field_index, name="📊 Live Server Vote Tally", value=new_tally_text, inline=False)
+            else:
+                embed.add_field(name="📊 Live Server Vote Tally", value=new_tally_text, inline=False)
+
+            try:
+                await msg.edit(embed=embed)
+            except Exception as edit_err:
+                logger.error(f"Failed to edit vote embed: {edit_err}")
+
+            if prev_vote_idx is not None:
+                await interaction.response.send_message(f"🔄 Switched your vote to **{chosen_player}**!", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"✅ Voted for **{chosen_player}**! Join the thread to defend your take!", ephemeral=True)
 
     def build_debate_embed(self, debate: Dict[str, Any]) -> discord.Embed:
         embed = discord.Embed(
@@ -388,7 +508,6 @@ class BasketballDebates(commands.Cog):
         embed = self.build_debate_embed(debate)
         view = DebateVoteView(debate)
 
-        # Notice: removed the @everyone mass ping by default
         header_text = "📢 **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
         if self.config.get("mention_everyone", False):
             header_text = f"@everyone {header_text}"
