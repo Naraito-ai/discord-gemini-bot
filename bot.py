@@ -1649,18 +1649,63 @@ bot = GeminiBot()
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    """Global handler for slash command errors to ensure the bot always responds."""
+    """Global handler for slash command errors to ensure the bot always responds gracefully."""
     cmd_name = interaction.command.name if interaction.command else "command"
     logger.error(f"Error in /{cmd_name}: {error}")
     
-    msg = f"❌ An error occurred while executing `/{cmd_name}`: {error}"
+    if isinstance(error, app_commands.CommandOnCooldown):
+        msg = f"⏳ This command is on cooldown. Try again in `{error.retry_after:.1f}s`."
+    elif isinstance(error, app_commands.MissingPermissions):
+        perms = ", ".join(f"`{p}`" for p in error.missing_permissions)
+        msg = f"🚫 You lack the required permissions to run `/{cmd_name}`: {perms}"
+    elif isinstance(error, app_commands.BotMissingPermissions):
+        perms = ", ".join(f"`{p}`" for p in error.missing_permissions)
+        msg = f"⚠️ I lack the required permissions to execute `/{cmd_name}`: {perms}"
+    elif isinstance(error, app_commands.CheckFailure):
+        msg = f"🚫 You do not have permission or meet the requirements to run `/{cmd_name}`."
+    else:
+        msg = f"❌ An error occurred while executing `/{cmd_name}`: {error}"
+
     try:
         if interaction.response.is_done():
             await interaction.followup.send(msg, ephemeral=True)
         else:
             await interaction.response.send_message(msg, ephemeral=True)
     except Exception as resp_err:
-        logger.error(f"Failed to send error response to user: {resp_err}")
+        logger.error(f"Failed to send slash error response to user: {resp_err}")
+
+
+@bot.event
+async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+    """Global handler for prefix command errors (e.g. !help, !debate)."""
+    # Ignore commands that don't exist to prevent bot spam
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    cmd_name = ctx.command.name if ctx.command else "command"
+    logger.error(f"Prefix error in !{cmd_name}: {error}")
+
+    if isinstance(error, commands.CommandOnCooldown):
+        msg = f"⏳ Command `!{cmd_name}` is on cooldown. Try again in `{error.retry_after:.1f}s`."
+    elif isinstance(error, commands.MissingPermissions):
+        perms = ", ".join(f"`{p}`" for p in error.missing_permissions)
+        msg = f"🚫 You lack required permissions to run `!{cmd_name}`: {perms}"
+    elif isinstance(error, commands.BotMissingPermissions):
+        perms = ", ".join(f"`{p}`" for p in error.missing_permissions)
+        msg = f"⚠️ I lack required permissions to execute `!{cmd_name}`: {perms}"
+    elif isinstance(error, commands.MissingRequiredArgument):
+        msg = f"❌ Missing required argument `{error.param.name}` for `!{cmd_name}`."
+    elif isinstance(error, commands.BadArgument):
+        msg = f"❌ Invalid argument provided for `!{cmd_name}`: {error}"
+    elif isinstance(error, commands.CheckFailure):
+        msg = f"🚫 You do not meet the permission requirements to run `!{cmd_name}`."
+    else:
+        msg = f"❌ An error occurred while executing `!{cmd_name}`."
+
+    try:
+        await ctx.reply(msg, mention_author=False)
+    except Exception as send_err:
+        logger.error(f"Failed to send prefix command error: {send_err}")
 
 
 

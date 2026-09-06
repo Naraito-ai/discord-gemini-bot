@@ -25,6 +25,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from database import db
+
 # ── Directory & Logger Setup ──────────────────────────────────────────────────
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "debates_config.json")
@@ -421,8 +423,15 @@ class BasketballDebates(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.config = load_config()
+        self._msg_locks: Dict[int, asyncio.Lock] = {}
         self.daily_debate_loop.start()
         logger.info("BasketballDebates Cog initialized and automated loop started.")
+
+    def get_msg_lock(self, msg_id: int) -> asyncio.Lock:
+        """Retrieves or creates an asyncio.Lock per debate message to serialize concurrent votes."""
+        if msg_id not in self._msg_locks:
+            self._msg_locks[msg_id] = asyncio.Lock()
+        return self._msg_locks[msg_id]
 
     def cog_unload(self):
         self.daily_debate_loop.cancel()
@@ -458,6 +467,26 @@ class BasketballDebates(commands.Cog):
                     f"Drop your takes, back up your player, and trash talk respectfully! Tag `@Sweety` if you want AI analysis."
                 )
                 await interaction.response.send_message(f"🚀 Thread created! Join here: {thread.mention}", ephemeral=True)
+            except discord.HTTPException as e:
+                # Code 160004: Thread already exists for this message
+                if e.code == 160004 or "already" in str(e).lower():
+                    existing_thread = None
+                    if interaction.guild:
+                        for th in interaction.guild.threads:
+                            if th.id == msg.id:
+                                existing_thread = th
+                                break
+                    if not existing_thread and hasattr(msg.channel, "threads"):
+                        for th in msg.channel.threads:
+                            if th.id == msg.id:
+                                existing_thread = th
+                                break
+                    if existing_thread:
+                        await interaction.response.send_message(f"👉 Jump into the debate here: {existing_thread.mention}", ephemeral=True)
+                        return
+                    await interaction.response.send_message("👉 A thread already exists for this debate! Check the message thread.", ephemeral=True)
+                    return
+                await interaction.response.send_message(f"❌ Could not create thread: {e}", ephemeral=True)
             except Exception as e:
                 await interaction.response.send_message(f"❌ Could not create thread: {e}", ephemeral=True)
             return
@@ -491,53 +520,73 @@ class BasketballDebates(commands.Cog):
                 return
 
             chosen_player = options[selected_idx]
-            msg_id_str = str(msg.id)
-            user_id_str = str(interaction.user.id)
+            msg_id = msg.id
+            user_id = interaction.user.id
+            msg_id_str = str(msg_id)
+            user_id_str = str(user_id)
 
-            # Check persistent memory of user votes
-            user_votes = self.config.setdefault("user_votes", {}).setdefault(msg_id_str, {})
-            prev_vote_idx = user_votes.get(user_id_str)
+            async with self.get_msg_lock(msg_id):
+                # 1. Check & Record in Persistent Database
+                prev_vote_idx = None
+                vote_recorded = False
+                try:
+                    is_new, prev_idx = await db.record_debate_vote(msg_id, user_id, selected_idx, chosen_player)
+                    vote_recorded = True
+                    prev_vote_idx = prev_idx
+                    if not is_new and prev_vote_idx == selected_idx:
+                        await interaction.response.send_message(f"✅ You already voted for **{chosen_player}**!", ephemeral=True)
+                        return
+                except Exception as db_err:
+                    logger.warning(f"Database vote recording fallback: {db_err}")
 
-            # Parse existing tally from embed
-            counts = parse_existing_tally(embed, options)
+                # 2. Keep in-memory config in sync for redundancy
+                user_votes = self.config.setdefault("user_votes", {}).setdefault(msg_id_str, {})
+                if not vote_recorded:
+                    prev_vote_idx = user_votes.get(user_id_str)
+                    if prev_vote_idx == selected_idx:
+                        await interaction.response.send_message(f"✅ You already voted for **{chosen_player}**!", ephemeral=True)
+                        return
+                user_votes[user_id_str] = selected_idx
+                save_config(self.config)
 
-            # If user already voted for this exact option, no change needed
-            if prev_vote_idx == selected_idx:
-                await interaction.response.send_message(f"✅ You already voted for **{chosen_player}**!", ephemeral=True)
-                return
+                # 3. Calculate new tally (prefer DB aggregation, fallback to embed parsing)
+                counts = {}
+                try:
+                    db_tallies = await db.get_debate_tallies(msg_id)
+                    if db_tallies:
+                        counts = {i: db_tallies.get(i, 0) for i in range(len(options))}
+                except Exception as db_err:
+                    logger.warning(f"Failed to fetch db tallies: {db_err}")
 
-            # If user changed their vote, decrement previous option
-            if prev_vote_idx is not None and prev_vote_idx < len(options):
-                counts[prev_vote_idx] = max(0, counts.get(prev_vote_idx, 1) - 1)
+                if not counts:
+                    counts = parse_existing_tally(embed, options)
+                    if prev_vote_idx is not None and prev_vote_idx < len(options):
+                        counts[prev_vote_idx] = max(0, counts.get(prev_vote_idx, 1) - 1)
+                    counts[selected_idx] = counts.get(selected_idx, 0) + 1
 
-            # Increment selected option
-            counts[selected_idx] = counts.get(selected_idx, 0) + 1
-            user_votes[user_id_str] = selected_idx
-            save_config(self.config)
+                # Update embed with new tally
+                new_tally_text = format_vote_tally(options, counts)
 
-            # Update embed with new tally
-            new_tally_text = format_vote_tally(options, counts)
+                field_index = None
+                for i, f in enumerate(embed.fields):
+                    if "Live Server Vote" in f.name:
+                        field_index = i
+                        break
 
-            field_index = None
-            for i, f in enumerate(embed.fields):
-                if "Live Server Vote" in f.name:
-                    field_index = i
-                    break
+                if field_index is not None:
+                    embed.set_field_at(field_index, name="📊 Live Server Vote Tally", value=new_tally_text, inline=False)
+                else:
+                    embed.add_field(name="📊 Live Server Vote Tally", value=new_tally_text, inline=False)
 
-            if field_index is not None:
-                embed.set_field_at(field_index, name="📊 Live Server Vote Tally", value=new_tally_text, inline=False)
-            else:
-                embed.add_field(name="📊 Live Server Vote Tally", value=new_tally_text, inline=False)
+                try:
+                    await msg.edit(embed=embed)
+                except Exception as edit_err:
+                    logger.error(f"Failed to edit vote embed: {edit_err}")
 
-            try:
-                await msg.edit(embed=embed)
-            except Exception as edit_err:
-                logger.error(f"Failed to edit vote embed: {edit_err}")
-
-            if prev_vote_idx is not None:
-                await interaction.response.send_message(f"🔄 Switched your vote to **{chosen_player}**!", ephemeral=True)
-            else:
-                await interaction.response.send_message(f"✅ Voted for **{chosen_player}**! Join the thread to defend your take!", ephemeral=True)
+                if prev_vote_idx is not None:
+                    await interaction.response.send_message(f"🔄 Switched your vote to **{chosen_player}**!", ephemeral=True)
+                else:
+                    await interaction.response.send_message(f"✅ Voted for **{chosen_player}**! Join the thread to defend your take!", ephemeral=True)
 
     def build_debate_embed(self, debate: Dict[str, Any]) -> discord.Embed:
         embed = discord.Embed(

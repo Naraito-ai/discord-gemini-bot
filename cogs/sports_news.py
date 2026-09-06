@@ -94,6 +94,15 @@ def load_config() -> dict:
             for k, v in DEFAULT_CONFIG.items():
                 if k not in data:
                     data[k] = v
+            # Fallback to environment variables if not configured in JSON
+            if not data.get("football_data_api_key"):
+                env_fb = os.getenv("FOOTBALL_DATA_API_KEY")
+                if env_fb:
+                    data["football_data_api_key"] = env_fb
+            if not data.get("pandascore_api_key"):
+                env_ps = os.getenv("PANDASCORE_API_KEY")
+                if env_ps:
+                    data["pandascore_api_key"] = env_ps
             return data
     except Exception as e:
         sports_logger.error(f"Failed to load sports config: {e}")

@@ -24,3 +24,5 @@ build/
 *.db-shm
 *.db-wal
 
+# Logs
+logs/
