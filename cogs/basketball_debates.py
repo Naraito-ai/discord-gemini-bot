@@ -85,8 +85,26 @@ DEBATES_BANK: List[Dict[str, Any]] = [
         "id": "clutch_final_shot_3way",
         "category": "🎯 CLUTCH GENE",
         "title": "Down 1 with 5 seconds left: Kobe, Jordan, or Dame?",
-        "description": "Final possession of Game 7 of the NBA Finals. Down by 1 point. Ball is inbounded with 5.0 seconds left on the clock.\n\nWho are you giving the final shot to win the championship?",
+        "description": "Final possession of Game 7 of the NBA Finals. Down by 1 point. Ball is inbounded with 5.0 seconds left on the clock.",
+        "situation": [
+            "Game 7 — NBA Finals",
+            "Down by 1 Point",
+            "5.0 Seconds Left on the Clock",
+            "No Timeouts Remaining"
+        ],
+        "decision_prompt": "Who are you trusting with the final shot to win the championship?",
+        "clutch_facts": [
+            "**Dame:** Only player in NBA history with two series-ending buzzer-beaters (2014 vs HOU, 2019 vs OKC)",
+            "**Jordan:** 9 career game-winning buzzer-beaters (most in NBA history; 3 in playoffs)",
+            "**Kobe:** 8 career game-winning buzzer-beaters (tied 2nd all-time; legendary 2006 vs Suns)"
+        ],
         "options": ["🐍 Kobe Bryant", "🐐 Michael Jordan", "⌚ Damian Lillard"],
+        "button_labels": [
+            "🐍 Kobe (Contested Fadeaway)",
+            "🐐 Jordan (Mid-Range Pullup)",
+            "⌚ Dame (35ft Logo Triple)"
+        ],
+        "thread_hook": "Dame has a historic edge on extreme-distance buzzer-beaters, but Jordan is 6-0 in the Finals. Did you actually factor this 5-second situation into your vote, or are you just glazing? 👀",
         "hot_take": "Dame has the longest buzzer-beaters in playoff history, but Jordan has 6 rings. Who gets the rock?"
     },
     {
@@ -94,31 +112,88 @@ DEBATES_BANK: List[Dict[str, Any]] = [
         "category": "🐐 GOAT DEBATE",
         "title": "Michael Jordan vs. LeBron James",
         "description": "The eternal basketball debate.\n\n**Michael Jordan:** 6x NBA Champion, 6x Finals MVP, 5x MVP, 10x Scoring Champ, DPOY, never lost a Finals series.\n**LeBron James:** 4x NBA Champion, 4x Finals MVP, 4x MVP, NBA All-Time Leading Scorer (40k+ pts), 20+ years of elite dominance.\n\nWho holds the basketball crown?",
+        "situation": [
+            "All-Time Peak vs All-Time Longevity",
+            "Jordan: 6-0 in Finals, 6 Finals MVPs",
+            "LeBron: 40,000+ Points, 21+ Years Elite"
+        ],
+        "decision_prompt": "Does LeBron's unmatched longevity beat Jordan's flawless peak?",
         "options": ["🐐 Michael Jordan", "👑 LeBron James"],
+        "button_labels": ["🐐 Jordan (6-0 Flawless Peak)", "👑 LeBron (20+ Yr Longevity)"],
+        "thread_hook": "Jordan never let a Finals series reach Game 7, but LeBron has dominated 3 different decades. Are you voting based on peak dominance or career body of work? 👀",
         "hot_take": "Does LeBron's unmatched longevity beat Jordan's flawless peak?"
     },
     {
-        "id": "kobe_vs_curry",
-        "category": "🏆 LEGACY SHOWDOWN",
-        "title": "Kobe Bryant vs. Stephen Curry",
-        "description": "Two players who changed how the entire world plays basketball.\n\n**Kobe Bryant:** 5x Champion, 2x Finals MVP, 18x All-Star, 81-point game, Black Mamba mentality & elite two-way defense.\n**Stephen Curry:** 4x Champion, Finals MVP, 2x MVP (only unanimous MVP in history), greatest shooter ever who transformed modern offense.\n\nWho had the greater all-time career and legacy?",
-        "options": ["🐍 Kobe Bryant", "🎯 Stephen Curry"],
-        "hot_take": "Curry changed the game, but Kobe inspired the mindset. Who do you rank higher?"
+        "id": "pure_shooter_3way",
+        "category": "🎯 GREATEST SNIPERS",
+        "title": "Best Pure Shooter: Steph Curry, Klay Thompson, or Ray Allen?",
+        "description": "Game on the line, catch-and-shoot 3-pointer with a hand in their face.",
+        "situation": [
+            "Down 3 Points",
+            "1.5 Seconds Remaining",
+            "Out-of-Bounds Catch & Shoot"
+        ],
+        "decision_prompt": "1 shot to save your season. Who shoots it?",
+        "clutch_facts": [
+            "**Steph:** NBA all-time 3-point leader (3,700+ 3PM; career 42.6% 3PT)",
+            "**Klay:** Scored 60 points on only 11 dribbles; 37 pts in a single quarter",
+            "**Ray Allen:** Hit the greatest clutch corner 3-pointer in Finals history (2013 Game 6)"
+        ],
+        "options": ["👨‍🍳 Steph Curry", "🎯 Klay Thompson", "☄️ Ray Allen"],
+        "button_labels": [
+            "👨‍🍳 Steph (Limitless Range)",
+            "🎯 Klay (0.4s Lightning Release)",
+            "☄️ Ray Allen (Corner Miracle)"
+        ],
+        "thread_hook": "Steph is the GOAT shooter, but with 1.5s on a stationary catch-and-shoot, Klay and Ray have faster shooting motions. Did you actually factor that in? 👀",
+        "hot_take": "Steph has the range, but in a stationary catch-and-shoot contest, who wins?"
     },
     {
-        "id": "pg_goat",
-        "category": "⚡ BEST POINT GUARD EVER",
-        "title": "Magic Johnson vs. Stephen Curry",
-        "description": "The battle for Point Guard supremacy:\n\n**Magic Johnson:** 5x Champion, 3x MVP, 3x Finals MVP, 6'9\" Showtime passing wizard and playmaker.\n**Stephen Curry:** 4x Champion, 2x MVP, revolutionized basketball spacing and shooting range forever.\n\nWho takes the starting PG spot on your All-Time team?",
-        "options": ["🪄 Magic Johnson", "👨‍🍳 Stephen Curry"],
-        "hot_take": "Can Steph's revolutionary shooting dethrone Magic's 5 rings and unmatched playmaking?"
+        "id": "derrick_rose_vs_kyrie_1v1",
+        "category": "⚔️ 1v1 TO 21",
+        "title": "1v1 to 21 (Make-it-Take-it): Prime D-Rose vs. Prime Kyrie Irving",
+        "description": "No double teams. Pure ISO basketball. Winners ball.",
+        "situation": [
+            "1v1 to 21 (Make-it-Take-it)",
+            "Both in Absolute Prime Athletic Peak",
+            "No Double Teams • Pure ISO",
+            "Call Your Own Fouls"
+        ],
+        "decision_prompt": "First to 21 points wins. Who takes it?",
+        "clutch_facts": [
+            "**D-Rose:** Youngest MVP in NBA history (age 22) with a 40-inch vertical and unstoppable change of direction",
+            "**Kyrie:** Considered by NBA players to possess the most complete ball-handling and finishing bag in history"
+        ],
+        "options": ["🌹 Prime Derrick Rose", "🪄 Prime Kyrie Irving"],
+        "button_labels": [
+            "🌹 D-Rose (Violent Speed & Bounce)",
+            "🪄 Kyrie (Deepest Scoring Bag)"
+        ],
+        "thread_hook": "Kyrie has the slickest handles in history, but could he stay in front of 2011 MVP Derrick Rose in an open-court ISO? Drop your take below! 👀",
+        "hot_take": "Kyrie has the better handles, but could he stay in front of 2011 MVP Rose?"
     },
     {
         "id": "prime_center_beast",
         "category": "🧱 PAINT DOMINANCE",
         "title": "Prime Shaquille O'Neal vs. Prime Hakeem Olajuwon",
         "description": "Game 7, NBA Finals, both players in their absolute physical primes.\n\n**Shaq (2000 MVP):** The most unstoppable, overpowering physical force in NBA history.\n**Hakeem (1994 MVP + DPOY):** The Dream Shake, all-time blocks leader, impossible footwork.\n\nWho dominates the paint and wins you the chip?",
+        "situation": [
+            "Game 7 — NBA Finals",
+            "Final 2 Minutes, Tied Game",
+            "Both at 100% Peak Stamina",
+            "Interior Paint Battle Only"
+        ],
+        "decision_prompt": "Who dominates the paint and wins you the chip?",
+        "clutch_facts": [
+            "**Shaq:** Averaged 38.0 PPG & 16.7 RPG in the 2000 NBA Finals",
+            "**Hakeem:** NBA all-time blocks leader (3,830 blocks) & only player with 200+ blocks and 200+ steals in a season"
+        ],
         "options": ["🦍 Prime Shaq", "💫 Prime Hakeem"],
+        "button_labels": [
+            "🦍 Shaq (Brute Force Bully Ball)",
+            "💫 Hakeem (The Dream Shake & Rim D)"
+        ],
+        "thread_hook": "Shaq is the most physically overpowering player ever, but Hakeem swept him in '95 with legendary footwork. Who actually wins in their prime? 👀",
         "hot_take": "Shaq swept Hakeem later, but Hakeem swept Shaq in '95. Who takes the crown?"
     },
     {
@@ -308,7 +383,7 @@ class DebateVoteView(discord.ui.View):
     def __init__(self, debate_data: Dict[str, Any]):
         super().__init__(timeout=None)  # Persistent view
         self.debate_data = debate_data
-        self.options = debate_data.get("options", ["Option A", "Option B"])
+        self.options = debate_data.get("button_labels") or debate_data.get("options", ["Option A", "Option B"])
 
         styles = [
             discord.ButtonStyle.primary,    # Blurple
@@ -467,7 +542,6 @@ class BasketballDebates(commands.Cog):
     def build_debate_embed(self, debate: Dict[str, Any]) -> discord.Embed:
         embed = discord.Embed(
             title=f"🏀 {debate.get('title', 'SpaceYT Basketball Debate')}",
-            description=f"{debate.get('description', '')}\n\n🔥 **Hot Take:** *{debate.get('hot_take', 'Drop your take below!')}*",
             color=discord.Color.from_rgb(255, 102, 0)  # Basketball Orange
         )
         embed.set_author(
@@ -475,9 +549,38 @@ class BasketballDebates(commands.Cog):
             icon_url="https://cdn-icons-png.flankfast.com/512/889/889508.png"
         )
         
-        # Build initial zero-vote tally dynamically for all options
+        desc_parts = []
+
+        # 1. High-Tension Scenario Box
+        situation = debate.get("situation")
+        if situation:
+            box_lines = ["━━━━━━━━━━━━━━━━━━━━━━━━━━", "🚨 **THE SITUATION**"]
+            for s in situation:
+                box_lines.append(f"• **{s}**")
+            box_lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            desc_parts.append("\n".join(box_lines))
+        elif debate.get("description"):
+            desc_parts.append(debate.get("description"))
+
+        # 2. Clutch Facts to Consider (verified only)
+        clutch_facts = debate.get("clutch_facts")
+        if clutch_facts:
+            facts_lines = ["\n📈 **CLUTCH FACTS TO CONSIDER**"]
+            for f in clutch_facts:
+                facts_lines.append(f"• {f}")
+            desc_parts.append("\n".join(facts_lines))
+
+        # 3. Decision Prompt / Hot Take
+        decision = debate.get("decision_prompt") or debate.get("hot_take")
+        if decision:
+            desc_parts.append(f"\n👉 **{decision}**")
+
+        embed.description = "\n".join(desc_parts)
+
+        # 4. Build initial zero-vote tally dynamically for all options/playstyles
+        display_opts = debate.get("button_labels") or debate.get("options", ["Option A", "Option B"])
         initial_lines = []
-        for opt in debate.get("options", ["Option A", "Option B"]):
+        for opt in display_opts:
             initial_lines.append(f"**{opt}**\n`[░░░░░░░░░░]` **0%** (0 votes)")
         initial_lines.append("👉 *Click a button below to cast your vote!*")
 
@@ -523,10 +626,16 @@ class BasketballDebates(commands.Cog):
                 try:
                     thread_name = f"🏀・{debate.get('title', 'Debate')[:85]}"
                     thread = await msg.create_thread(name=thread_name, auto_archive_duration=1440)
+                    
+                    # Scenario-relevant thread hook
+                    hook_text = debate.get("thread_hook")
+                    if not hook_text:
+                        hook_text = "The clock, score, spacing, and shot difficulty all matter here. Who actually fits THIS situation best? 👀"
+
                     await thread.send(
-                        f"🔥 **SpaceYT Debate Floor is OPEN!**\n"
-                        f"> **Topic:** {debate.get('title')}\n"
-                        f"> *\"{debate.get('hot_take')}\"*\n\n"
+                        f"🔥 **SpaceYT Debate Floor is OPEN!**\n\n"
+                        f"> 🧠 **Before you blindly vote for your favorite player:**\n"
+                        f"> *{hook_text}*\n\n"
                         f"Who's got the better argument? Drop your takes below! 🎤"
                     )
                 except Exception as t_err:
