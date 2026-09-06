@@ -44,12 +44,13 @@ if not logger.handlers:
     logger.addHandler(fh)
 
 DEFAULT_CONFIG = {
-    "channel_id": None,
+    "channel_id": "1546052564271894639",  # Permanently defaults to #🏀-ball-talk
     "auto_post_enabled": True,
     "post_interval_hours": 12,
     "auto_create_thread": True,
     "mention_everyone": True,
     "history": [],
+    "last_post_timestamp": 0,
     "user_votes": {}  # message_id -> {user_id: option_idx}
 }
 
@@ -62,6 +63,8 @@ def load_config() -> Dict[str, Any]:
             data = json.load(f)
             for k, v in DEFAULT_CONFIG.items():
                 data.setdefault(k, v)
+            if not data.get("channel_id"):
+                data["channel_id"] = "1546052564271894639"
             return data
     except Exception as e:
         logger.error(f"Failed to load debates config: {e}")
@@ -534,34 +537,52 @@ class BasketballDebates(commands.Cog):
             logger.error(f"Failed to post debate message: {e}")
             return None
 
-    # ── Background Task Loop (Every 12 Hours) ─────────────────────────────────
-
-    @tasks.loop(hours=12)
+    # ── Background Task Loop (Every 12 Hours with Persistent Timestamp) ────────
+    # Checks every 10 minutes against last_post_timestamp so container restarts never reset the timer!
+    @tasks.loop(minutes=10)
     async def daily_debate_loop(self):
         await self.bot.wait_until_ready()
         if not self.config.get("auto_post_enabled", True):
             return
 
-        channel_id = self.config.get("channel_id")
-        if not channel_id:
-            logger.info("Basketball debate channel not configured yet. Skipping scheduled post.")
+        interval_seconds = int(self.config.get("post_interval_hours", 12)) * 3600
+        now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+        last_post = float(self.config.get("last_post_timestamp", 0))
+
+        # If 12 hours have not passed yet, wait for the remaining time
+        if now - last_post < interval_seconds:
+            remaining_mins = int((interval_seconds - (now - last_post)) / 60)
             return
 
+        channel_id = self.config.get("channel_id") or "1546052564271894639"
         channel = self.bot.get_channel(int(channel_id))
         if not channel:
             try:
                 channel = await self.bot.fetch_channel(int(channel_id))
-            except Exception as e:
-                logger.warning(f"Failed to fetch debate channel {channel_id}: {e}")
-                return
+            except Exception:
+                # Fail-safe: search all guild channels for 'ball-talk'
+                for g in self.bot.guilds:
+                    for ch in g.text_channels:
+                        if "ball-talk" in ch.name.lower() or "ball_talk" in ch.name.lower():
+                            channel = ch
+                            break
+                    if channel:
+                        break
 
-        logger.info(f"Auto-posting scheduled basketball debate to #{channel.name}...")
-        await self.post_debate_message(channel)
+        if not channel:
+            logger.warning("Could not find #🏀-ball-talk channel to post scheduled debate.")
+            return
+
+        logger.info(f"Auto-posting scheduled 12-hour basketball debate to #{channel.name}...")
+        msg = await self.post_debate_message(channel)
+        if msg:
+            self.config["last_post_timestamp"] = now
+            save_config(self.config)
 
     @daily_debate_loop.before_loop
     async def before_daily_loop(self):
         await self.bot.wait_until_ready()
-        await asyncio.sleep(10)
+        await asyncio.sleep(15)
 
     # ── Slash & Prefix Commands ───────────────────────────────────────────────
 
