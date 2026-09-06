@@ -48,7 +48,7 @@ DEFAULT_CONFIG = {
     "auto_post_enabled": True,
     "post_interval_hours": 12,
     "auto_create_thread": True,
-    "mention_everyone": False,
+    "mention_everyone": True,
     "history": [],
     "user_votes": {}  # message_id -> {user_id: option_idx}
 }
@@ -508,9 +508,9 @@ class BasketballDebates(commands.Cog):
         embed = self.build_debate_embed(debate)
         view = DebateVoteView(debate)
 
-        header_text = "📢 **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
-        if self.config.get("mention_everyone", False):
-            header_text = f"@everyone {header_text}"
+        header_text = "📢 @everyone **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
+        if not self.config.get("mention_everyone", True):
+            header_text = "📢 **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
 
         try:
             msg = await channel.send(content=header_text, embed=embed, view=view)
