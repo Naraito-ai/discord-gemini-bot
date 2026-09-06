@@ -3,8 +3,10 @@
   "auto_post_enabled": true,
   "post_interval_hours": 12,
   "auto_create_thread": true,
-  "mention_everyone": true,
-  "history": [],
-  "last_post_timestamp": 0,
+  "mention_everyone": false,
+  "history": [
+    "franchise_trio_luka_sga_jt"
+  ],
+  "last_post_timestamp": 1788683000,
   "user_votes": {}
 }

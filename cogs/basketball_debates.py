@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
     "auto_post_enabled": True,
     "post_interval_hours": 12,
     "auto_create_thread": True,
-    "mention_everyone": True,
+    "mention_everyone": False,
     "history": [],
     "last_post_timestamp": 0,
     "user_votes": {}  # message_id -> {user_id: option_idx}
@@ -67,6 +67,7 @@ def load_config() -> Dict[str, Any]:
                 data.setdefault(k, v)
             if not data.get("channel_id"):
                 data["channel_id"] = "1546052564271894639"
+            data["mention_everyone"] = False
             return data
     except Exception as e:
         logger.error(f"Failed to load debates config: {e}")
@@ -663,12 +664,15 @@ class BasketballDebates(commands.Cog):
         embed = self.build_debate_embed(debate)
         view = DebateVoteView(debate)
 
-        header_text = "📢 @everyone **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
-        if not self.config.get("mention_everyone", True):
-            header_text = "📢 **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
+        header_text = "📢 **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
 
         try:
-            msg = await channel.send(content=header_text, embed=embed, view=view)
+            msg = await channel.send(
+                content=header_text,
+                embed=embed,
+                view=view,
+                allowed_mentions=discord.AllowedMentions.none()
+            )
 
             # Auto-create discussion thread if enabled
             if self.config.get("auto_create_thread", True):
@@ -707,11 +711,6 @@ class BasketballDebates(commands.Cog):
         now = datetime.datetime.now(datetime.timezone.utc).timestamp()
         last_post = float(self.config.get("last_post_timestamp", 0))
 
-        # If 12 hours have not passed yet, wait for the remaining time
-        if now - last_post < interval_seconds:
-            remaining_mins = int((interval_seconds - (now - last_post)) / 60)
-            return
-
         channel_id = self.config.get("channel_id") or "1546052564271894639"
         channel = self.bot.get_channel(int(channel_id))
         if not channel:
@@ -729,6 +728,26 @@ class BasketballDebates(commands.Cog):
 
         if not channel:
             logger.warning("Could not find #🏀-ball-talk channel to post scheduled debate.")
+            return
+
+        # If last_post is 0 or recent restart, inspect channel history so we NEVER double-post after deploy
+        if last_post <= 0:
+            try:
+                async for prev_msg in channel.history(limit=25):
+                    if prev_msg.author.id == self.bot.user.id and prev_msg.embeds:
+                        title = prev_msg.embeds[0].title or ""
+                        fields = [f.name for f in prev_msg.embeds[0].fields]
+                        if "Live Server Vote" in title or any("Live Server Vote" in fn for fn in fields):
+                            last_post = prev_msg.created_at.timestamp()
+                            self.config["last_post_timestamp"] = last_post
+                            save_config(self.config)
+                            break
+            except Exception as hist_err:
+                logger.warning(f"Could not inspect channel history for last debate: {hist_err}")
+
+        # If 12 hours have not passed yet, wait for the remaining time
+        if now - last_post < interval_seconds:
+            remaining_mins = int((interval_seconds - (now - last_post)) / 60)
             return
 
         logger.info(f"Auto-posting scheduled 12-hour basketball debate to #{channel.name}...")
