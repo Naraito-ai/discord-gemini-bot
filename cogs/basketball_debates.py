@@ -4,10 +4,10 @@ SPACEYT BASKETBALL DEBATES & ENGAGEMENT COG
 =======================================================
 Features:
 1. Daily & on-demand spicy NBA/Basketball debates & hot takes
-2. Interactive real-time voting buttons with live percentage bars
-3. "Start, Bench, Cut" challenges
-4. Automated debate threads to drive server chat and retention
-5. AI-powered debate generator fallback
+2. Interactive real-time voting buttons with dynamic multi-option support (2, 3, or 4 players)
+3. Live percentage bars for all choices
+4. "Start, Bench, Cut" challenges
+5. Automated debate threads to drive server chat and retention
 6. Slash commands + instant prefix commands
 """
 
@@ -46,6 +46,7 @@ DEFAULT_CONFIG = {
     "auto_post_enabled": True,
     "post_interval_hours": 12,
     "auto_create_thread": True,
+    "mention_everyone": False,
     "history": []
 }
 
@@ -73,7 +74,15 @@ def save_config(cfg: Dict[str, Any]) -> None:
 # ── Curated Bank of High-Engagement Basketball Debates ────────────────────────
 
 DEBATES_BANK: List[Dict[str, Any]] = [
-    # ── 1v1 / Head-to-Head Debates ──
+    # ── 3-Way Clutch Showdown (Fixed with all 3 players) ──
+    {
+        "id": "clutch_final_shot_3way",
+        "category": "🎯 CLUTCH GENE",
+        "title": "Down 1 with 5 seconds left: Kobe, Jordan, or Dame?",
+        "description": "Final possession of Game 7 of the NBA Finals. Down by 1 point. Ball is inbounded with 5.0 seconds left on the clock.\n\nWho are you giving the final shot to win the championship?",
+        "options": ["🐍 Kobe Bryant", "🐐 Michael Jordan", "⌚ Damian Lillard"],
+        "hot_take": "Dame has the longest buzzer-beaters in playoff history, but Jordan has 6 rings. Who gets the rock?"
+    },
     {
         "id": "goat_lj_mj",
         "category": "🐐 GOAT DEBATE",
@@ -107,14 +116,6 @@ DEBATES_BANK: List[Dict[str, Any]] = [
         "hot_take": "Shaq swept Hakeem later, but Hakeem swept Shaq in '95. Who takes the crown?"
     },
     {
-        "id": "curry_vs_magic_clutch",
-        "category": "🎯 CLUTCH GENE",
-        "title": "Down 1 with 5 seconds left: Kobe, Jordan, or Dame?",
-        "description": "Final possession of Game 7 of the NBA Finals. Down by 1 point. Ball is inbounded with 5.0 seconds left.\n\nWho are you trusting with the final shot to win the championship?",
-        "options": ["🐍 Kobe Bryant", "🐐 Michael Jordan"],
-        "hot_take": "Jordan hit 'The Shot', but Kobe lives for tough contested fadeaways. Who gets the rock?"
-    },
-    {
         "id": "warriors17_vs_bulls96",
         "category": "⚔️ DYNASTY BATTLE",
         "title": "2017 Golden State Warriors vs. 1996 Chicago Bulls",
@@ -123,12 +124,12 @@ DEBATES_BANK: List[Dict[str, Any]] = [
         "hot_take": "Can the Bulls' perimeter defense slow down Steph and KD, or do the Warriors get bullied?"
     },
     {
-        "id": "luka_vs_tatum_vs_sga",
+        "id": "luka_vs_tatum_vs_sga_3way",
         "category": "🌟 NEXT GENERATION KINGS",
-        "title": "Build a Franchise Around: Luka Dončić vs. Shai Gilgeous-Alexander",
-        "description": "You are awarded an expansion NBA team today. You have the choice of signing one superstar to build your franchise around for the next 10 years:\n\n**Luka Dončić:** Triple-double machine, clutch playoff killer, offensive maestro.\n**Shai Gilgeous-Alexander:** Two-way superstar guard, elite mid-range assassin, relentless drive & defense.\n\nWho are you picking as your franchise cornerstone?",
-        "options": ["🪄 Luka Dončić", "⚡ Shai Gilgeous-Alexander"],
-        "hot_take": "Is Luka's playoff ceiling higher than SGA's elite two-way consistency?"
+        "title": "Build a Franchise Around: Luka Dončić, Shai Gilgeous-Alexander, or Jayson Tatum?",
+        "description": "You are awarded an expansion NBA team today. You have the choice of signing one superstar to lead your franchise for the next decade:\n\n**Luka Dončić:** Playoff scoring & triple-double machine.\n**Shai Gilgeous-Alexander:** Two-way superstar guard, lethal mid-range and rim pressure.\n**Jayson Tatum:** NBA Champion, elite two-way wing, complete modern prototype.\n\nWho are you building around?",
+        "options": ["🪄 Luka Dončić", "⚡ Shai Gilgeous-Alexander", "☘️ Jayson Tatum"],
+        "hot_take": "Tatum has the ring, Luka has the stats, and Shai has the two-way game. Who is #1?"
     },
     {
         "id": "kd_vs_kawhi_prime",
@@ -139,12 +140,12 @@ DEBATES_BANK: List[Dict[str, Any]] = [
         "hot_take": "KD has the better bag, but Kawhi was an unstoppable two-way terminator in 2019."
     },
     {
-        "id": "best_duo_history",
+        "id": "best_duo_history_3way",
         "category": "👥 GREATEST DUO OF ALL TIME",
-        "title": "Shaq & Kobe vs. Jordan & Pippen",
-        "description": "Two iconic three-peat duos:\n\n**Shaq & Kobe (2000-2002):** Unmatched inside-outside dominance, 15-1 postseason run in 2001.\n**Jordan & Pippen (1991-1993, 1996-1998):** 6-0 in Finals, elite perimeter defense and triangle offense perfection.\n\nWhich duo is greater?",
-        "options": ["💜💛 Shaq & Kobe", "❤️🖤 Jordan & Pippen"],
-        "hot_take": "Could anyone on the 90s Bulls contain prime Diesel inside?"
+        "title": "Shaq & Kobe vs. Jordan & Pippen vs. LeBron & Wade",
+        "description": "Three iconic championship duos:\n\n**Shaq & Kobe:** Dominant inside-outside power, 3-peat.\n**Jordan & Pippen:** 6-0 in Finals, greatest perimeter defensive duo.\n**LeBron & Wade:** Unmatched athleticism and transition fastbreak speed.\n\nWhich duo is the greatest in NBA history?",
+        "options": ["💜💛 Shaq & Kobe", "❤️🖤 Jordan & Pippen", "🔥 LeBron & Wade"],
+        "hot_take": "Could anyone stop prime Shaq and young Kobe when they were locked in?"
     },
     {
         "id": "jokic_vs_giannis",
@@ -154,14 +155,12 @@ DEBATES_BANK: List[Dict[str, Any]] = [
         "options": ["🃏 Nikola Jokić", "🦌 Giannis Antetokounmpo"],
         "hot_take": "Jokic's offensive genius vs Giannis's two-way dominance — who do you choose?"
     },
-
-    # ── Hot Takes / True or False Debates ──
     {
         "id": "three_point_revolution",
         "category": "📢 CONTROVERSIAL HOT TAKE",
         "title": "Has the 3-Point Era Ruined the NBA?",
         "description": "Teams now routinely hoist 45+ three-pointers a game. Mid-range and post play have diminished significantly.\n\n**Side A (Ruined):** Too repetitive, live-or-die by the 3, lack of defensive grit and physical interior battles.\n**Side B (Improved):** Elite spacing, higher skill level than ever, exciting high-scoring games and comebacks.\n\nWhat is your honest take?",
-        "options": ["❌ Yes, it ruined the game", "✅ No, the game evolved for the better"],
+        "options": ["❌ Yes, it ruined the game", "✅ No, it evolved for the better"],
         "hot_take": "Are high scores fun, or do you miss physical 90s/2000s basketball?"
     },
     {
@@ -220,23 +219,57 @@ SBC_CHALLENGES: List[Dict[str, Any]] = [
     }
 ]
 
-# ── Interactive Voting View ───────────────────────────────────────────────────
+# ── Helper: Dynamic Multi-Option Vote Tally Formatter ─────────────────────────
+
+def format_vote_tally(options: List[str], votes: Dict[int, int]) -> str:
+    """Dynamically calculates and formats live vote bars for 2, 3, or 4 options."""
+    total = len(votes)
+    lines = []
+    for idx, opt_label in enumerate(options):
+        count = sum(1 for v in votes.values() if v == idx)
+        pct = int((count / total) * 100) if total > 0 else 0
+        filled = min(10, max(0, pct // 10))
+        bar = "█" * filled + "░" * (10 - filled)
+        lines.append(f"**{opt_label}**\n`[{bar}]` **{pct}%** ({count} votes)")
+
+    lines.append(f"\n👥 *Total Votes Cast: `{total}`*")
+    return "\n\n".join(lines)
+
+
+# ── Interactive Voting View (Supports ANY Number of Options) ──────────────────
 
 class DebateVoteView(discord.ui.View):
     def __init__(self, debate_data: Dict[str, Any]):
         super().__init__(timeout=None)  # Persistent view
         self.debate_data = debate_data
-        self.votes: Dict[int, int] = {}  # user_id -> option_index (0 or 1)
+        self.votes: Dict[int, int] = {}  # user_id -> option_index
         self.options = debate_data.get("options", ["Option A", "Option B"])
 
+        # Button styles cycling cleanly across options
+        styles = [
+            discord.ButtonStyle.primary,    # Blurple
+            discord.ButtonStyle.success,    # Green
+            discord.ButtonStyle.danger,     # Red
+            discord.ButtonStyle.secondary   # Grey
+        ]
+
+        # Add a vote button for EVERY option in the debate
         for idx, opt_label in enumerate(self.options):
-            style = discord.ButtonStyle.primary if idx == 0 else discord.ButtonStyle.success
-            btn = discord.ui.Button(label=opt_label[:80], style=style, custom_id=f"vote_{debate_data['id']}_{idx}")
+            style = styles[idx % len(styles)]
+            btn = discord.ui.Button(
+                label=opt_label[:80],
+                style=style,
+                custom_id=f"vote_{debate_data['id']}_{idx}"
+            )
             btn.callback = self.make_callback(idx)
             self.add_item(btn)
 
         # Discuss in thread button
-        thread_btn = discord.ui.Button(label="💬 Join Debate in Thread", style=discord.ButtonStyle.secondary, custom_id=f"thread_{debate_data['id']}")
+        thread_btn = discord.ui.Button(
+            label="💬 Join Debate in Thread",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"thread_{debate_data['id']}"
+        )
         thread_btn.callback = self.thread_callback
         self.add_item(thread_btn)
 
@@ -247,29 +280,13 @@ class DebateVoteView(discord.ui.View):
             self.votes[user_id] = option_index
             chosen_name = self.options[option_index]
 
-            # Recompute counts
-            count_0 = sum(1 for v in self.votes.values() if v == 0)
-            count_1 = sum(1 for v in self.votes.values() if v == 1)
-            total = count_0 + count_1
-
-            pct_0 = int((count_0 / total) * 100) if total > 0 else 50
-            pct_1 = 100 - pct_0 if total > 0 else 50
-
-            bar_0 = "█" * (pct_0 // 10) + "░" * (10 - (pct_0 // 10))
-            bar_1 = "█" * (pct_1 // 10) + "░" * (10 - (pct_1 // 10))
+            # Recalculate dynamic vote tally across all options
+            tally_text = format_vote_tally(self.options, self.votes)
 
             # Update embed fields
             msg = interaction.message
             if msg and msg.embeds:
                 embed = msg.embeds[0]
-                # Update or add tally field
-                tally_text = (
-                    f"**{self.options[0]}**\n`[{bar_0}]` **{pct_0}%** ({count_0} votes)\n\n"
-                    f"**{self.options[1]}**\n`[{bar_1}]` **{pct_1}%** ({count_1} votes)\n\n"
-                    f"👥 *Total Votes Cast: `{total}`*"
-                )
-                
-                # Check if tally field exists
                 field_index = None
                 for i, f in enumerate(embed.fields):
                     if "Live Server Vote" in f.name:
@@ -286,7 +303,7 @@ class DebateVoteView(discord.ui.View):
             if prev_vote is not None and prev_vote != option_index:
                 await interaction.response.send_message(f"🔄 You switched your vote to **{chosen_name}**!", ephemeral=True)
             else:
-                await interaction.response.send_message(f"✅ You voted for **{chosen_name}**! Check out the thread to back up your take!", ephemeral=True)
+                await interaction.response.send_message(f"✅ You voted for **{chosen_name}**! Join the thread to defend your take!", ephemeral=True)
 
         return callback
 
@@ -328,24 +345,29 @@ class BasketballDebates(commands.Cog):
         embed = discord.Embed(
             title=f"🏀 {debate.get('title', 'SpaceYT Basketball Debate')}",
             description=f"{debate.get('description', '')}\n\n🔥 **Hot Take:** *{debate.get('hot_take', 'Drop your take below!')}*",
-            color=discord.Color.from_rgb(255, 102, 0) # Basketball Orange
+            color=discord.Color.from_rgb(255, 102, 0)  # Basketball Orange
         )
-        embed.set_author(name=f"SpaceYT Basketball Arena • {debate.get('category', 'DEBATE')}", icon_url="https://cdn-icons-png.flankfast.com/512/889/889508.png")
+        embed.set_author(
+            name=f"SpaceYT Basketball Arena • {debate.get('category', 'DEBATE')}",
+            icon_url="https://cdn-icons-png.flankfast.com/512/889/889508.png"
+        )
         
-        opt_0 = debate.get("options", ["Option A", "Option B"])[0]
-        opt_1 = debate.get("options", ["Option A", "Option B"])[1]
+        # Build initial zero-vote tally dynamically for all options
+        initial_lines = []
+        for opt in debate.get("options", ["Option A", "Option B"]):
+            initial_lines.append(f"**{opt}**\n`[░░░░░░░░░░]` **0%** (0 votes)")
+        initial_lines.append("👉 *Click a button below to cast your vote!*")
 
         embed.add_field(
             name="📊 Live Server Vote Tally",
-            value=(
-                f"**{opt_0}**\n`[░░░░░░░░░░]` **0%** (0 votes)\n\n"
-                f"**{opt_1}**\n`[░░░░░░░░░░]` **0%** (0 votes)\n\n"
-                f"👉 *Click a button below to cast your vote!*"
-            ),
+            value="\n\n".join(initial_lines),
             inline=False
         )
 
-        embed.set_footer(text="SpaceYT Official Community • Click below to vote & discuss", icon_url=self.bot.user.display_avatar.url if self.bot.user else None)
+        embed.set_footer(
+            text="SpaceYT Official Community • Click below to vote & discuss",
+            icon_url=self.bot.user.display_avatar.url if self.bot.user else None
+        )
         embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         return embed
 
@@ -366,12 +388,13 @@ class BasketballDebates(commands.Cog):
         embed = self.build_debate_embed(debate)
         view = DebateVoteView(debate)
 
+        # Notice: removed the @everyone mass ping by default
+        header_text = "📢 **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
+        if self.config.get("mention_everyone", False):
+            header_text = f"@everyone {header_text}"
+
         try:
-            msg = await channel.send(
-                content="📢 **@everyone NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!",
-                embed=embed,
-                view=view
-            )
+            msg = await channel.send(content=header_text, embed=embed, view=view)
 
             # Auto-create discussion thread if enabled
             if self.config.get("auto_create_thread", True):
@@ -419,7 +442,6 @@ class BasketballDebates(commands.Cog):
     @daily_debate_loop.before_loop
     async def before_daily_loop(self):
         await self.bot.wait_until_ready()
-        # Initial offset so it doesn't instantly fire on boot if unnecessary
         await asyncio.sleep(10)
 
     # ── Slash & Prefix Commands ───────────────────────────────────────────────
