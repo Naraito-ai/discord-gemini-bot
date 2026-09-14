@@ -51,6 +51,7 @@ DEFAULT_CONFIG = {
     "post_interval_hours": 12,
     "auto_create_thread": True,
     "mention_everyone": False,
+    "mention_here": True,
     "history": [],
     "last_post_timestamp": 0,
     "user_votes": {}  # message_id -> {user_id: option_idx}
@@ -68,6 +69,8 @@ def load_config() -> Dict[str, Any]:
             if not data.get("channel_id"):
                 data["channel_id"] = "1546052564271894639"
             data["mention_everyone"] = False
+            if "mention_here" not in data:
+                data["mention_here"] = True
             return data
     except Exception as e:
         logger.error(f"Failed to load debates config: {e}")
@@ -647,7 +650,12 @@ class BasketballDebates(commands.Cog):
         embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         return embed
 
-    async def post_debate_message(self, channel: discord.TextChannel, debate: Optional[Dict[str, Any]] = None) -> Optional[discord.Message]:
+    async def post_debate_message(
+        self,
+        channel: discord.TextChannel,
+        debate: Optional[Dict[str, Any]] = None,
+        mention_override: Optional[str] = None
+    ) -> Optional[discord.Message]:
         if not debate:
             # Pick a debate from bank that hasn't been posted recently
             history = self.config.get("history", [])
@@ -664,14 +672,33 @@ class BasketballDebates(commands.Cog):
         embed = self.build_debate_embed(debate)
         view = DebateVoteView(debate)
 
-        header_text = "📢 **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
+        # Determine mention tag:
+        # mention_override can be 'here', 'everyone', 'none', or None (which uses config)
+        mention_tag = mention_override
+        if mention_tag is None:
+            if self.config.get("mention_here", True):
+                mention_tag = "here"
+            elif self.config.get("mention_everyone", False):
+                mention_tag = "everyone"
+            else:
+                mention_tag = "none"
+
+        if mention_tag == "here":
+            header_text = "📢 @here **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
+            allowed_mentions = discord.AllowedMentions(everyone=True)
+        elif mention_tag == "everyone":
+            header_text = "📢 @everyone **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
+            allowed_mentions = discord.AllowedMentions(everyone=True)
+        else:
+            header_text = "📢 **NEW BASKETBALL DEBATE DROPPED! 🏀** Cast your vote and defend your take!"
+            allowed_mentions = discord.AllowedMentions.none()
 
         try:
             msg = await channel.send(
                 content=header_text,
                 embed=embed,
                 view=view,
-                allowed_mentions=discord.AllowedMentions.none()
+                allowed_mentions=allowed_mentions
             )
 
             # Auto-create discussion thread if enabled
@@ -764,13 +791,26 @@ class BasketballDebates(commands.Cog):
     # ── Slash & Prefix Commands ───────────────────────────────────────────────
 
     @app_commands.command(name="debate", description="🏀 Trigger an instant spicy NBA/Basketball debate with live voting buttons")
-    @app_commands.describe(channel="Channel to post the debate in (defaults to current channel)")
+    @app_commands.describe(
+        channel="Channel to post the debate in (defaults to current channel)",
+        ping="Whether to ping @here (defaults to channel configuration)"
+    )
+    @app_commands.choices(ping=[
+        app_commands.Choice(name="@here ping", value="here"),
+        app_commands.Choice(name="No ping", value="none")
+    ])
     @app_commands.guild_only()
-    async def debate_slash(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
+    async def debate_slash(
+        self,
+        interaction: discord.Interaction,
+        channel: Optional[discord.TextChannel] = None,
+        ping: Optional[app_commands.Choice[str]] = None
+    ):
         target_channel = channel or interaction.channel
         await interaction.response.defer(thinking=True, ephemeral=True)
 
-        msg = await self.post_debate_message(target_channel)
+        override = ping.value if ping else None
+        msg = await self.post_debate_message(target_channel, mention_override=override)
         if msg:
             await interaction.followup.send(f"✅ Basketball debate successfully posted in {target_channel.mention}!", ephemeral=True)
         else:
@@ -805,6 +845,32 @@ class BasketballDebates(commands.Cog):
         await interaction.response.send_message(
             f"✅ **Automated Basketball Debates Enabled!**\nDaily debates will now automatically post into {channel.mention} every 12 hours."
         )
+
+    @app_commands.command(name="setdebatemention", description="⚙️ Configure ping mentions (@here, @everyone, or none) for debates")
+    @app_commands.describe(mention_type="Select mention type for debate drops")
+    @app_commands.choices(mention_type=[
+        app_commands.Choice(name="@here (Active members online)", value="here"),
+        app_commands.Choice(name="@everyone (All members)", value="everyone"),
+        app_commands.Choice(name="None (No pings)", value="none")
+    ])
+    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.guild_only()
+    async def setdebatemention_slash(self, interaction: discord.Interaction, mention_type: app_commands.Choice[str]):
+        val = mention_type.value
+        if val == "here":
+            self.config["mention_here"] = True
+            self.config["mention_everyone"] = False
+            msg = "✅ Upcoming basketball debates will now tag **@here**."
+        elif val == "everyone":
+            self.config["mention_here"] = False
+            self.config["mention_everyone"] = True
+            msg = "✅ Upcoming basketball debates will now tag **@everyone**."
+        else:
+            self.config["mention_here"] = False
+            self.config["mention_everyone"] = False
+            msg = "⚙️ Upcoming basketball debates will now post **without pings**."
+        save_config(self.config)
+        await interaction.response.send_message(msg)
 
     @app_commands.command(name="toggledebates", description="⚙️ Enable or disable automatic daily basketball debates")
     @app_commands.describe(status="Turn daily debates on or off")
@@ -858,6 +924,29 @@ class BasketballDebates(commands.Cog):
         self.config["auto_post_enabled"] = True
         save_config(self.config)
         await ctx.send(f"✅ Daily basketball debates will now automatically post into {channel.mention} every 12 hours!")
+
+    @commands.command(name="setdebatemention")
+    @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
+    async def setdebatemention_prefix(self, ctx: commands.Context, mention_type: str):
+        """Set debate ping: !setdebatemention [here|everyone|none]"""
+        m = mention_type.lower().strip().lstrip("@")
+        if m == "here":
+            self.config["mention_here"] = True
+            self.config["mention_everyone"] = False
+            await ctx.send("✅ Upcoming basketball debates will now tag **@here**.")
+        elif m == "everyone":
+            self.config["mention_here"] = False
+            self.config["mention_everyone"] = True
+            await ctx.send("✅ Upcoming basketball debates will now tag **@everyone**.")
+        elif m in ("none", "off", "disable"):
+            self.config["mention_here"] = False
+            self.config["mention_everyone"] = False
+            await ctx.send("⚙️ Upcoming basketball debates will now post **without pings**.")
+        else:
+            await ctx.send("❌ Invalid option. Use `!setdebatemention here`, `everyone`, or `none`.")
+            return
+        save_config(self.config)
 
 
 async def setup(bot: commands.Bot):

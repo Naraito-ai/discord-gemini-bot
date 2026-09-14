@@ -2,6 +2,16 @@
 
 All notable changes to the Discord Gemini Bot project are documented here.
 
+## [1.3.2] - 2026-09-15
+
+### Added & Changed
+*   **SpaceYT Debates `@here` Ping Tag**: Configured the SpaceYT automated debates channel (`#🏀-ball-talk`) to tag `@here` on all upcoming automated and manual basketball debates.
+*   **`AllowedMentions` Integration**: Explicitly configured `discord.AllowedMentions(everyone=True)` when mentions are enabled so online members are properly notified without pinging offline members.
+*   **Configurable Ping Mode (`/setdebatemention`)**: Added slash command `/setdebatemention <here|everyone|none>` and prefix command `!setdebatemention [here|everyone|none]` for server managers to switch or disable debate pings on demand.
+*   **Manual `/debate` Ping Option**: Added optional `ping` choice parameter to the `/debate` slash command.
+
+---
+
 ## [1.3.1] - 2026-07-28
 
 ### Added & Fixed

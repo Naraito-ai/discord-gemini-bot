@@ -101,3 +101,8 @@ The repo includes pre-configured [discloud.config](file:///D:/discord-gemini-bot
 | `/ticket` | Manage Server | Setup the support ticket button panel. |
 | `/suggest <idea>` | Everyone | Submit a suggestion to the suggestions channel. |
 | `/poll <question> <options>` | Everyone | Create a poll (options separated by `,` or `\|`). |
+| `/debate [channel] [ping]` | Everyone | Post an instant spicy NBA basketball debate with live voting buttons. |
+| `/startbenchcut` | Everyone | Roll a 3-player Start, Bench, Cut basketball challenge. |
+| `/setdebatechannel <channel>` | Manage Server | Set automated 12-hour basketball debate channel. |
+| `/setdebatemention <here/everyone/none>` | Manage Server | Configure debate drop ping mention (@here, @everyone, or none). |
+| `/toggledebates <status>` | Manage Server | Enable or disable automated daily basketball debates. |

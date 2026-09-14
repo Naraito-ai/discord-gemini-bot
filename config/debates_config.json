@@ -4,6 +4,7 @@
   "post_interval_hours": 12,
   "auto_create_thread": true,
   "mention_everyone": false,
+  "mention_here": true,
   "history": [
     "franchise_trio_luka_sga_jt"
   ],
