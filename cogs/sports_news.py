@@ -77,36 +77,39 @@ DEFAULT_CONFIG = {
     "football_data_api_key": None,
     "pandascore_api_key": None,
     "check_interval_minutes": 30,
-    "leagues": ["PD", "SA", "BL1", "FL1"],
+    "leagues": ["PL", "CL", "PD", "SA", "BL1", "FL1"],
     "posted_news_ids": [],
     "posted_match_ids": []
 }
 
 
 def load_config() -> dict:
-    """Loads sports config safely from JSON file."""
+    """Loads sports config safely from JSON file and environment variables."""
     if not os.path.exists(CONFIG_PATH):
         save_config(DEFAULT_CONFIG)
-        return DEFAULT_CONFIG.copy()
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            for k, v in DEFAULT_CONFIG.items():
-                if k not in data:
-                    data[k] = v
-            # Fallback to environment variables if not configured in JSON
-            if not data.get("football_data_api_key"):
-                env_fb = os.getenv("FOOTBALL_DATA_API_KEY")
-                if env_fb:
-                    data["football_data_api_key"] = env_fb
-            if not data.get("pandascore_api_key"):
-                env_ps = os.getenv("PANDASCORE_API_KEY")
-                if env_ps:
-                    data["pandascore_api_key"] = env_ps
-            return data
-    except Exception as e:
-        sports_logger.error(f"Failed to load sports config: {e}")
-        return DEFAULT_CONFIG.copy()
+        data = DEFAULT_CONFIG.copy()
+    else:
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for k, v in DEFAULT_CONFIG.items():
+                    if k not in data:
+                        data[k] = v
+        except Exception as e:
+            sports_logger.error(f"Failed to load sports config: {e}")
+            data = DEFAULT_CONFIG.copy()
+
+    # Prioritize environment variables if not set in config
+    if not data.get("football_data_api_key"):
+        env_fb = os.getenv("FOOTBALL_DATA_API_KEY")
+        if env_fb:
+            data["football_data_api_key"] = env_fb
+    if not data.get("pandascore_api_key"):
+        env_ps = os.getenv("PANDASCORE_API_KEY")
+        if env_ps:
+            data["pandascore_api_key"] = env_ps
+            
+    return data
 
 
 def save_config(config_data: dict):
@@ -274,7 +277,7 @@ class SportsNews(commands.Cog):
         await self.bot.wait_until_ready()
         self.last_esports_fetch = datetime.datetime.now(IST)
 
-        api_key = self.config.get("pandascore_api_key")
+        api_key = self.config.get("pandascore_api_key") or os.getenv("PANDASCORE_API_KEY")
         channel_id = self.config.get("esports_channel_id")
 
         if not api_key or not channel_id:
@@ -295,7 +298,6 @@ class SportsNews(commands.Cog):
 
         new_items = 0
         async with aiohttp.ClientSession(headers=headers) as session:
-            # 1. Fetch Upcoming Tournaments
             try:
                 async with session.get("https://api.pandascore.co/tournaments/upcoming?per_page=5", timeout=12) as resp:
                     if resp.status == 200:
@@ -346,11 +348,11 @@ class SportsNews(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def live_scores_loop(self):
-        """Fetch real-time live matches for La Liga, Serie A, Bundesliga, and Ligue 1."""
+        """Fetch real-time live matches for top European football leagues."""
         await self.bot.wait_until_ready()
         self.last_live_scores_fetch = datetime.datetime.now(IST)
 
-        api_key = self.config.get("football_data_api_key")
+        api_key = self.config.get("football_data_api_key") or os.getenv("FOOTBALL_DATA_API_KEY")
         channel_id = self.config.get("scores_channel_id")
 
         if not api_key or not channel_id:
@@ -369,7 +371,7 @@ class SportsNews(commands.Cog):
         }
 
         async with aiohttp.ClientSession(headers=headers) as session:
-            for code in self.config.get("leagues", ["PD", "SA", "BL1", "FL1"]):
+            for code in self.config.get("leagues", ["PL", "CL", "PD", "SA", "BL1", "FL1"]):
                 url = f"https://api.football-data.org/v4/competitions/{code}/matches?status=IN_PLAY,LIVE,PAUSED"
                 try:
                     async with session.get(url, timeout=10) as resp:
@@ -384,7 +386,7 @@ class SportsNews(commands.Cog):
                                 await self._post_or_update_live_match(channel, m, code)
                 except Exception as e:
                     sports_logger.error(f"Live scores error ({code}): {e}")
-                await asyncio.sleep(2)  # Respect free tier rate limits
+                await asyncio.sleep(2)
 
     async def _post_or_update_live_match(self, channel: discord.TextChannel, match: dict, league_code: str):
         """Creates or edits an in-place live score card."""
@@ -416,7 +418,7 @@ class SportsNews(commands.Cog):
                 sports_logger.info(f"[LIVE] Updated {league_name}: {home} {home_score}-{away_score} {away} ({minute}')")
                 return
             except Exception:
-                pass  # Message was deleted or inaccessible, post new
+                pass
 
         try:
             sent_msg = await channel.send(embed=embed)
@@ -429,11 +431,11 @@ class SportsNews(commands.Cog):
 
     @tasks.loop(hours=6)
     async def upcoming_matches_loop(self):
-        """Fetch upcoming matches for the next 7 days across top 4 leagues."""
+        """Fetch upcoming matches for the next 7 days across top leagues."""
         await self.bot.wait_until_ready()
         self.last_upcoming_fetch = datetime.datetime.now(IST)
 
-        api_key = self.config.get("football_data_api_key")
+        api_key = self.config.get("football_data_api_key") or os.getenv("FOOTBALL_DATA_API_KEY")
         channel_id = self.config.get("scores_channel_id")
 
         if not api_key or not channel_id:
@@ -448,7 +450,7 @@ class SportsNews(commands.Cog):
 
         headers = {"X-Auth-Token": api_key, "User-Agent": "SweetyBot/1.0"}
         async with aiohttp.ClientSession(headers=headers) as session:
-            for code in self.config.get("leagues", ["PD", "SA", "BL1", "FL1"]):
+            for code in self.config.get("leagues", ["PL", "CL", "PD", "SA", "BL1", "FL1"]):
                 url = f"https://api.football-data.org/v4/competitions/{code}/matches?status=SCHEDULED"
                 try:
                     async with session.get(url, timeout=10) as resp:
@@ -528,7 +530,7 @@ class SportsNews(commands.Cog):
         save_config(self.config)
         sports_logger.info(f"[CONFIG] {name} API key updated by {ctx.author}")
         try:
-            await ctx.message.delete()  # Delete message for API key security
+            await ctx.message.delete()
         except Exception:
             pass
         await ctx.send(f"🔒 Successfully configured and saved **{name}** API key securely!")
@@ -557,7 +559,7 @@ class SportsNews(commands.Cog):
     @commands.command(name="esports")
     async def esports_cmd(self, ctx: commands.Context):
         """Fetch latest esports tournaments now."""
-        api_key = self.config.get("pandascore_api_key")
+        api_key = self.config.get("pandascore_api_key") or os.getenv("PANDASCORE_API_KEY")
         if not api_key:
             await ctx.send("❌ PandaScore API key is not configured! Admin can set it using `!setapikey esports <KEY>`.")
             return
@@ -594,7 +596,7 @@ class SportsNews(commands.Cog):
     @commands.command(name="live")
     async def live_cmd(self, ctx: commands.Context):
         """Show all currently live matches in top European leagues."""
-        api_key = self.config.get("football_data_api_key")
+        api_key = self.config.get("football_data_api_key") or os.getenv("FOOTBALL_DATA_API_KEY")
         if not api_key:
             await ctx.send("❌ Football-Data API key is not set! Admin can set it using `!setapikey football <KEY>`.")
             return
@@ -603,7 +605,7 @@ class SportsNews(commands.Cog):
             headers = {"X-Auth-Token": api_key, "User-Agent": "SweetyBot/1.0"}
             live_found = 0
             async with aiohttp.ClientSession(headers=headers) as session:
-                for code in self.config.get("leagues", ["PD", "SA", "BL1", "FL1"]):
+                for code in self.config.get("leagues", ["PL", "CL", "PD", "SA", "BL1", "FL1"]):
                     url = f"https://api.football-data.org/v4/competitions/{code}/matches?status=IN_PLAY,LIVE,PAUSED"
                     try:
                         async with session.get(url, timeout=10) as resp:
@@ -629,17 +631,19 @@ class SportsNews(commands.Cog):
                         sports_logger.error(f"Error in !live: {e}")
 
             if live_found == 0:
-                await ctx.send("ℹ️ No live matches currently in progress for La Liga, Serie A, Bundesliga, or Ligue 1. Use `!upcoming` to see upcoming fixtures!")
+                await ctx.send("ℹ️ No live matches currently in progress for top European leagues. Use `!upcoming` to see upcoming fixtures!")
 
     @commands.command(name="upcoming")
     async def upcoming_cmd(self, ctx: commands.Context, league: str = "laliga"):
-        """Show upcoming matches: !upcoming <laliga|seriea|bundesliga|ligue1>"""
-        api_key = self.config.get("football_data_api_key")
+        """Show upcoming matches: !upcoming <laliga|seriea|bundesliga|ligue1|premierleague>"""
+        api_key = self.config.get("football_data_api_key") or os.getenv("FOOTBALL_DATA_API_KEY")
         if not api_key:
             await ctx.send("❌ Football-Data API key is not set! Admin can set it using `!setapikey football <KEY>`.")
             return
 
         league_map = {
+            "pl": "PL", "premierleague": "PL", "premier league": "PL", "epl": "PL", "england": "PL",
+            "cl": "CL", "ucl": "CL", "championsleague": "CL", "champions league": "CL",
             "laliga": "PD", "la liga": "PD", "pd": "PD", "spain": "PD",
             "seriea": "SA", "serie a": "SA", "sa": "SA", "italy": "SA",
             "bundesliga": "BL1", "bl1": "BL1", "germany": "BL1",
@@ -693,7 +697,7 @@ class SportsNews(commands.Cog):
                 "• `!fcnews` — Fetch latest FC Mobile leaks & updates\n"
                 "• `!esports` — Fetch upcoming esports tournaments\n"
                 "• `!live` — Show all live matches right now\n"
-                "• `!upcoming [laliga|seriea|bundesliga|ligue1]` — Show upcoming fixtures (IST)"
+                "• `!upcoming [league]` — Show upcoming fixtures (IST)"
             ),
             inline=False
         )
@@ -704,9 +708,16 @@ class SportsNews(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def sportsstatus_cmd(self, ctx: commands.Context):
         """View diagnostic status of all 4 loops and channel configs."""
-        fc_chan = self.bot.get_channel(int(self.config.get("fc_mobile_channel_id") or 0))
-        esp_chan = self.bot.get_channel(int(self.config.get("esports_channel_id") or 0))
-        sc_chan = self.bot.get_channel(int(self.config.get("scores_channel_id") or 0))
+        fc_id = self.config.get("fc_mobile_channel_id")
+        esp_id = self.config.get("esports_channel_id")
+        sc_id = self.config.get("scores_channel_id")
+        
+        fc_chan = self.bot.get_channel(int(fc_id)) if fc_id else None
+        esp_chan = self.bot.get_channel(int(esp_id)) if esp_id else None
+        sc_chan = self.bot.get_channel(int(sc_id)) if sc_id else None
+
+        fb_key = self.config.get("football_data_api_key") or os.getenv("FOOTBALL_DATA_API_KEY")
+        ps_key = self.config.get("pandascore_api_key") or os.getenv("PANDASCORE_API_KEY")
 
         embed = discord.Embed(
             title="📊 Sports Hub Diagnostics & Loop Status",
@@ -724,8 +735,8 @@ class SportsNews(commands.Cog):
         embed.add_field(
             name="🔑 API Keys",
             value=(
-                f"• **Football-Data:** `{'Configured' if self.config.get('football_data_api_key') else 'Missing'}`\n"
-                f"• **PandaScore:** `{'Configured' if self.config.get('pandascore_api_key') else 'Missing'}`"
+                f"• **Football-Data:** `{'Configured' if fb_key else 'Missing'}`\n"
+                f"• **PandaScore:** `{'Configured' if ps_key else 'Missing'}`"
             ),
             inline=False
         )

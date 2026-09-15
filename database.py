@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger("GeminiBot.Database")
@@ -12,8 +13,7 @@ class DatabaseManager:
         self.pg_pool = None
         self.sqlite_conn = None
         self._sqlite_lock = asyncio.Lock()  # Prevent SQLite write locks
-        self._config_cache = {}  # Cache for guild configurations
-
+        self._config_cache: Dict[tuple, Any] = {}  # Cache for guild configurations
 
         # Detect database type
         if self.db_url and (self.db_url.startswith("postgres://") or self.db_url.startswith("postgresql://")):
@@ -28,9 +28,6 @@ class DatabaseManager:
             try:
                 import asyncpg
                 logger.info("Initializing PostgreSQL database connection...")
-                # We disable SSL verification issues by passing ssl='require' if typical for Render/Supabase
-                # but let's allow it to auto-detect. Often 'ssl' parameter is needed.
-                # Render/Supabase usually require SSL.
                 self.pg_pool = await asyncpg.create_pool(self.db_url, min_size=1, max_size=10)
                 logger.info("PostgreSQL connection pool created successfully.")
             except ImportError:
@@ -53,7 +50,7 @@ class DatabaseManager:
         await self._create_tables()
 
     async def _create_tables(self):
-        """Creates database schema."""
+        """Creates database schema for all bot modules and dashboard tracking."""
         queries = [
             # Guilds Table
             """
@@ -248,7 +245,6 @@ class DatabaseManager:
         if self.is_postgres:
             async with self.pg_pool.acquire() as conn:
                 # asyncpg uses $1, $2 for placeholders instead of ? (SQLite)
-                # We dynamically convert ? to $1, $2... for postgres
                 pg_query = query
                 if "?" in query:
                     parts = query.split("?")
@@ -256,15 +252,14 @@ class DatabaseManager:
                 await conn.execute(pg_query, *args)
         else:
             async with self._sqlite_lock:
-                # SQLite uses ? placeholders
-                sqlite_query = query.replace("$", "?")
+                sqlite_query = query
                 if "SERIAL PRIMARY KEY" in sqlite_query:
                     sqlite_query = sqlite_query.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
                 await self.sqlite_conn.execute(sqlite_query, args)
                 await self.sqlite_conn.commit()
 
-    async def fetch(self, query: str, *args):
-        """Fetches multiple records."""
+    async def fetch(self, query: str, *args) -> List[Dict[str, Any]]:
+        """Fetches multiple records as a list of dicts."""
         if self.is_postgres:
             async with self.pg_pool.acquire() as conn:
                 pg_query = query
@@ -275,28 +270,29 @@ class DatabaseManager:
                 return [dict(r) for r in records]
         else:
             async with self._sqlite_lock:
-                sqlite_query = query.replace("$", "?")
+                sqlite_query = query
                 if "SERIAL PRIMARY KEY" in sqlite_query:
                     sqlite_query = sqlite_query.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
                 async with self.sqlite_conn.execute(sqlite_query, args) as cursor:
                     rows = await cursor.fetchall()
-                    # Convert to list of dicts to match asyncpg interface
+                    if cursor.description is None:
+                        return []
                     columns = [description[0] for description in cursor.description]
                     return [dict(zip(columns, row)) for row in rows]
 
-    async def fetchrow(self, query: str, *args):
-        """Fetches a single record."""
+    async def fetchrow(self, query: str, *args) -> Optional[Dict[str, Any]]:
+        """Fetches a single record as a dict."""
         results = await self.fetch(query, *args)
         return results[0] if results else None
 
     # ── Resource Management Queries ─────────────────────────────────────────
 
-    async def add_resource(self, guild_id: int, resource_type: str, resource_id: int):
+    async def add_resource(self, guild_id: Any, resource_type: str, resource_id: Any):
         """Saves a created role, channel, or category to the database."""
         query = "INSERT INTO guild_resources (guild_id, resource_type, resource_id) VALUES (?, ?, ?)"
-        await self.execute(query, str(guild_id), resource_type, resource_id)
+        await self.execute(query, str(guild_id), resource_type, int(resource_id))
 
-    async def get_resources(self, guild_id: int, resource_type: str = None):
+    async def get_resources(self, guild_id: Any, resource_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """Gets all resources of a type for a guild."""
         if resource_type:
             query = "SELECT resource_id FROM guild_resources WHERE guild_id = ? AND resource_type = ?"
@@ -306,14 +302,14 @@ class DatabaseManager:
             rows = await self.fetch(query, str(guild_id))
         return rows
 
-    async def clear_resources(self, guild_id: int):
+    async def clear_resources(self, guild_id: Any):
         """Deletes all tracked resource records for a guild from the database."""
         query = "DELETE FROM guild_resources WHERE guild_id = ?"
         await self.execute(query, str(guild_id))
 
     # ── Guild Configuration Queries ──────────────────────────────────────────
 
-    async def set_config(self, guild_id: int, key: str, value: str):
+    async def set_config(self, guild_id: Any, key: str, value: Any):
         """Sets a configuration option with atomic upsert."""
         query = """
             INSERT INTO guild_config (guild_id, key, value) 
@@ -325,17 +321,17 @@ class DatabaseManager:
         # Update cache
         self._config_cache[(str(guild_id), key)] = str(value)
 
-    def _parse_config_value(self, val):
-        if val == "True": return True
-        if val == "False": return False
+    def _parse_config_value(self, val: Any) -> Any:
+        if val == "True" or val is True: return True
+        if val == "False" or val is False: return False
         if val == "None" or val is None: return None
         try:
             return int(val)
-        except ValueError:
+        except (ValueError, TypeError):
             return val
 
-    async def get_config(self, guild_id: int, key: str, default=None):
-        """Gets a configuration option."""
+    async def get_config(self, guild_id: Any, key: str, default: Any = None) -> Any:
+        """Gets a configuration option with caching."""
         cache_key = (str(guild_id), key)
         if cache_key in self._config_cache:
             val = self._config_cache[cache_key]
@@ -354,50 +350,57 @@ class DatabaseManager:
 
     # ── Dashboard Helper Queries ──────────────────────────────────────────
 
-    async def increment_analytics(self, guild_id: int, column_name: str, amount: int = 1):
+    async def increment_analytics(self, guild_id: Any, column_name: str, amount: int = 1):
         """Increments a specific statistic counter in the analytics table for today."""
+        # Whitelist columns to prevent any arbitrary injection
+        valid_columns = {
+            "messages_count", "commands_count", "joins_count", "leaves_count",
+            "warnings_count", "mutes_count", "bans_count", "voice_active_seconds"
+        }
+        if column_name not in valid_columns:
+            logger.warning(f"Invalid analytics column name: {column_name}")
+            return
+
         try:
-            from datetime import datetime
-            from typing import Optional
-            today = datetime.now().date()
+            today_str = datetime.now().date().isoformat()
             rows = await self.fetch(
                 "SELECT id FROM analytics WHERE guild_id = ? AND date = ?",
                 str(guild_id),
-                today
+                today_str
             )
             if rows:
                 query = f"UPDATE analytics SET {column_name} = {column_name} + ? WHERE guild_id = ? AND date = ?"
-                await self.execute(query, amount, str(guild_id), today)
+                await self.execute(query, amount, str(guild_id), today_str)
             else:
                 query = f"INSERT INTO analytics (guild_id, date, {column_name}) VALUES (?, ?, ?)"
-                await self.execute(query, str(guild_id), today, amount)
+                await self.execute(query, str(guild_id), today_str, amount)
         except Exception as e:
             logger.error(f"Failed to increment analytics: {e}")
 
-    async def log_command(self, guild_id, user_id: int, command_name: str, status: str, latency: float):
+    async def log_command(self, guild_id: Any, user_id: Any, command_name: str, status: str, latency: float):
         """Logs a slash command execution."""
         query = "INSERT INTO commands (guild_id, user_id, command_name, status, latency) VALUES (?, ?, ?, ?, ?)"
         await self.execute(query, str(guild_id) if guild_id else None, str(user_id), command_name, status, latency)
         if guild_id:
             await self.increment_analytics(guild_id, "commands_count")
 
-    async def log_ai_usage(self, guild_id, user_id: int, prompt: str, response: str, model: str, tokens_used: int, latency: float):
+    async def log_ai_usage(self, guild_id: Any, user_id: Any, prompt: str, response: str, model: str, tokens_used: int, latency: float):
         """Logs an AI query usage entry."""
         query = "INSERT INTO ai_usage (guild_id, user_id, prompt, response, model, tokens_used, latency) VALUES (?, ?, ?, ?, ?, ?, ?)"
         await self.execute(query, str(guild_id) if guild_id else None, str(user_id), prompt, response, model, tokens_used, latency)
 
-    async def add_warning(self, guild_id: int, user_id: int, moderator_id: int, reason: str):
+    async def add_warning(self, guild_id: Any, user_id: Any, moderator_id: Any, reason: str):
         """Logs a member warning."""
         query = "INSERT INTO warnings (guild_id, user_id, moderator_id, reason) VALUES (?, ?, ?, ?)"
         await self.execute(query, str(guild_id), str(user_id), str(moderator_id), reason)
         await self.increment_analytics(guild_id, "warnings_count")
 
-    async def get_warnings(self, guild_id: int, user_id: int) -> list:
+    async def get_warnings(self, guild_id: Any, user_id: Any) -> list:
         """Retrieves all warnings for a user in a guild."""
         query = "SELECT id, moderator_id, reason, timestamp FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY timestamp DESC"
         return await self.fetch(query, str(guild_id), str(user_id))
 
-    async def clear_warnings(self, guild_id: int, user_id: int, amount: Optional[int] = None) -> int:
+    async def clear_warnings(self, guild_id: Any, user_id: Any, amount: Optional[int] = None) -> int:
         """Deletes warnings for a user in a guild (all or limited amount) and returns count deleted."""
         if amount is not None and amount > 0:
             rows = await self.fetch(
@@ -418,7 +421,7 @@ class DatabaseManager:
             await self.execute(query, str(guild_id), str(user_id))
             return int(count)
 
-    async def delete_warning_by_id(self, guild_id: int, warn_id: int) -> bool:
+    async def delete_warning_by_id(self, guild_id: Any, warn_id: int) -> bool:
         """Deletes a specific warning by its ID. Returns True if deleted, False if not found."""
         rows = await self.fetch("SELECT id FROM warnings WHERE guild_id = ? AND id = ?", str(guild_id), int(warn_id))
         if not rows:
@@ -426,25 +429,25 @@ class DatabaseManager:
         await self.execute("DELETE FROM warnings WHERE guild_id = ? AND id = ?", str(guild_id), int(warn_id))
         return True
 
-    async def add_timeout(self, guild_id: int, user_id: int, moderator_id: int, duration_seconds: int, reason: str):
+    async def add_timeout(self, guild_id: Any, user_id: Any, moderator_id: Any, duration_seconds: int, reason: str):
         """Logs a member timeout."""
         query = "INSERT INTO timeouts (guild_id, user_id, moderator_id, duration_seconds, reason) VALUES (?, ?, ?, ?, ?)"
         await self.execute(query, str(guild_id), str(user_id), str(moderator_id), duration_seconds, reason)
         await self.increment_analytics(guild_id, "mutes_count")
 
-    async def add_ban(self, guild_id: int, user_id: int, moderator_id: int, reason: str):
+    async def add_ban(self, guild_id: Any, user_id: Any, moderator_id: Any, reason: str):
         """Logs a member ban."""
         query = "INSERT INTO bans (guild_id, user_id, moderator_id, reason) VALUES (?, ?, ?, ?)"
         await self.execute(query, str(guild_id), str(user_id), str(moderator_id), reason)
         await self.increment_analytics(guild_id, "bans_count")
 
-    async def log_audit(self, guild_id: int, user_id: int, action: str, details: str = None):
+    async def log_audit(self, guild_id: Any, user_id: Any, action: str, details: str = None):
         """Logs a dashboard or moderator action."""
         query = "INSERT INTO audit_logs (guild_id, user_id, action, details) VALUES (?, ?, ?, ?)"
         await self.execute(query, str(guild_id), str(user_id), action, details)
 
     # ── Basketball & Community Debate Voting Persistence ──────────────────────
-    async def record_debate_vote(self, message_id: int, user_id: int, option_index: int, option_name: str) -> tuple:
+    async def record_debate_vote(self, message_id: Any, user_id: Any, option_index: int, option_name: str) -> tuple:
         """
         Records or updates a user's debate vote.
         Returns: (is_new_vote: bool, previous_option_index: Optional[int])
@@ -471,7 +474,7 @@ class DatabaseManager:
             )
             return True, None
 
-    async def get_user_debate_vote(self, message_id: int, user_id: int):
+    async def get_user_debate_vote(self, message_id: Any, user_id: Any) -> Optional[int]:
         """Gets user's previously voted option index for a debate message."""
         existing = await self.fetchrow(
             "SELECT option_index FROM debate_votes WHERE message_id = ? AND user_id = ?",
@@ -481,7 +484,7 @@ class DatabaseManager:
             return existing["option_index"] if isinstance(existing, dict) and "option_index" in existing else existing[0]
         return None
 
-    async def get_debate_tallies(self, message_id: int) -> dict:
+    async def get_debate_tallies(self, message_id: Any) -> Dict[int, int]:
         """Returns a dict of {option_index: total_votes} from database."""
         rows = await self.fetch(
             "SELECT option_index, COUNT(*) as count FROM debate_votes WHERE message_id = ? GROUP BY option_index",

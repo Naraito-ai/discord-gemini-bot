@@ -243,28 +243,12 @@ DEBATES_BANK: List[Dict[str, Any]] = [
         "hot_take": "Jokic's offensive genius vs Giannis's two-way dominance — who do you choose?"
     },
     {
-        "id": "pure_shooter_3way",
-        "category": "🎯 GREATEST SNIPERS",
-        "title": "Best Pure Shooter: Steph Curry, Klay Thompson, or Ray Allen?",
-        "description": "Game on the line, catch-and-shoot 3-pointer with a hand in their face.\n\n**Steph Curry:** Off-the-dribble god, limitless range.\n**Klay Thompson:** Fastest release in history, 37 pts in a quarter.\n**Ray Allen:** Picture-perfect mechanics, iconic Game 6 miracle.\n\nWho has the purest jumper?",
-        "options": ["👨‍🍳 Steph Curry", "🎯 Klay Thompson", "☄️ Ray Allen"],
-        "hot_take": "Steph has the range, but in a stationary catch-and-shoot contest, who wins?"
-    },
-    {
         "id": "greatest_dunker_3way",
         "category": "✈️ IN-GAME DUNK KINGS",
         "title": "Greatest In-Game Dunker: Vince Carter, Michael Jordan, or LeBron James?",
         "description": "Driving down the lane with a 7-footer waiting at the rim.\n\n**Vince Carter:** Dunk of Death over 7'2\" Weis, unmatched bounce and creativity.\n**Michael Jordan:** Free throw line liftoff, suspended in mid-air.\n**LeBron James:** Unstoppable freight train posterizing everyone for 20 straight years.\n\nWho is the true King of the Dunk?",
         "options": ["✈️ Vince Carter", "🐐 Michael Jordan", "👑 LeBron James"],
         "hot_take": "Can anyone top Vince Carter's 2000 Dunk Contest and Olympic poster?"
-    },
-    {
-        "id": "derrick_rose_vs_kyrie_1v1",
-        "category": "⚔️ 1v1 TO 21",
-        "title": "1v1 to 21 (Make-it-Take-it): Prime D-Rose vs. Prime Kyrie Irving",
-        "description": "No double teams. Pure ISO basketball. Winners ball.\n\n**Prime Derrick Rose (2011 MVP):** Blinding first-step speed, violent change of direction, impossible acrobatics.\n**Prime Kyrie Irving:** The deepest scoring bag in history, both hands, unguardable handles and finishing.\n\nFirst to 21 wins. Who takes it?",
-        "options": ["🌹 Prime Derrick Rose", "🪄 Prime Kyrie Irving"],
-        "hot_take": "Kyrie has the better handles, but could he stay in front of 2011 MVP Rose?"
     },
     {
         "id": "best_euro_alltime_3way",
@@ -369,9 +353,7 @@ def parse_existing_tally(embed: discord.Embed, options: List[str]) -> Dict[int, 
     if not field_text:
         return counts
 
-    # Regex search for: **Option Name** ... (X votes)
     for idx, opt in enumerate(options):
-        # Escape option text for regex matching
         clean_opt = re.escape(opt)
         pattern = rf"\*\*{clean_opt}\*\*.*?\((\d+)\s+votes\)"
         match = re.search(pattern, field_text, re.DOTALL)
@@ -442,7 +424,6 @@ class BasketballDebates(commands.Cog):
         logger.info("BasketballDebates Cog unloaded and loop cancelled.")
 
     # ── Bulletproof Persistent Interaction Listener ───────────────────────────
-    # Catches all button clicks even if the bot restarted or view is not in memory!
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type != discord.InteractionType.component:
@@ -472,7 +453,6 @@ class BasketballDebates(commands.Cog):
                 )
                 await interaction.response.send_message(f"🚀 Thread created! Join here: {thread.mention}", ephemeral=True)
             except discord.HTTPException as e:
-                # Code 160004: Thread already exists for this message
                 if e.code == 160004 or "already" in str(e).lower():
                     existing_thread = None
                     if interaction.guild:
@@ -595,7 +575,7 @@ class BasketballDebates(commands.Cog):
     def build_debate_embed(self, debate: Dict[str, Any]) -> discord.Embed:
         embed = discord.Embed(
             title=f"🏀 {debate.get('title', 'SpaceYT Basketball Debate')}",
-            color=discord.Color.from_rgb(255, 102, 0)  # Basketball Orange
+            color=discord.Color.from_rgb(255, 102, 0)
         )
         embed.set_author(
             name=f"SpaceYT Basketball Arena • {debate.get('category', 'DEBATE')}",
@@ -615,7 +595,7 @@ class BasketballDebates(commands.Cog):
         elif debate.get("description"):
             desc_parts.append(debate.get("description"))
 
-        # 2. Clutch Facts to Consider (verified only)
+        # 2. Clutch Facts to Consider
         clutch_facts = debate.get("clutch_facts")
         if clutch_facts:
             facts_lines = ["\n📈 **CLUTCH FACTS TO CONSIDER**"]
@@ -630,7 +610,7 @@ class BasketballDebates(commands.Cog):
 
         embed.description = "\n".join(desc_parts)
 
-        # 4. Build initial zero-vote tally dynamically for all options/playstyles
+        # 4. Build initial zero-vote tally dynamically
         display_opts = debate.get("button_labels") or debate.get("options", ["Option A", "Option B"])
         initial_lines = []
         for opt in display_opts:
@@ -657,11 +637,9 @@ class BasketballDebates(commands.Cog):
         mention_override: Optional[str] = None
     ) -> Optional[discord.Message]:
         if not debate:
-            # Pick a debate from bank that hasn't been posted recently
             history = self.config.get("history", [])
             available = [d for d in DEBATES_BANK if d["id"] not in history]
             if not available:
-                # Reset history if all have been cycled
                 self.config["history"] = []
                 available = DEBATES_BANK
 
@@ -672,8 +650,6 @@ class BasketballDebates(commands.Cog):
         embed = self.build_debate_embed(debate)
         view = DebateVoteView(debate)
 
-        # Determine mention tag:
-        # mention_override can be 'here', 'everyone', 'none', or None (which uses config)
         mention_tag = mention_override
         if mention_tag is None:
             if self.config.get("mention_here", True):
@@ -707,7 +683,6 @@ class BasketballDebates(commands.Cog):
                     thread_name = f"🏀・{debate.get('title', 'Debate')[:85]}"
                     thread = await msg.create_thread(name=thread_name, auto_archive_duration=1440)
                     
-                    # Scenario-relevant thread hook
                     hook_text = debate.get("thread_hook")
                     if not hook_text:
                         hook_text = "The clock, score, spacing, and shot difficulty all matter here. Who actually fits THIS situation best? 👀"
@@ -726,8 +701,7 @@ class BasketballDebates(commands.Cog):
             logger.error(f"Failed to post debate message: {e}")
             return None
 
-    # ── Background Task Loop (Every 12 Hours with Persistent Timestamp) ────────
-    # Checks every 10 minutes against last_post_timestamp so container restarts never reset the timer!
+    # ── Background Task Loop ──────────────────────────────────────────────────
     @tasks.loop(minutes=10)
     async def daily_debate_loop(self):
         await self.bot.wait_until_ready()
@@ -744,7 +718,6 @@ class BasketballDebates(commands.Cog):
             try:
                 channel = await self.bot.fetch_channel(int(channel_id))
             except Exception:
-                # Fail-safe: search all guild channels for 'ball-talk'
                 for g in self.bot.guilds:
                     for ch in g.text_channels:
                         if "ball-talk" in ch.name.lower() or "ball_talk" in ch.name.lower():
@@ -757,7 +730,7 @@ class BasketballDebates(commands.Cog):
             logger.warning("Could not find #🏀-ball-talk channel to post scheduled debate.")
             return
 
-        # If last_post is 0 or recent restart, inspect channel history so we NEVER double-post after deploy
+        # Check channel history if last_post is 0 to avoid immediate double-post after restart
         if last_post <= 0:
             try:
                 async for prev_msg in channel.history(limit=25):
@@ -772,9 +745,7 @@ class BasketballDebates(commands.Cog):
             except Exception as hist_err:
                 logger.warning(f"Could not inspect channel history for last debate: {hist_err}")
 
-        # If 12 hours have not passed yet, wait for the remaining time
         if now - last_post < interval_seconds:
-            remaining_mins = int((interval_seconds - (now - last_post)) / 60)
             return
 
         logger.info(f"Auto-posting scheduled 12-hour basketball debate to #{channel.name}...")
@@ -839,7 +810,7 @@ class BasketballDebates(commands.Cog):
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.guild_only()
     async def setdebatechannel_slash(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        self.config["channel_id"] = channel.id
+        self.config["channel_id"] = str(channel.id)
         self.config["auto_post_enabled"] = True
         save_config(self.config)
         await interaction.response.send_message(
@@ -920,7 +891,7 @@ class BasketballDebates(commands.Cog):
     @commands.guild_only()
     async def setdebatechannel_prefix(self, ctx: commands.Context, channel: discord.TextChannel):
         """Set automated debate channel: !setdebatechannel #channel"""
-        self.config["channel_id"] = channel.id
+        self.config["channel_id"] = str(channel.id)
         self.config["auto_post_enabled"] = True
         save_config(self.config)
         await ctx.send(f"✅ Daily basketball debates will now automatically post into {channel.mention} every 12 hours!")

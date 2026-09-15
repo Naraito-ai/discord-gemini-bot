@@ -10,8 +10,7 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from dotenv import load_dotenv
-from flask import Flask, jsonify
-from threading import Thread
+import aiohttp
 from typing import Optional, Union, List, Dict, Any
 from database import db
 
@@ -84,145 +83,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger("GeminiBot")
 
-# ── Keep-alive server so Render / Railway / UptimeRobot can ping us ────────
-_flask_app = Flask(__name__)
-
-@_flask_app.route('/')
-def _home():
-    return "✅ Discord Bot is alive and running!"
-
-import math
-
-@_flask_app.route('/health')
-def health():
-    bot_status = "unknown"
-    bot_latency = None
-    try:
-        if 'bot' in globals() and bot:
-            if bot.is_ready():
-                bot_status = "online"
-                lat = getattr(bot, "latency", None)
-                if lat is not None and not math.isinf(lat) and not math.isnan(lat):
-                    bot_latency = round(lat * 1000, 2)
-            elif bot.user:
-                bot_status = "online"
-                lat = getattr(bot, "latency", None)
-                if lat is not None and not math.isinf(lat) and not math.isnan(lat):
-                    bot_latency = round(lat * 1000, 2)
-            else:
-                bot_status = "connecting"
-    except Exception as e:
-        bot_status = f"error: {e}"
-
-    return jsonify({
-        "status": "ok",
-        "bot": str(bot.user) if ('bot' in globals() and bot and bot.user) else "not_initialized",
-        "gateway": bot_status,
-        "latency_ms": bot_latency
-    })
-
-@_flask_app.route('/terms')
-def terms_page():
-    return """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Terms of Service - Sweety Bot</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; padding: 40px 20px; max-width: 800px; margin: auto; }
-        h1, h2 { color: #38bdf8; }
-        a { color: #818cf8; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .card { background: #1e293b; padding: 24px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; }
-    </style>
-</head>
-<body>
-    <h1>Terms of Service — Sweety Bot</h1>
-    <p><em>Last Updated: August 2026</em></p>
-    <div class="card">
-        <h2>1. Acceptance of Terms</h2>
-        <p>By adding <strong>Sweety</strong> to your Discord server or using any of its features, you agree to these Terms, as well as Discord's Terms of Service and Community Guidelines.</p>
-        
-        <h2>2. Permitted Usage</h2>
-        <p>You agree not to exploit, spam, reverse-engineer, or use the bot to generate abusive, illegal, or harmful content.</p>
-        
-        <h2>3. Availability & Disclaimers</h2>
-        <p>Sweety is provided on an "as-is" basis. The developers are not liable for server changes resulting from administrative commands executed by server staff.</p>
-        
-        <h2>4. Contact</h2>
-        <p>Developer: <strong>Naraito</strong> (<a href="https://github.com/Naraito-ai/discord-gemini-bot" target="_blank">GitHub Repository</a>)</p>
-    </div>
-</body>
-</html>"""
-
-@_flask_app.route('/privacy')
-def privacy_page():
-    return """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Privacy Policy - Sweety Bot</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; padding: 40px 20px; max-width: 800px; margin: auto; }
-        h1, h2 { color: #38bdf8; }
-        a { color: #818cf8; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .card { background: #1e293b; padding: 24px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; }
-    </style>
-</head>
-<body>
-    <h1>Privacy Policy — Sweety Bot</h1>
-    <p><em>Last Updated: August 2026</em></p>
-    <div class="card">
-        <h2>1. Data We Collect</h2>
-        <p>Sweety processes Discord Server IDs, Channel IDs, Role IDs, and User IDs solely to deliver moderation, role management, and AI responses.</p>
-        
-        <h2>2. Data We Do NOT Collect</h2>
-        <p>We do not collect private passwords, emails, financial information, or personal direct messages (DMs). We never sell or share user data.</p>
-        
-        <h2>3. AI Processing</h2>
-        <p>User queries sent via <code>/ask</code> or direct mentions are transmitted securely via API to generate answers and are not stored for training.</p>
-        
-        <h2>4. Data Deletion</h2>
-        <p>Server owners may request complete deletion of server settings and logs at any time by contacting the developer or removing the bot.</p>
-        
-        <h2>5. Contact</h2>
-        <p>Developer: <strong>Naraito</strong> (<a href="https://github.com/Naraito-ai/discord-gemini-bot" target="_blank">GitHub Repository</a>)</p>
-    </div>
-</body>
-</html>"""
-
-def keep_alive():
-    port = int(os.getenv("PORT", 8080))
-    logger.info(f"Starting keep-alive web server on 0.0.0.0:{port}...")
-    def _run_server():
+# ── Keep-alive background self-pinger for 24/7 cloud uptime (Render / Railway) ────────
+async def start_self_pinger():
+    """Pings the external URL every 3 minutes so free cloud hosting never sleeps."""
+    await asyncio.sleep(30)
+    url = os.getenv("RENDER_EXTERNAL_URL")
+    if not url and os.getenv("RENDER_SERVICE_NAME"):
+        url = f"https://{os.getenv('RENDER_SERVICE_NAME')}.onrender.com"
+    if not url:
+        return
+    logger.info(f"Self-pinger active. Keeping {url} awake 24/7...")
+    while True:
         try:
-            _flask_app.run(host='0.0.0.0', port=port, use_reloader=False)
-        except Exception as e:
-            logger.error(f"Keep-alive server error: {e}")
-            
-    def _self_pinger():
-        time.sleep(30)
-        url = os.getenv("RENDER_EXTERNAL_URL", "https://discord-gemini-bot-x3sm.onrender.com")
-        logger.info(f"Self-pinger active. Keeping {url} awake 24/7...")
-        while True:
-            try:
-                import urllib.request
-                req = urllib.request.Request(url, headers={"User-Agent": "RenderKeepAlive/1.0"})
-                with urllib.request.urlopen(req, timeout=15) as resp:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers={"User-Agent": "RenderKeepAlive/1.0"}, timeout=15) as resp:
                     pass
-            except Exception:
-                pass
-            time.sleep(180)  # Ping every 3 minutes so Render never sleeps
-            
-    t = Thread(target=_run_server, daemon=True)
-    t.start()
-    
-    t_ping = Thread(target=_self_pinger, daemon=True)
-    t_ping.start()
-
-# Start keep-alive web server immediately for instant Render port check
-keep_alive()
+        except Exception:
+            pass
+        await asyncio.sleep(180)
 
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -232,18 +110,25 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 def extract_json(text: str) -> str:
-    """Robustly extracts a JSON object from text, ignoring surrounding text or code fences."""
+    """Robustly extracts a JSON object from text, stripping markdown code fences if present."""
     text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+        text = text.strip()
     start = text.find('{')
     end = text.rfind('}')
     if start != -1 and end != -1 and end > start:
         return text[start:end+1]
+    start_arr = text.find('[')
+    end_arr = text.rfind(']')
+    if start_arr != -1 and end_arr != -1 and end_arr > start_arr:
+        return text[start_arr:end_arr+1]
     return text
 
 async def register_uptime_monitor(api_key: str, url: str):
     """Automatically registers this service with UptimeRobot to keep it awake on Render."""
     try:
-        import aiohttp
         payload = {
             "api_key": api_key,
             "friendly_name": "Discord Gemini Bot (Render)",
@@ -268,7 +153,7 @@ async def register_uptime_monitor(api_key: str, url: str):
 
 
 async def call_ai_generation(prompt, system_instruction, json_mode=False):
-    """Generates content asynchronously using Groq (openai/gpt-oss-120b)."""
+    """Generates content asynchronously using high-speed Groq AI."""
     groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
     if not groq_key:
         groq_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
@@ -276,14 +161,13 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
     if not groq_key:
         raise ValueError("No valid GROQ_API_KEY found in environment variables.")
 
-    import aiohttp
     headers = {
         "Authorization": f"Bearer {groq_key}",
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0"
     }
     
-    models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"]
+    models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
     last_err = None
     
     for model_name in models:
@@ -303,7 +187,10 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
                 async with session.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30) as r:
                     r.raise_for_status()
                     res_data = await r.json()
-                    result = res_data["choices"][0]["message"]["content"]
+                    choices = res_data.get("choices", [])
+                    if not choices:
+                        raise ValueError(f"Empty choices returned from Groq model {model_name}")
+                    result = choices[0]["message"]["content"]
                     if json_mode:
                         result = extract_json(result)
                     return result
@@ -1072,32 +959,33 @@ async def get_mod_log_channel(guild: discord.Guild):
            discord.utils.get(guild.text_channels, name="mod-logs") or \
            discord.utils.get(guild.text_channels, name="🚨-admin-chat")
 
-def is_staff_or_immune(member: discord.Member) -> bool:
+def is_protected(member: Union[discord.Member, discord.User, int, None]) -> bool:
     """
-    Returns True if member is the Bot Developer (Naraito), Server Owner, 
-    Administrator, Moderator, Staff, or holds any administrative/moderation permissions or roles.
-    Immune members are NEVER muted, warned, or deleted by Auto-Mod.
+    Sole authoritative gatekeeper for bot immunity and protection.
+    Guarantees that User ID 719932313919684670 (Creator/Immune),
+    Guild Owner, Administrators, and Staff/Moderators can NEVER be
+    timed out, kicked, banned, warned, or penalized by automod/antiraid.
     """
     if member is None:
         return False
-        
-    # 1. Hardcoded User ID check FIRST (719932313919684670 -> always return True)
-    member_id = member if isinstance(member, int) else getattr(member, "id", None)
-    if member_id == 719932313919684670:
+    
+    # Numerical ID extraction
+    mem_id = getattr(member, "id", member)
+    try:
+        mem_id = int(mem_id)
+    except (ValueError, TypeError):
+        mem_id = None
+
+    # 1. Absolute Creator Immunity: User ID 719932313919684670
+    if mem_id == 719932313919684670:
         return True
 
-    # Ensure member has guild context for server-specific checks
+    # 2. Guild Owner Immunity
     guild = getattr(member, "guild", None)
-    if not guild:
-        return False
-
-    # 2. Guild owner check (member.id == guild.owner_id -> always return True)
-    if member.id == guild.owner_id:
+    if guild and mem_id is not None and mem_id == getattr(guild, "owner_id", None):
         return True
 
-    # 3. ANY of these discord.Permissions -> return True:
-    #    administrator, manage_guild, manage_channels, manage_messages, 
-    #    manage_roles, kick_members, ban_members, moderate_members
+    # 3. Staff Permissions Immunity
     perms = getattr(member, "guild_permissions", None)
     if perms and (
         perms.administrator or 
@@ -1111,22 +999,24 @@ def is_staff_or_immune(member: discord.Member) -> bool:
     ):
         return True
 
-    # 4. Role name substring check (case-insensitive) -> return True if any role name contains:
-    #    admin, mod, staff, owner, founder, manager, lead, dev
+    # 4. Staff Role Name Substring Immunity
     staff_keywords = ["admin", "mod", "staff", "owner", "founder", "manager", "lead", "dev"]
-    roles = getattr(member, "roles", [])
-    for role in roles:
+    for role in getattr(member, "roles", []):
         r_name = getattr(role, "name", "").lower()
         if any(kw in r_name for kw in staff_keywords):
             return True
 
     return False
 
+def is_staff_or_immune(member) -> bool:
+    """Alias for backwards compatibility — delegates 100% to is_protected."""
+    return is_protected(member)
+
 
 async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: discord.TextChannel, reason: str, message_content: str, duration_minutes: int = 20):
     """Automatically times out (mutes) a user for duration_minutes. Server owner, admins, and mods are 100% immune."""
     # Absolute Safety Check: Never mute or timeout server owner, admins, or moderators
-    if is_staff_or_immune(member):
+    if is_protected(member):
         logger.info(f"Auto-Mod skipped action for immune staff member: {getattr(member, 'name', member)} ({getattr(member, 'id', member)})")
         return
 
@@ -1507,23 +1397,29 @@ async def build_server_structure(guild, data, response_channel):
 class GeminiBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.presences = True
+        intents.presences = False
         intents.members = True
         intents.guilds = True
         intents.message_content = True
         intents.voice_states = True
-        super().__init__(command_prefix="!", intents=intents)
+        super().__init__(
+            command_prefix="!",
+            intents=intents,
+            status=discord.Status.online,
+            activity=discord.Activity(type=discord.ActivityType.watching, name="/help | @Sweety")
+        )
         self.temp_voice_channel_ids = set()
+        self.start_time = time.time()
         
     async def setup_hook(self):
-        # Connect database & create tables
+        # 1. Connect database & create tables
         try:
             await db.initialize()
             logger.info("Database initialized successfully.")
         except Exception as db_err:
             logger.error(f"Database initialization error: {db_err}")
 
-        # Dynamically load all cogs from ./cogs directory
+        # 2. Dynamically load all cogs from ./cogs directory
         cogs_dir = os.path.join(os.path.dirname(__file__), "cogs")
         if os.path.exists(cogs_dir):
             for filename in os.listdir(cogs_dir):
@@ -1535,18 +1431,20 @@ class GeminiBot(commands.Bot):
                     except Exception as cog_err:
                         logger.error(f"[SWEETY] Failed to load cog {filename}: {cog_err}", exc_info=True)
         
-        # Optional FastAPI dashboard (disabled by default on cloud web hosts)
-        disable_api = os.getenv("DISABLE_API", "true").lower() in ("true", "1", "yes")
+        # 3. Start FastAPI dashboard in the same process & event loop
+        disable_api = os.getenv("DISABLE_API", "false").lower() in ("true", "1", "yes")
         if not disable_api:
             try:
                 from api import start_fastapi
                 port = int(os.getenv("PORT", 8080))
                 asyncio.create_task(start_fastapi(self, db, port))
+                logger.info(f"FastAPI dashboard task scheduled on port {port}.")
             except Exception as api_err:
-                logger.warning(f"FastAPI optional dashboard skipped: {api_err}")
+                logger.warning(f"FastAPI dashboard startup error: {api_err}")
 
-    @tasks.loop(minutes=30)
+    @tasks.loop(minutes=10)
     async def presence_keepalive(self):
+        """Periodically broadcasts presence so the bot stays visible as Online across all guilds."""
         try:
             await self.change_presence(
                 status=discord.Status.online,
@@ -1555,12 +1453,12 @@ class GeminiBot(commands.Bot):
                     name="/help | @Sweety"
                 )
             )
-            logger.info("🔄 Presence keepalive ping sent")
+            logger.info("🔄 Gateway presence keepalive ping sent")
         except Exception as e:
-            logger.warning(f"Keepalive failed: {e}")
+            logger.warning(f"Gateway presence keepalive failed: {e}")
 
     async def on_connect(self):
-        logger.info("Gateway connected — broadcasting presence")
+        logger.info("Gateway connected — broadcasting online presence")
         try:
             await self.change_presence(
                 status=discord.Status.online,
@@ -1592,7 +1490,7 @@ class GeminiBot(commands.Bot):
         logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         
         # Step 1: Wait for gateway to fully stabilize
-        await asyncio.sleep(3)
+        await asyncio.sleep(2)
         
         # Step 2: Set presence FIRST before anything else
         try:
@@ -1603,7 +1501,7 @@ class GeminiBot(commands.Bot):
                     name="/help | @Sweety"
                 )
             )
-            logger.info("✅ Presence set to Online")
+            logger.info("✅ Gateway presence set to Online")
         except Exception as e:
             logger.error(f"❌ Presence failed: {e}")
         
@@ -1617,18 +1515,12 @@ class GeminiBot(commands.Bot):
         except Exception as e:
             logger.error(f"❌ Cache load failed: {e}")
         
-        # Step 4: Sync slash commands globally & to active guilds for instant 0s availability
+        # Step 4: Sync slash commands globally
         try:
-            for g in self.guilds:
-                try:
-                    self.tree.copy_global_to(guild=g)
-                    await self.tree.sync(guild=g)
-                except Exception:
-                    pass
             synced = await self.tree.sync()
             logger.info(f"✅ Synced {len(synced)} commands instantly across all guilds")
         except Exception as e:
-            logger.error(f"❌ Sync failed: {e}")
+            logger.error(f"❌ Command sync failed: {e}")
 
         # Step 5: Start presence keepalive loop
         try:
@@ -1637,7 +1529,8 @@ class GeminiBot(commands.Bot):
         except Exception as e:
             logger.warning(f"Could not start presence keepalive: {e}")
             
-        # Automatic UptimeRobot self-registration
+        # Step 6: Start self-pinger & register UptimeRobot monitor
+        asyncio.create_task(start_self_pinger())
         uptime_key = os.getenv("UPTIME_API_KEY", "").strip()
         render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
         if not render_url and os.getenv("RENDER_SERVICE_NAME"):
@@ -2321,6 +2214,7 @@ async def panic_command(interaction: discord.Interaction):
         if member.bot or member.id == guild.owner_id or member.guild_permissions.administrator:
             continue
         if member.joined_at and member.joined_at > ten_mins_ago:
+            if is_protected(member): continue
             try:
                 await member.kick(reason="Panic Mode: Kicking recent joiners during active raid")
                 kicked_count += 1
@@ -2571,7 +2465,7 @@ async def teardown_command(interaction: discord.Interaction):
 @app_commands.default_permissions(kick_members=True)
 @app_commands.guild_only()
 async def kick_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
-    if is_staff_or_immune(member):
+    if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be kicked.", ephemeral=True)
         return
         
@@ -2612,7 +2506,7 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
 @app_commands.guild_only()
 async def ban_command(interaction: discord.Interaction, member: discord.User, reason: str = "No reason provided", delete_message_days: int = 0):
     guild_member = interaction.guild.get_member(member.id)
-    if is_staff_or_immune(guild_member or member.id):
+    if is_protected(guild_member or member):
         await interaction.response.send_message("❌ This user is staff/immune and cannot be banned.", ephemeral=True)
         return
         
@@ -2673,19 +2567,19 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
     # Auto-escalation thresholds
     if total_warns == 3:
         try:
-            await member.timeout(datetime.timedelta(minutes=15), reason=f"Auto-Escalation: 3 Warnings Reached ({reason})")
+            if not is_protected(member): await member.timeout(datetime.timedelta(minutes=15), reason=f"Auto-Escalation: 3 Warnings Reached ({reason})")
             escalation_action = "\n⚠️ **Auto-Escalation:** Member has reached **3 warnings** and was automatically timed out for **15 minutes**."
         except Exception:
             pass
     elif total_warns == 4:
         try:
-            await member.timeout(datetime.timedelta(hours=1), reason=f"Auto-Escalation: 4 Warnings Reached ({reason})")
+            if not is_protected(member): await member.timeout(datetime.timedelta(hours=1), reason=f"Auto-Escalation: 4 Warnings Reached ({reason})")
             escalation_action = "\n🚨 **Auto-Escalation:** Member has reached **4 warnings** and was automatically timed out for **1 hour**."
         except Exception:
             pass
     elif total_warns >= 5:
         try:
-            await member.timeout(datetime.timedelta(hours=24), reason=f"Auto-Escalation: 5+ Warnings Reached ({reason})")
+            if not is_protected(member): await member.timeout(datetime.timedelta(hours=24), reason=f"Auto-Escalation: 5+ Warnings Reached ({reason})")
             escalation_action = "\n🛑 **Auto-Escalation:** Member has reached **5+ warnings** and was automatically timed out for **24 hours**."
         except Exception:
             pass
@@ -2716,7 +2610,7 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
 async def warn_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
-    if is_staff_or_immune(member):
+    if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be warned.", ephemeral=True)
         return
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
@@ -2848,7 +2742,7 @@ async def delwarn_command(interaction: discord.Interaction, warn_id: int):
 @commands.guild_only()
 async def warn_prefix_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
     """Issue a warning to a member: !warn @member [reason]"""
-    if is_staff_or_immune(member):
+    if is_protected(member):
         await ctx.send("❌ This member is staff/immune and cannot be warned.")
         return
     if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
@@ -2946,7 +2840,7 @@ async def delwarn_prefix_cmd(ctx: commands.Context, warn_id: int):
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
 async def mute_command(interaction: discord.Interaction, member: discord.Member, duration_minutes: int, reason: str = "No reason provided"):
-    if is_staff_or_immune(member):
+    if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be muted.", ephemeral=True)
         return
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
@@ -3801,7 +3695,7 @@ async def mods_command(interaction: discord.Interaction):
 @bot.event
 async def on_member_join(member):
     """Event listener to handle Anti-Raid protection and auto-role assignment."""
-    if is_staff_or_immune(member):
+    if is_protected(member):
         return
         
     guild = member.guild
@@ -3855,6 +3749,7 @@ async def on_member_join(member):
         # If server is currently in active raid mode, or this is a fresh alt joining during rapid joins
         in_raid_mode = _guild_raid_mode_active.get(guild.id, 0) > now
         if (in_raid_mode or len(_guild_join_history[guild.id]) >= limit) and is_fresh_alt:
+            if is_protected(member): return
             try:
                 await member.kick(reason="Anti-Raid: Fresh Alt Account during Join Flood")
                 mod_log = await get_mod_log_channel(guild)
@@ -3975,7 +3870,7 @@ async def on_message(message):
     # ── Auto-Mod Security & Anti-Toxicity Shield (Owner, Admins & Mods 100% Immune)
     if not message.author.bot and message.guild:
         # Full Immunity for Server Owner, Admins, and Moderators
-        if not is_staff_or_immune(message.author):
+        if not is_protected(message.author):
             automod_enabled = await db.get_config(message.guild.id, "automod", True)
             if automod_enabled:
                 content = message.content.strip()
@@ -4154,7 +4049,7 @@ async def on_message(message):
 if __name__ == "__main__":
     if not DISCORD_TOKEN or DISCORD_TOKEN == "your_token_here":
         print("❌ STARTUP BLOCKED: DISCORD_TOKEN is not set in .env file.")
-    elif not GROQ_API_KEY and not os.getenv("GROQ_API_KEY"):
+    elif not GROQ_API_KEY and not os.getenv("GROQ_API_KEY") and not os.getenv("GEMINI_API_KEY"):
         print("❌ STARTUP BLOCKED: GROQ_API_KEY is not set in environment variables.")
     else:
         logger.info("🔒 Security layer active: rate limiting, input sanitization, and prompt injection resistance enabled.")
