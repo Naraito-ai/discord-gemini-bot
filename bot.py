@@ -12,6 +12,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 from threading import Thread
+from typing import Optional, Union, List, Dict, Any
 from database import db
 
 # ── Security: Rate Limit Trackers ──────────────────────────────────────────
