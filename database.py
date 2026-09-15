@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger("GeminiBot.Database")
 
@@ -396,13 +397,34 @@ class DatabaseManager:
         query = "SELECT id, moderator_id, reason, timestamp FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY timestamp DESC"
         return await self.fetch(query, str(guild_id), str(user_id))
 
-    async def clear_warnings(self, guild_id: int, user_id: int) -> int:
-        """Deletes all warnings for a user in a guild and returns count."""
-        rows = await self.fetch("SELECT COUNT(*) as count FROM warnings WHERE guild_id = ? AND user_id = ?", str(guild_id), str(user_id))
-        count = rows[0]["count"] if rows and isinstance(rows[0], dict) and "count" in rows[0] else (rows[0][0] if rows else 0)
-        query = "DELETE FROM warnings WHERE guild_id = ? AND user_id = ?"
-        await self.execute(query, str(guild_id), str(user_id))
-        return count
+    async def clear_warnings(self, guild_id: int, user_id: int, amount: Optional[int] = None) -> int:
+        """Deletes warnings for a user in a guild (all or limited amount) and returns count deleted."""
+        if amount is not None and amount > 0:
+            rows = await self.fetch(
+                "SELECT id FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY timestamp DESC, id DESC LIMIT ?",
+                str(guild_id), str(user_id), int(amount)
+            )
+            if not rows:
+                return 0
+            ids = [r["id"] if isinstance(r, dict) and "id" in r else r[0] for r in rows]
+            placeholders = ", ".join(["?"] * len(ids))
+            query = f"DELETE FROM warnings WHERE id IN ({placeholders})"
+            await self.execute(query, *ids)
+            return len(ids)
+        else:
+            rows = await self.fetch("SELECT COUNT(*) as count FROM warnings WHERE guild_id = ? AND user_id = ?", str(guild_id), str(user_id))
+            count = rows[0]["count"] if rows and isinstance(rows[0], dict) and "count" in rows[0] else (rows[0][0] if rows else 0)
+            query = "DELETE FROM warnings WHERE guild_id = ? AND user_id = ?"
+            await self.execute(query, str(guild_id), str(user_id))
+            return int(count)
+
+    async def delete_warning_by_id(self, guild_id: int, warn_id: int) -> bool:
+        """Deletes a specific warning by its ID. Returns True if deleted, False if not found."""
+        rows = await self.fetch("SELECT id FROM warnings WHERE guild_id = ? AND id = ?", str(guild_id), int(warn_id))
+        if not rows:
+            return False
+        await self.execute("DELETE FROM warnings WHERE guild_id = ? AND id = ?", str(guild_id), int(warn_id))
+        return True
 
     async def add_timeout(self, guild_id: int, user_id: int, moderator_id: int, duration_seconds: int, reason: str):
         """Logs a member timeout."""

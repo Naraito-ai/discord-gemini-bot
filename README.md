@@ -101,6 +101,10 @@ The repo includes pre-configured [discloud.config](file:///D:/discord-gemini-bot
 | `/ticket` | Manage Server | Setup the support ticket button panel. |
 | `/suggest <idea>` | Everyone | Submit a suggestion to the suggestions channel. |
 | `/poll <question> <options>` | Everyone | Create a poll (options separated by `,` or `\|`). |
+| `/warn <user> [reason]` | Moderate Members | Issue a formal warning with auto-escalation to timeouts. |
+| `/warnings [user]` | Everyone | View warning history and infraction records with Warning IDs. |
+| `/clearwarns <user> [amount]` | Moderate Members | Clear warnings for a member (all or a specified amount). |
+| `/delwarn <warn_id>` | Moderate Members | Delete a specific warning by its ID. |
 | `/debate [channel] [ping]` | Everyone | Post an instant spicy NBA basketball debate with live voting buttons. |
 | `/startbenchcut` | Everyone | Roll a 3-player Start, Bench, Cut basketball challenge. |
 | `/setdebatechannel <channel>` | Manage Server | Set automated 12-hour basketball debate channel. |

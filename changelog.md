@@ -2,6 +2,16 @@
 
 All notable changes to the Discord Gemini Bot project are documented here.
 
+## [1.3.3] - 2026-09-15
+
+### Added & Fixed
+*   **Moderator Access for Clearing Warnings**: Updated `/clearwarns` and `!clearwarns` permission checks from `administrator=True` to `moderate_members=True`, allowing moderators (as well as administrators) to remove member infractions.
+*   **Selectable Amount in `/clearwarns`**: Added an optional `amount` parameter to `/clearwarns <member> [amount]` and `!clearwarns @member [amount]`, allowing staff to clear a specific number of recent warnings or leave blank to reset all warnings.
+*   **Single Warning Deletion (`/delwarn`)**: Added `/delwarn <warn_id>` and `!delwarn <warn_id>` to delete a single warning by its unique ID.
+*   **Warning ID Visibility**: Updated `/warnings` and `!warnings` to display each infraction's unique ID for easy targeted deletion.
+
+---
+
 ## [1.3.2] - 2026-09-15
 
 ### Added & Changed
