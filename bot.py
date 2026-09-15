@@ -1515,12 +1515,19 @@ class GeminiBot(commands.Bot):
         except Exception as e:
             logger.error(f"❌ Cache load failed: {e}")
         
-        # Step 4: Sync slash commands globally
+        # Step 4: Sync slash commands to all guilds & globally
         try:
+            for g in self.guilds:
+                try:
+                    self.tree.copy_global_to(guild=g)
+                    await self.tree.sync(guild=g)
+                except Exception as ge:
+                    logger.debug(f"Guild sync skipped for {g.id}: {ge}")
             synced = await self.tree.sync()
             logger.info(f"✅ Synced {len(synced)} commands instantly across all guilds")
         except Exception as e:
             logger.error(f"❌ Command sync failed: {e}")
+
 
         # Step 5: Start presence keepalive loop
         try:
@@ -2909,6 +2916,21 @@ async def warnleaderboard_command(interaction: discord.Interaction, limit: Optio
     await interaction.followup.send(embed=embed)
 
 
+@bot.tree.command(name="warnlb", description="Alias for /warnleaderboard — Display the server warnings leaderboard")
+@app_commands.describe(limit="Number of top warned users to display (5 to 25, default 10)")
+@app_commands.choices(limit=[
+    app_commands.Choice(name="Top 5", value=5),
+    app_commands.Choice(name="Top 10", value=10),
+    app_commands.Choice(name="Top 15", value=15),
+    app_commands.Choice(name="Top 20", value=20),
+    app_commands.Choice(name="Top 25", value=25),
+])
+@app_commands.guild_only()
+async def warnlb_command(interaction: discord.Interaction, limit: Optional[int] = 10):
+    await warnleaderboard_command(interaction, limit=limit)
+
+
+
 
 
 
@@ -3059,6 +3081,25 @@ async def warnleaderboard_prefix_cmd(ctx: commands.Context, limit: Optional[int]
     embed.description = "\n\n".join(lines)
     embed.set_footer(text="Sweety Moderation Shield • Use !warnings <user> or !clearwarns to manage")
     await ctx.send(embed=embed)
+
+
+@bot.command(name="sync")
+@commands.guild_only()
+async def sync_prefix_cmd(ctx: commands.Context):
+    """Instantly sync all slash commands to this server: !sync"""
+    if not is_protected(ctx.author):
+        await ctx.send("❌ Only staff or server admins can trigger command sync.")
+        return
+    
+    msg = await ctx.send("🔄 Syncing slash commands directly to this server...")
+    try:
+        ctx.bot.tree.copy_global_to(guild=ctx.guild)
+        synced_guild = await ctx.bot.tree.sync(guild=ctx.guild)
+        synced_global = await ctx.bot.tree.sync()
+        await msg.edit(content=f"✅ **Slash commands synced successfully!**\n• `{len(synced_guild)}` commands synced to **{ctx.guild.name}** (Available immediately)\n• `{len(synced_global)}` commands synced globally.\n\n💡 *Tip: Press `Ctrl+R` in Discord if you don't see new commands immediately.*")
+    except Exception as e:
+        await msg.edit(content=f"❌ Command sync failed: `{e}`")
+
 
 
 
