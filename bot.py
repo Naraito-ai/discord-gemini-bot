@@ -1515,18 +1515,19 @@ class GeminiBot(commands.Bot):
         except Exception as e:
             logger.error(f"❌ Cache load failed: {e}")
         
-        # Step 4: Sync slash commands to all guilds & globally
+        # Step 4: Clear guild-specific duplicates & sync cleanly to global registry
         try:
             for g in self.guilds:
                 try:
-                    self.tree.copy_global_to(guild=g)
+                    self.tree.clear_commands(guild=g)
                     await self.tree.sync(guild=g)
                 except Exception as ge:
-                    logger.debug(f"Guild sync skipped for {g.id}: {ge}")
+                    logger.debug(f"Guild clear skipped for {g.id}: {ge}")
             synced = await self.tree.sync()
-            logger.info(f"✅ Synced {len(synced)} commands instantly across all guilds")
+            logger.info(f"✅ Cleared guild duplicates & Synced {len(synced)} commands globally")
         except Exception as e:
             logger.error(f"❌ Command sync failed: {e}")
+
 
 
         # Step 5: Start presence keepalive loop
@@ -3086,19 +3087,23 @@ async def warnleaderboard_prefix_cmd(ctx: commands.Context, limit: Optional[int]
 @bot.command(name="sync")
 @commands.guild_only()
 async def sync_prefix_cmd(ctx: commands.Context):
-    """Instantly sync all slash commands to this server: !sync"""
+    """Instantly clears duplicates and syncs all slash commands cleanly: !sync"""
     if not is_protected(ctx.author):
         await ctx.send("❌ Only staff or server admins can trigger command sync.")
         return
     
-    msg = await ctx.send("🔄 Syncing slash commands directly to this server...")
+    msg = await ctx.send("🔄 Cleaning duplicate commands & syncing globally...")
     try:
-        ctx.bot.tree.copy_global_to(guild=ctx.guild)
-        synced_guild = await ctx.bot.tree.sync(guild=ctx.guild)
+        # Clear guild-specific duplicates
+        ctx.bot.tree.clear_commands(guild=ctx.guild)
+        await ctx.bot.tree.sync(guild=ctx.guild)
+        
+        # Sync globally once
         synced_global = await ctx.bot.tree.sync()
-        await msg.edit(content=f"✅ **Slash commands synced successfully!**\n• `{len(synced_guild)}` commands synced to **{ctx.guild.name}** (Available immediately)\n• `{len(synced_global)}` commands synced globally.\n\n💡 *Tip: Press `Ctrl+R` in Discord if you don't see new commands immediately.*")
+        await msg.edit(content=f"✅ **Duplicate commands eliminated & synced cleanly!**\n• Cleared all duplicate guild-specific commands in **{ctx.guild.name}**\n• Synced `{len(synced_global)}` commands globally.\n\n💡 *Tip: Press `Ctrl+R` in Discord if you still see cached duplicates.*")
     except Exception as e:
         await msg.edit(content=f"❌ Command sync failed: `{e}`")
+
 
 
 
