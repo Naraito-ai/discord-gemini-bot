@@ -2635,6 +2635,42 @@ async def warn_command(interaction: discord.Interaction, member: discord.Member,
     await interaction.followup.send(embed=embed)
 
 
+# ── Interactive Warning Management UI ──────────────────────────────────────────
+
+class WarningActionView(discord.ui.View):
+    def __init__(self, guild_id: int, target_member: discord.Member, author_id: int):
+        super().__init__(timeout=180)
+        self.guild_id = guild_id
+        self.target_member = target_member
+        self.author_id = author_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not is_protected(interaction.user):
+            await interaction.response.send_message("❌ You must be a moderator or administrator to use warning controls.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Clear 1 Warn", style=discord.ButtonStyle.primary, emoji="1️⃣")
+    async def clear_one(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        count = await db.clear_warnings(self.guild_id, self.target_member.id, amount=1)
+        if count > 0:
+            await interaction.followup.send(f"✅ Successfully removed **1** recent warning for {self.target_member.mention}.", ephemeral=True)
+            await log_mod_action(interaction.guild, interaction.user, self.target_member, "Warning Cleared", "Cleared 1 warning via interactive UI")
+        else:
+            await interaction.followup.send(f"ℹ️ {self.target_member.mention} currently has no warnings.", ephemeral=True)
+
+    @discord.ui.button(label="Clear All Warns", style=discord.ButtonStyle.danger, emoji="🧹")
+    async def clear_all(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        count = await db.clear_warnings(self.guild_id, self.target_member.id)
+        if count > 0:
+            await interaction.followup.send(f"✅ Successfully cleared **all {count}** warnings for {self.target_member.mention}.", ephemeral=True)
+            await log_mod_action(interaction.guild, interaction.user, self.target_member, "Warnings Cleared", f"Cleared all {count} warnings via interactive UI")
+        else:
+            await interaction.followup.send(f"ℹ️ {self.target_member.mention} currently has no warnings.", ephemeral=True)
+
+
 @bot.tree.command(name="warnings", description="View all active warnings and infraction history for a member")
 @app_commands.describe(member="The member to check (defaults to yourself)")
 @app_commands.guild_only()
@@ -2675,19 +2711,38 @@ async def warnings_command(interaction: discord.Interaction, member: discord.Mem
     else:
         embed.set_footer(text="Sweety Moderation Shield • Use /clearwarns or /delwarn to manage")
         
-    await interaction.followup.send(embed=embed)
+    # Attach interactive action view if viewer is moderator/staff
+    view = None
+    if is_protected(interaction.user):
+        view = WarningActionView(interaction.guild.id, target, interaction.user.id)
+
+    await interaction.followup.send(embed=embed, view=view)
 
 
 @bot.tree.command(name="clearwarns", description="Clear warnings for a member (all or a specific amount)")
 @app_commands.describe(
     member="The member whose warnings will be cleared",
-    amount="Number of most recent warnings to remove (leave empty to clear all)"
+    amount="Number of warnings to remove (Select from dropdown or leave empty to clear all)"
 )
+@app_commands.choices(amount=[
+    app_commands.Choice(name="1 Warning", value=1),
+    app_commands.Choice(name="2 Warnings", value=2),
+    app_commands.Choice(name="3 Warnings", value=3),
+    app_commands.Choice(name="5 Warnings", value=5),
+    app_commands.Choice(name="10 Warnings", value=10),
+])
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
 async def clearwarns_command(interaction: discord.Interaction, member: discord.Member, amount: Optional[int] = None):
-    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ You cannot modify warnings for a member with a higher or equal role.", ephemeral=True)
+    # Staff / Mod Permission Check
+    if not is_protected(interaction.user):
+        await interaction.response.send_message("❌ You do not have permission to clear warnings.", ephemeral=True)
+        return
+
+    # Role Hierarchy Check (Creator/Owner/Admins bypass)
+    is_admin = interaction.user.guild_permissions.administrator or interaction.user.id == interaction.guild.owner_id or interaction.user.id == 719932313919684670
+    if not is_admin and is_protected(member) and member.top_role >= interaction.user.top_role:
+        await interaction.response.send_message("❌ You cannot modify warnings for another staff member with a higher or equal role.", ephemeral=True)
         return
 
     if amount is not None and amount <= 0:
@@ -2722,6 +2777,10 @@ async def clearwarns_command(interaction: discord.Interaction, member: discord.M
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
 async def delwarn_command(interaction: discord.Interaction, warn_id: int):
+    if not is_protected(interaction.user):
+        await interaction.response.send_message("❌ You do not have permission to delete warnings.", ephemeral=True)
+        return
+
     await interaction.response.defer()
     success = await db.delete_warning_by_id(interaction.guild.id, warn_id)
     if success:
@@ -2735,6 +2794,7 @@ async def delwarn_command(interaction: discord.Interaction, warn_id: int):
         await log_mod_action(interaction.guild, interaction.user, None, "Warning Deleted", f"Deleted warning ID {warn_id}")
     else:
         await interaction.followup.send(f"❌ Warning with ID **`{warn_id}`** was not found in this server.", ephemeral=True)
+
 
 
 @bot.command(name="warn")
@@ -2794,12 +2854,16 @@ async def warnings_prefix_cmd(ctx: commands.Context, member: discord.Member = No
 
 
 @bot.command(name="clearwarns", aliases=["clearwarnings", "removewarn"])
-@commands.has_permissions(moderate_members=True)
 @commands.guild_only()
 async def clearwarns_prefix_cmd(ctx: commands.Context, member: discord.Member, amount: Optional[int] = None):
     """Clear warnings for a member: !clearwarns @member [amount]"""
-    if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id and not ctx.author.guild_permissions.administrator:
-        await ctx.send("❌ You cannot modify warnings for a member with a higher or equal role.")
+    if not is_protected(ctx.author):
+        await ctx.send("❌ You do not have permission to clear warnings.")
+        return
+
+    is_admin = ctx.author.guild_permissions.administrator or ctx.author.id == ctx.guild.owner_id or ctx.author.id == 719932313919684670
+    if not is_admin and is_protected(member) and member.top_role >= ctx.author.top_role:
+        await ctx.send("❌ You cannot modify warnings for another staff member with a higher or equal role.")
         return
 
     if amount is not None and amount <= 0:
@@ -2819,10 +2883,13 @@ async def clearwarns_prefix_cmd(ctx: commands.Context, member: discord.Member, a
 
 
 @bot.command(name="delwarn")
-@commands.has_permissions(moderate_members=True)
 @commands.guild_only()
 async def delwarn_prefix_cmd(ctx: commands.Context, warn_id: int):
     """Delete a specific warning by ID: !delwarn <id>"""
+    if not is_protected(ctx.author):
+        await ctx.send("❌ You do not have permission to delete warnings.")
+        return
+
     success = await db.delete_warning_by_id(ctx.guild.id, warn_id)
     if success:
         await ctx.send(f"🗑️ Successfully deleted warning with ID **`{warn_id}`**!")
