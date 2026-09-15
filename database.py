@@ -429,6 +429,18 @@ class DatabaseManager:
         await self.execute("DELETE FROM warnings WHERE guild_id = ? AND id = ?", str(guild_id), int(warn_id))
         return True
 
+    async def get_warnings_leaderboard(self, guild_id: Any, limit: int = 10) -> list:
+        """Retrieves top warned members in a guild."""
+        query = """
+            SELECT user_id, COUNT(*) as warn_count, MAX(timestamp) as latest_warn
+            FROM warnings
+            WHERE guild_id = ?
+            GROUP BY user_id
+            ORDER BY warn_count DESC, latest_warn DESC
+            LIMIT ?
+        """
+        return await self.fetch(query, str(guild_id), int(limit))
+
     async def add_timeout(self, guild_id: Any, user_id: Any, moderator_id: Any, duration_seconds: int, reason: str):
         """Logs a member timeout."""
         query = "INSERT INTO timeouts (guild_id, user_id, moderator_id, duration_seconds, reason) VALUES (?, ?, ?, ?, ?)"

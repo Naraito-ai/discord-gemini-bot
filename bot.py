@@ -1614,7 +1614,7 @@ async def help_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="🏀 **SpaceYT Basketball Arena & Debates**", value="• `/debate [channel] [ping]` — Post a spicy NBA debate with live voting buttons\n• `/startbenchcut` — Roll a 3-player Start, Bench, Cut challenge\n• `/setdebatechannel <channel>` — Set automated daily debate channel\n• `/setdebatemention <type>` — Configure debate ping tag (@here/none)\n• `/toggledebates <status>` — Turn daily auto-debates on or off", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
@@ -2796,6 +2796,64 @@ async def delwarn_command(interaction: discord.Interaction, warn_id: int):
         await interaction.followup.send(f"❌ Warning with ID **`{warn_id}`** was not found in this server.", ephemeral=True)
 
 
+@bot.tree.command(name="warnleaderboard", description="Display the server leaderboard of members with the most warnings")
+@app_commands.describe(limit="Number of top warned users to display (5 to 25, default 10)")
+@app_commands.choices(limit=[
+    app_commands.Choice(name="Top 5", value=5),
+    app_commands.Choice(name="Top 10", value=10),
+    app_commands.Choice(name="Top 15", value=15),
+    app_commands.Choice(name="Top 20", value=20),
+    app_commands.Choice(name="Top 25", value=25),
+])
+@app_commands.guild_only()
+async def warnleaderboard_command(interaction: discord.Interaction, limit: Optional[int] = 10):
+    await interaction.response.defer()
+    limit = max(1, min(limit or 10, 25))
+    rows = await db.get_warnings_leaderboard(interaction.guild.id, limit=limit)
+    
+    if not rows:
+        embed = discord.Embed(
+            title=f"🏆 Warnings Leaderboard — {interaction.guild.name}",
+            description="✅ **No warnings recorded in this server! The record is completely clean.**",
+            color=discord.Color.green()
+        )
+        if interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+        await interaction.followup.send(embed=embed)
+        return
+
+    embed = discord.Embed(
+        title=f"⚠️ Warnings Leaderboard — {interaction.guild.name}",
+        description=f"Showing top **{len(rows)}** members with active infractions on file.\n",
+        color=discord.Color.orange()
+    )
+    if interaction.guild.icon:
+        embed.set_thumbnail(url=interaction.guild.icon.url)
+
+    rank_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    lines = []
+    for idx, r in enumerate(rows, 1):
+        uid = r["user_id"] if isinstance(r, dict) and "user_id" in r else r[0]
+        cnt = int(r["warn_count"] if isinstance(r, dict) and "warn_count" in r else r[1])
+        
+        if cnt >= 5:
+            risk = f"🛑 **{cnt} Warnings** `(24h Timeout Risk)`"
+        elif cnt == 4:
+            risk = f"🚨 **{cnt} Warnings** `(1h Timeout Risk)`"
+        elif cnt == 3:
+            risk = f"⚠️ **{cnt} Warnings** `(15m Timeout Risk)`"
+        else:
+            risk = f"🟡 **{cnt} Warning{'s' if cnt != 1 else ''}**"
+
+        medal = rank_emojis[idx-1] if idx <= len(rank_emojis) else f"`#{idx}`"
+        lines.append(f"{medal} <@{uid}> — {risk}")
+
+    embed.description = "\n\n".join(lines)
+    embed.set_footer(text="Sweety Moderation Shield • Use /warnings <user> or /clearwarns to manage")
+    await interaction.followup.send(embed=embed)
+
+
+
 
 @bot.command(name="warn")
 @commands.has_permissions(moderate_members=True)
@@ -2896,6 +2954,55 @@ async def delwarn_prefix_cmd(ctx: commands.Context, warn_id: int):
         await log_mod_action(ctx.guild, ctx.author, None, "Warning Deleted", f"Deleted warning ID {warn_id}")
     else:
         await ctx.send(f"❌ Warning with ID **`{warn_id}`** was not found in this server.")
+
+
+@bot.command(name="warnleaderboard", aliases=["warnlb", "warnslb", "warningslb", "warningsleaderboard"])
+@commands.guild_only()
+async def warnleaderboard_prefix_cmd(ctx: commands.Context, limit: Optional[int] = 10):
+    """View the server warnings leaderboard: !warnlb [limit]"""
+    limit = max(1, min(limit or 10, 25))
+    rows = await db.get_warnings_leaderboard(ctx.guild.id, limit=limit)
+    if not rows:
+        embed = discord.Embed(
+            title=f"🏆 Warnings Leaderboard — {ctx.guild.name}",
+            description="✅ **No warnings recorded in this server! The record is completely clean.**",
+            color=discord.Color.green()
+        )
+        if ctx.guild.icon:
+            embed.set_thumbnail(url=ctx.guild.icon.url)
+        await ctx.send(embed=embed)
+        return
+
+    embed = discord.Embed(
+        title=f"⚠️ Warnings Leaderboard — {ctx.guild.name}",
+        description=f"Showing top **{len(rows)}** members with active infractions on file.\n",
+        color=discord.Color.orange()
+    )
+    if ctx.guild.icon:
+        embed.set_thumbnail(url=ctx.guild.icon.url)
+
+    rank_emojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    lines = []
+    for idx, r in enumerate(rows, 1):
+        uid = r["user_id"] if isinstance(r, dict) and "user_id" in r else r[0]
+        cnt = int(r["warn_count"] if isinstance(r, dict) and "warn_count" in r else r[1])
+        
+        if cnt >= 5:
+            risk = f"🛑 **{cnt} Warnings** `(24h Timeout Risk)`"
+        elif cnt == 4:
+            risk = f"🚨 **{cnt} Warnings** `(1h Timeout Risk)`"
+        elif cnt == 3:
+            risk = f"⚠️ **{cnt} Warnings** `(15m Timeout Risk)`"
+        else:
+            risk = f"🟡 **{cnt} Warning{'s' if cnt != 1 else ''}**"
+
+        medal = rank_emojis[idx-1] if idx <= len(rank_emojis) else f"`#{idx}`"
+        lines.append(f"{medal} <@{uid}> — {risk}")
+
+    embed.description = "\n\n".join(lines)
+    embed.set_footer(text="Sweety Moderation Shield • Use !warnings <user> or !clearwarns to manage")
+    await ctx.send(embed=embed)
+
 
 
 @bot.tree.command(name="mute", description="Timeout (mute) a member in the server")
