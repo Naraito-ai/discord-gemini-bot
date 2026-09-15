@@ -2555,8 +2555,14 @@ async def unban_command(interaction: discord.Interaction, user_id: str, reason: 
 
 # ── Formal Warning & Auto-Escalation System ──────────────────────────────────
 
+TICKET_CHANNEL_ID = 1549080000328896583
+
 async def issue_warning_logic(guild: discord.Guild, member: discord.Member, moderator: discord.Member, reason: str) -> tuple[int, str]:
-    """Issues a formal warning, calculates total warnings, and applies auto-escalation timeouts."""
+    """
+    Issues a formal warning / strike, tracks strike count, and enforces strike policies:
+    - 3 Strikes: 7-Day Server Timeout (Appeal in <#1549080000328896583>)
+    - 6 Strikes: Permanent Server Ban
+    """
     await db.add_warning(guild.id, member.id, moderator.id, reason)
     
     # Get total warnings count
@@ -2567,42 +2573,92 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
     # Auto-escalation thresholds
     if total_warns == 3:
         try:
-            if not is_protected(member): await member.timeout(datetime.timedelta(minutes=15), reason=f"Auto-Escalation: 3 Warnings Reached ({reason})")
-            escalation_action = "\n⚠️ **Auto-Escalation:** Member has reached **3 warnings** and was automatically timed out for **15 minutes**."
-        except Exception:
-            pass
-    elif total_warns == 4:
+            if not is_protected(member):
+                await member.timeout(datetime.timedelta(days=7), reason=f"Auto-Escalation: 3 Strikes Reached ({reason})")
+            escalation_action = (
+                "\n\n🛑 **Auto-Escalation: 7-Day Timeout Applied**\n"
+                "• **Penalty:** Muted for **7 full days** (Reached 3 Strikes).\n"
+                "• **Appeal:** Please open a ticket in <#1549080000328896583> to appeal with Admins / Moderators.\n"
+                "• **Warning:** Accumulating 3 more strikes (6 total) will result in a **permanent ban**."
+            )
+        except Exception as e:
+            logger.warning(f"Failed to timeout member {member.id} for 7 days: {e}")
+    elif total_warns >= 6:
         try:
-            if not is_protected(member): await member.timeout(datetime.timedelta(hours=1), reason=f"Auto-Escalation: 4 Warnings Reached ({reason})")
-            escalation_action = "\n🚨 **Auto-Escalation:** Member has reached **4 warnings** and was automatically timed out for **1 hour**."
-        except Exception:
-            pass
-    elif total_warns >= 5:
-        try:
-            if not is_protected(member): await member.timeout(datetime.timedelta(hours=24), reason=f"Auto-Escalation: 5+ Warnings Reached ({reason})")
-            escalation_action = "\n🛑 **Auto-Escalation:** Member has reached **5+ warnings** and was automatically timed out for **24 hours**."
-        except Exception:
-            pass
+            if not is_protected(member):
+                await member.ban(reason=f"Auto-Escalation: 6 Strikes Reached - Permanent Server Ban ({reason})", delete_message_days=0)
+            escalation_action = (
+                "\n\n⛔ **Auto-Escalation: Permanent Ban Applied**\n"
+                "• **Penalty:** **Permanently banned** from the server (Accumulated 6 Strikes)."
+            )
+        except Exception as e:
+            logger.warning(f"Failed to ban member {member.id} for 6 strikes: {e}")
+    elif total_warns > 3:
+        remaining = 6 - total_warns
+        escalation_action = f"\n\n⚠️ **Critical Notice:** Member has **{total_warns}/6 strikes** ({remaining} more strike{'s' if remaining != 1 else ''} will result in a **permanent ban**)."
+    else:
+        remaining = 3 - total_warns
+        escalation_action = f"\n\n🟡 **Notice:** Member has **{total_warns}/3 strikes** before a 7-day timeout ({remaining} strike{'s' if remaining != 1 else ''} remaining)."
 
-    # Attempt to DM the user
+    # Attempt to DM the user with full rules and appeal info
     try:
+        dm_color = discord.Color.red() if total_warns >= 3 else discord.Color.gold()
         dm_embed = discord.Embed(
-            title=f"⚠️ Warning Received in {guild.name}",
-            description=f"You have been formally warned by **{moderator.display_name}**.",
-            color=discord.Color.gold()
+            title=f"⚠️ Warning / Strike Issued in {guild.name}",
+            description=f"You have been formally issued a strike by **{moderator.display_name}**.",
+            color=dm_color
         )
         dm_embed.add_field(name="Reason", value=reason, inline=False)
-        dm_embed.add_field(name="Total Warnings on File", value=f"`{total_warns}` warnings", inline=True)
-        if escalation_action:
-            dm_embed.add_field(name="Penalty", value=escalation_action.strip(), inline=False)
-        dm_embed.set_footer(text=f"Please adhere to {guild.name} server rules to avoid further timeouts or bans.")
+        dm_embed.add_field(name="Total Strikes on Record", value=f"`{total_warns}` / 6 strikes", inline=True)
+        
+        if total_warns == 3:
+            dm_embed.add_field(
+                name="🛑 Penalty Applied: 7-Day Mute",
+                value=(
+                    "You have reached **3 strikes** and have been **muted for 7 full days**.\n\n"
+                    "📌 **How to Appeal:**\n"
+                    "Create a ticket in the ticket channel <#1549080000328896583> in the server to appeal your strikes with Admins / Moderators.\n\n"
+                    "⚠️ *Note: If you return and accumulate 3 more strikes (6 total), you will be permanently banned from the server.*"
+                ),
+                inline=False
+            )
+        elif total_warns >= 6:
+            dm_embed.add_field(
+                name="⛔ Penalty Applied: Permanent Ban",
+                value="You have accumulated **6 strikes** and have been **permanently banned** from the server.",
+                inline=False
+            )
+        elif total_warns > 3:
+            dm_embed.add_field(
+                name="🚨 High Risk Notice",
+                value=f"You currently have **{total_warns}/6 strikes**. Reaching 6 strikes results in an immediate permanent ban.",
+                inline=False
+            )
+
+        dm_embed.add_field(
+            name="📜 Server Strike Rules",
+            value=(
+                "• **3 Strikes:** Muted for 7 full days (Appeal via ticket in <#1549080000328896583>)\n"
+                "• **6 Strikes:** Permanent ban from the server\n\n"
+                "**Strikes are issued for:**\n"
+                "• Being critical of moderators in a public setting\n"
+                "• Toxicity / hate of any kind\n"
+                "• General rudeness\n"
+                "• Inappropriate pictures, messages, or descriptions\n"
+                "• Curse words / religion / race / gender / sexuality bashing (Permanent ban)\n"
+                "• Anything else the moderation team deems worthy of a strike."
+            ),
+            inline=False
+        )
+        dm_embed.set_footer(text="Please keep the community friendly and adhere to server rules.")
         await member.send(embed=dm_embed)
     except Exception:
         pass
 
     # Log to moderation channel
-    await log_mod_action(guild, moderator, member, "Warning Issued", reason, f"Total Warnings: {total_warns}{escalation_action}")
+    await log_mod_action(guild, moderator, member, "Warning Issued", reason, f"Total Strikes: {total_warns}{escalation_action}")
     return total_warns, escalation_action
+
 
 
 @bot.tree.command(name="warn", description="Issue a formal warning to a member with auto-escalation")
@@ -2836,14 +2892,14 @@ async def warnleaderboard_command(interaction: discord.Interaction, limit: Optio
         uid = r["user_id"] if isinstance(r, dict) and "user_id" in r else r[0]
         cnt = int(r["warn_count"] if isinstance(r, dict) and "warn_count" in r else r[1])
         
-        if cnt >= 5:
-            risk = f"🛑 **{cnt} Warnings** `(24h Timeout Risk)`"
-        elif cnt == 4:
-            risk = f"🚨 **{cnt} Warnings** `(1h Timeout Risk)`"
-        elif cnt == 3:
-            risk = f"⚠️ **{cnt} Warnings** `(15m Timeout Risk)`"
+        if cnt >= 6:
+            risk = f"⛔ **{cnt} Strikes** `(Permanent Ban Applied)`"
+        elif cnt >= 3:
+            remaining = 6 - cnt
+            risk = f"🛑 **{cnt} Strikes** `(7-Day Mute / {remaining} from Ban)`"
         else:
-            risk = f"🟡 **{cnt} Warning{'s' if cnt != 1 else ''}**"
+            remaining = 3 - cnt
+            risk = f"🟡 **{cnt} Strike{'s' if cnt != 1 else ''}** `({remaining} from 7-Day Mute)`"
 
         medal = rank_emojis[idx-1] if idx <= len(rank_emojis) else f"`#{idx}`"
         lines.append(f"{medal} <@{uid}> — {risk}")
@@ -2851,6 +2907,7 @@ async def warnleaderboard_command(interaction: discord.Interaction, limit: Optio
     embed.description = "\n\n".join(lines)
     embed.set_footer(text="Sweety Moderation Shield • Use /warnings <user> or /clearwarns to manage")
     await interaction.followup.send(embed=embed)
+
 
 
 
@@ -2987,14 +3044,14 @@ async def warnleaderboard_prefix_cmd(ctx: commands.Context, limit: Optional[int]
         uid = r["user_id"] if isinstance(r, dict) and "user_id" in r else r[0]
         cnt = int(r["warn_count"] if isinstance(r, dict) and "warn_count" in r else r[1])
         
-        if cnt >= 5:
-            risk = f"🛑 **{cnt} Warnings** `(24h Timeout Risk)`"
-        elif cnt == 4:
-            risk = f"🚨 **{cnt} Warnings** `(1h Timeout Risk)`"
-        elif cnt == 3:
-            risk = f"⚠️ **{cnt} Warnings** `(15m Timeout Risk)`"
+        if cnt >= 6:
+            risk = f"⛔ **{cnt} Strikes** `(Permanent Ban Applied)`"
+        elif cnt >= 3:
+            remaining = 6 - cnt
+            risk = f"🛑 **{cnt} Strikes** `(7-Day Mute / {remaining} from Ban)`"
         else:
-            risk = f"🟡 **{cnt} Warning{'s' if cnt != 1 else ''}**"
+            remaining = 3 - cnt
+            risk = f"🟡 **{cnt} Strike{'s' if cnt != 1 else ''}** `({remaining} from 7-Day Mute)`"
 
         medal = rank_emojis[idx-1] if idx <= len(rank_emojis) else f"`#{idx}`"
         lines.append(f"{medal} <@{uid}> — {risk}")
