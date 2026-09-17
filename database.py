@@ -222,17 +222,6 @@ class DatabaseManager:
                 voice_active_seconds INTEGER DEFAULT 0
             );
             """,
-            # Debate Votes Table (Persistent Community Engagement)
-            """
-            CREATE TABLE IF NOT EXISTS debate_votes (
-                message_id TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                option_index INTEGER NOT NULL,
-                option_name TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (message_id, user_id)
-            );
-            """,
             # Reminders Table
             """
             CREATE TABLE IF NOT EXISTS reminders (
@@ -480,57 +469,6 @@ class DatabaseManager:
         """Logs a dashboard or moderator action."""
         query = "INSERT INTO audit_logs (guild_id, user_id, action, details) VALUES (?, ?, ?, ?)"
         await self.execute(query, str(guild_id), str(user_id), action, details)
-
-    # ── Basketball & Community Debate Voting Persistence ──────────────────────
-    async def record_debate_vote(self, message_id: Any, user_id: Any, option_index: int, option_name: str) -> tuple:
-        """
-        Records or updates a user's debate vote.
-        Returns: (is_new_vote: bool, previous_option_index: Optional[int])
-        """
-        existing = await self.fetchrow(
-            "SELECT option_index FROM debate_votes WHERE message_id = ? AND user_id = ?",
-            str(message_id), str(user_id)
-        )
-        if existing:
-            prev_idx = existing["option_index"] if isinstance(existing, dict) and "option_index" in existing else (existing[0] if existing else None)
-            if prev_idx == option_index:
-                return False, prev_idx
-            # Update existing vote
-            await self.execute(
-                "UPDATE debate_votes SET option_index = ?, option_name = ?, timestamp = CURRENT_TIMESTAMP WHERE message_id = ? AND user_id = ?",
-                option_index, option_name, str(message_id), str(user_id)
-            )
-            return True, prev_idx
-        else:
-            # Insert new vote
-            await self.execute(
-                "INSERT INTO debate_votes (message_id, user_id, option_index, option_name) VALUES (?, ?, ?, ?)",
-                str(message_id), str(user_id), option_index, option_name
-            )
-            return True, None
-
-    async def get_user_debate_vote(self, message_id: Any, user_id: Any) -> Optional[int]:
-        """Gets user's previously voted option index for a debate message."""
-        existing = await self.fetchrow(
-            "SELECT option_index FROM debate_votes WHERE message_id = ? AND user_id = ?",
-            str(message_id), str(user_id)
-        )
-        if existing:
-            return existing["option_index"] if isinstance(existing, dict) and "option_index" in existing else existing[0]
-        return None
-
-    async def get_debate_tallies(self, message_id: Any) -> Dict[int, int]:
-        """Returns a dict of {option_index: total_votes} from database."""
-        rows = await self.fetch(
-            "SELECT option_index, COUNT(*) as count FROM debate_votes WHERE message_id = ? GROUP BY option_index",
-            str(message_id)
-        )
-        tallies = {}
-        for r in rows:
-            opt = r["option_index"] if isinstance(r, dict) and "option_index" in r else r[0]
-            cnt = r["count"] if isinstance(r, dict) and "count" in r else r[1]
-            tallies[int(opt)] = int(cnt)
-        return tallies
 
     # ── Reminders Methods ───────────────────────────────────────────────────
     async def add_reminder(self, reminder_id: str, user_id: Any, guild_id: Any, channel_id: Any, reminder_text: str, remind_at: float, created_at: float, delivery_method: str = "dm") -> bool:
