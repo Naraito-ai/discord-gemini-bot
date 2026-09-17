@@ -2029,14 +2029,14 @@ class InteractiveTeamBattleView(discord.ui.View):
         }
         
         self.current_round = 0  # 0 to 4
-        self.score_a = int(eval_a.get("ovr", 90) * 0.7) + random.randint(15, 25)
-        self.score_b = int(eval_b.get("ovr", 90) * 0.7) + random.randint(15, 25)
         self.duels_won_a = 0
         self.duels_won_b = 0
+        self.round_pts_a = 0
+        self.round_pts_b = 0
         self.momentum_a = 0
         self.momentum_b = 0
         self.round_history = []
-        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a['ovr']} OVR) vs {opponent.display_name} ({eval_b['ovr']} OVR).\n*Real-time tactical decisions, counters & momentum determine the winner, NOT just raw OVR!*"
+        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a['ovr']} OVR) vs {opponent.display_name} ({eval_b['ovr']} OVR).\n*Real-time tactical decisions, counters & momentum determine who wins the Best-of-5!*"
         self.player_points = {self.author.display_name: {}, self.opponent.display_name: {}}
         self.is_game_over = False
         self._build_controls()
@@ -2081,26 +2081,24 @@ class InteractiveTeamBattleView(discord.ui.View):
         pl_a = self.picks_a[cur_pos]
         pl_b = self.picks_b[cur_pos]
 
-        lead_diff = self.score_a - self.score_b
-        if lead_diff > 0:
-            status_text = f"👑 **{self.author.display_name} leads by +{lead_diff} PTS**"
+        if self.duels_won_a > self.duels_won_b:
+            status_text = f"🟢 **{self.author.display_name}** leads **`{self.duels_won_a} — {self.duels_won_b}`**"
             status_color = discord.Color.gold()
-        elif lead_diff < 0:
-            status_text = f"⚡ **{self.opponent.display_name} leads by +{abs(lead_diff)} PTS**"
+        elif self.duels_won_b > self.duels_won_a:
+            status_text = f"🔴 **{self.opponent.display_name}** leads **`{self.duels_won_b} — {self.duels_won_a}`**"
             status_color = discord.Color.purple()
         else:
-            status_text = "🔥 **TIED GAME! High Drama on Court!**"
+            status_text = f"⚖️ **Series Tied `{self.duels_won_a} — {self.duels_won_b}`**"
             status_color = discord.Color.orange()
 
         mom_bar_a = "🔥" * max(0, self.momentum_a) or "⚪"
         mom_bar_b = "🔥" * max(0, self.momentum_b) or "⚪"
 
         embed = discord.Embed(
-            title=f"⚔️ LIVE NBA TACTICAL BATTLE: {self.author.display_name} vs {self.opponent.display_name}",
+            title=f"⚔️ LIVE NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}",
             description=(
-                f"### 🏀 Scoreboard: `{self.score_a}` — `{self.score_b}`\n"
-                f"{status_text}\n"
-                f"**Matchup Quarter**: `Round {self.current_round + 1}/5` • **{pos_title} ({cur_pos}) Duel**\n"
+                f"### 🏀 Match Status: {status_text}\n"
+                f"**Quarter `{self.current_round + 1}/5`**: **{pos_title} ({cur_pos}) Matchup**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             ),
             color=status_color
@@ -2110,56 +2108,61 @@ class InteractiveTeamBattleView(discord.ui.View):
 
         # Active Matchup Box
         matchup_value = (
-            f"🟢 **{self.author.display_name}**: {pl_a['emoji']} **{pl_a['name']}** (`${pl_a['cost']}`) — *{pl_a['tag']}*\n"
-            f"🔴 **{self.opponent.display_name}**: {pl_b['emoji']} **{pl_b['name']}** (`${pl_b['cost']}`) — *{pl_b['tag']}*\n"
-            f"📊 **Momentum**: {self.author.display_name} `[{mom_bar_a}]`  VS  {self.opponent.display_name} `[{mom_bar_b}]`"
+            f"🟢 **{self.author.display_name}**: {pl_a['emoji']} **{pl_a['name']}** (`${pl_a['cost']}`) `[MOM: {mom_bar_a}]`\n"
+            f"🔴 **{self.opponent.display_name}**: {pl_b['emoji']} **{pl_b['name']}** (`${pl_b['cost']}`) `[MOM: {mom_bar_b}]`\n"
+            f"⚡ *Archetypes: {pl_a['tag']} vs {pl_b['tag']}*"
         )
-        embed.add_field(name=f"⭐ Current Duel • {pos_title}", value=matchup_value, inline=False)
+        embed.add_field(name=f"⭐ Current Duel • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
 
         # Play commentary
-        embed.add_field(name="📜 Latest Play / Action", value=f">>> {self.last_commentary}", inline=False)
+        embed.add_field(name="📜 Latest Play Action", value=f">>> {self.last_commentary}", inline=False)
 
         # Tactical guide
         guide_text = (
-            "🎯 `3PT Step-Back` (3 pts, beats paint drop) • 💥 `Power Drive` (2+1 pts, beats tight press)\n"
-            "🧠 `Pick & Roll` (2 pts, high IQ) • 🔒 `Clamp & Break` (Steal) • ⚡ `Mamba Iso` (Clutch)"
+            "🎯 `3PT Step-Back` (+3) • 💥 `Power Drive` (+2+And-1) • 🧠 `Pick & Roll` (+2)\n"
+            "🔒 `Lockdown Clamp` (Steal) • ⚡ `Mamba Iso` (Clutch) • ⏩ `Quick Sim`"
         )
         embed.add_field(name="🎮 Choose Your Live Coach Decision Below", value=guide_text, inline=False)
 
-        embed.set_footer(text=f"Duels Won: {self.author.display_name} ({self.duels_won_a}) vs {self.opponent.display_name} ({self.duels_won_b}) • Tactics & reads beat high OVR!")
+        embed.set_footer(text=f"Duels: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • Tactical reads beat high OVR!")
         embed.timestamp = discord.utils.utcnow()
         return embed
 
     def _make_game_over_embed(self) -> discord.Embed:
-        # Determine overall winner
-        if self.score_a > self.score_b:
+        # Best of 5 Duels determines winner
+        if self.duels_won_a > self.duels_won_b:
             winner_name = self.author.display_name
             winner_member = self.author
             winner_is_a = True
-        elif self.score_b > self.score_a:
+        elif self.duels_won_b > self.duels_won_a:
             winner_name = self.opponent.display_name
             winner_member = self.opponent
             winner_is_a = False
         else:
-            if self.duels_won_a >= self.duels_won_b:
-                self.score_a += 2
+            if self.round_pts_a >= self.round_pts_b:
                 winner_name = self.author.display_name
                 winner_member = self.author
                 winner_is_a = True
             else:
-                self.score_b += 2
                 winner_name = self.opponent.display_name
                 winner_member = self.opponent
                 winner_is_a = False
 
+        # Calculate realistic, perfectly aligned NBA scores
+        final_score_a = 96 + (self.duels_won_a * 6) + (self.round_pts_a * 2)
+        final_score_b = 96 + (self.duels_won_b * 6) + (self.round_pts_b * 2)
+        if winner_is_a and final_score_a <= final_score_b:
+            final_score_a = final_score_b + 2
+        elif not winner_is_a and final_score_b <= final_score_a:
+            final_score_b = final_score_a + 2
+
         embed = discord.Embed(
             title=f"🏆 FINAL WHISTLE: {self.author.display_name} vs {self.opponent.display_name}",
             description=(
-                f"# 👑 `{winner_name}` WINS THE GAME!\n\n"
-                f"### 🏀 Final Score: **`{self.score_a} — {self.score_b}`**\n"
-                f"• **Positional Duels Won**: `{self.author.display_name} ({self.duels_won_a})` — `{self.opponent.display_name} ({self.duels_won_b})`\n"
-                f"• **{self.author.display_name} ({self.eval_a['ovr']} OVR)**: {self.eval_a['tier'].split('•')[0].strip()}\n"
-                f"• **{self.opponent.display_name} ({self.eval_b['ovr']} OVR)**: {self.eval_b['tier'].split('•')[0].strip()}\n"
+                f"# 👑 `{winner_name}` WINS THE SERIES!\n\n"
+                f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Duels: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
+                f"• 🟢 **{self.author.display_name} ({self.eval_a['ovr']} OVR)**: {self.eval_a['tier'].split('•')[0].strip()}\n"
+                f"• 🔴 **{self.opponent.display_name} ({self.eval_b['ovr']} OVR)**: {self.eval_b['tier'].split('•')[0].strip()}\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             ),
             color=discord.Color.gold() if winner_is_a else discord.Color.purple()
@@ -2167,10 +2170,31 @@ class InteractiveTeamBattleView(discord.ui.View):
         if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
             embed.set_thumbnail(url=winner_member.display_avatar.url)
 
-        for log_entry in self.round_history:
-            embed.add_field(name=log_entry["title"], value=log_entry["value"], inline=False)
+        # Build clean visual Box Score for the 5 matchups
+        box_lines = []
+        for r in self.round_history:
+            pos = r["pos"]
+            p_a = r["pl_a"]["name"]
+            p_b = r["pl_b"]["name"]
+            pts_a = r["pts_a"]
+            pts_b = r["pts_b"]
+            if r["a_won"]:
+                res_icon = "🟢"
+                p_a_fmt = f"**{p_a}** `(+{pts_a})`"
+                p_b_fmt = f"{p_b} `(+{pts_b})`"
+            elif pts_b > pts_a:
+                res_icon = "🔴"
+                p_a_fmt = f"{p_a} `(+{pts_a})`"
+                p_b_fmt = f"**{p_b}** `(+{pts_b})`"
+            else:
+                res_icon = "🟡"
+                p_a_fmt = f"**{p_a}** `(+{pts_a})`"
+                p_b_fmt = f"**{p_b}** `(+{pts_b})`"
+            box_lines.append(f"`{pos:<2}` {res_icon} {p_a_fmt} ── **`{pts_a} - {pts_b}`** ── {p_b_fmt}")
 
-        # Select Game MVP
+        embed.add_field(name="🏀 Positional Duels Breakdown (Best of 5)", value="\n".join(box_lines), inline=False)
+
+        # Select Game MVP with realistic statline
         winning_picks = self.picks_a if winner_is_a else self.picks_b
         winning_user = self.author.display_name if winner_is_a else self.opponent.display_name
         scores_map = self.player_points.get(winning_user, {})
@@ -2184,9 +2208,9 @@ class InteractiveTeamBattleView(discord.ui.View):
         if not mvp_player:
             mvp_player = list(winning_picks.values())[0]
 
-        mvp_pts = scores_map.get(mvp_player["name"], random.randint(24, 34))
-        mvp_reb = random.randint(5, 14)
-        mvp_ast = random.randint(4, 12)
+        mvp_pts = random.randint(28, 38) + (scores_map.get(mvp_player["name"], 0) * 2)
+        mvp_reb = random.randint(6, 14)
+        mvp_ast = random.randint(5, 13)
         mvp_blk = random.randint(1, 4)
 
         mvp_value = (
@@ -2211,7 +2235,7 @@ class InteractiveTeamBattleView(discord.ui.View):
 
         # 1. Resolve Challenger Attack Possession
         res_a = resolve_possession(action_key, pl_a, pl_b, self.momentum_a, self.momentum_b)
-        self.score_a += res_a["pts"]
+        self.round_pts_a += res_a["pts"]
         self.player_points[self.author.display_name][pl_a["name"]] = self.player_points[self.author.display_name].get(pl_a["name"], 0) + res_a["pts"]
 
         if res_a["success"]:
@@ -2219,17 +2243,21 @@ class InteractiveTeamBattleView(discord.ui.View):
         else:
             self.momentum_a = max(0, self.momentum_a - 1)
 
-        # 2. Opponent AI counter possession
+        # 2. Opponent dynamic tactical AI counter
         opp_tactics = ["three", "drive", "pnr", "defense", "iso"]
-        if pl_b.get("pts_3", 0) >= 92:
-            opp_choice = random.choice(["three", "three", "pnr", "iso"])
-        elif pl_b.get("inside", 0) >= 95:
-            opp_choice = random.choice(["drive", "drive", "pnr", "defense"])
+        if pl_b.get("pts_3", 0) >= 92 and random.random() < 0.4:
+            opp_choice = "three"
+        elif pl_b.get("inside", 0) >= 92 and random.random() < 0.4:
+            opp_choice = "drive"
+        elif pl_b.get("defense", 0) >= 92 and random.random() < 0.4:
+            opp_choice = "defense"
+        elif pl_b.get("playmaking", 0) >= 92 and random.random() < 0.4:
+            opp_choice = "pnr"
         else:
             opp_choice = random.choice(opp_tactics)
 
         res_b = resolve_possession(opp_choice, pl_b, pl_a, self.momentum_b, self.momentum_a)
-        self.score_b += res_b["pts"]
+        self.round_pts_b += res_b["pts"]
         self.player_points[self.opponent.display_name][pl_b["name"]] = self.player_points[self.opponent.display_name].get(pl_b["name"], 0) + res_b["pts"]
 
         if res_b["success"]:
@@ -2241,20 +2269,20 @@ class InteractiveTeamBattleView(discord.ui.View):
         round_a_won = (res_a["pts"] > res_b["pts"]) or (res_a["pts"] == res_b["pts"] and res_a["success"])
         if round_a_won:
             self.duels_won_a += 1
-            round_icon = "🟢"
-        else:
+        elif res_b["pts"] > res_a["pts"]:
             self.duels_won_b += 1
-            round_icon = "🔴"
 
         self.last_commentary = f"{res_a['read_note']}\n• **{self.author.display_name}**: {res_a['commentary']}\n• **{self.opponent.display_name}**: {res_b['commentary']}"
 
         self.round_history.append({
-            "title": f"🏀 Round {self.current_round + 1} • {pos_title} ({cur_pos}) Duel",
-            "value": (
-                f"{round_icon} **{self.author.display_name}** ({pl_a['name']}): `+{res_a['pts']} PTS`  VS  "
-                f"**{self.opponent.display_name}** ({pl_b['name']}): `+{res_b['pts']} PTS`\n"
-                f"💬 *{res_a['commentary']}*"
-            )
+            "pos": cur_pos,
+            "pos_title": pos_title,
+            "pl_a": pl_a,
+            "pl_b": pl_b,
+            "pts_a": res_a["pts"],
+            "pts_b": res_b["pts"],
+            "a_won": round_a_won,
+            "commentary": res_a["commentary"]
         })
 
         self.current_round += 1
@@ -2282,26 +2310,26 @@ class InteractiveTeamBattleView(discord.ui.View):
             res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b)
             res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a)
 
-            self.score_a += res_a["pts"]
-            self.score_b += res_b["pts"]
+            self.round_pts_a += res_a["pts"]
+            self.round_pts_b += res_b["pts"]
             self.player_points[self.author.display_name][pl_a["name"]] = self.player_points[self.author.display_name].get(pl_a["name"], 0) + res_a["pts"]
             self.player_points[self.opponent.display_name][pl_b["name"]] = self.player_points[self.opponent.display_name].get(pl_b["name"], 0) + res_b["pts"]
 
-            round_a_won = (res_a["pts"] > res_b["pts"])
+            round_a_won = (res_a["pts"] > res_b["pts"]) or (res_a["pts"] == res_b["pts"] and res_a["success"])
             if round_a_won:
                 self.duels_won_a += 1
-                round_icon = "🟢"
-            else:
+            elif res_b["pts"] > res_a["pts"]:
                 self.duels_won_b += 1
-                round_icon = "🔴"
 
             self.round_history.append({
-                "title": f"🏀 Round {self.current_round + 1} • {pos_title} ({cur_pos}) Duel (Simulated)",
-                "value": (
-                    f"{round_icon} **{self.author.display_name}** ({pl_a['name']}): `+{res_a['pts']} PTS`  VS  "
-                    f"**{self.opponent.display_name}** ({pl_b['name']}): `+{res_b['pts']} PTS`\n"
-                    f"💬 *{res_a['commentary']}*"
-                )
+                "pos": cur_pos,
+                "pos_title": pos_title,
+                "pl_a": pl_a,
+                "pl_b": pl_b,
+                "pts_a": res_a["pts"],
+                "pts_b": res_b["pts"],
+                "a_won": round_a_won,
+                "commentary": res_a["commentary"]
             })
             self.current_round += 1
 
