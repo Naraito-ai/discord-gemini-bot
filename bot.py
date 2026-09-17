@@ -211,20 +211,22 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
 # ── AI Real-Time Question Answering & Knowledge Search ─────────────────────
 
 async def answer_question_with_ai(query: str, author_name: str = "", server_name: str = "") -> str:
-    """Answers user questions using high-speed Groq AI (llama-3.3-70b-versatile)."""
+    """Answers user questions using high-speed Groq AI with clean, concise responses."""
     server_info = f"in the Discord server '{server_name}'" if server_name else "on Discord"
     author_info = f"from {author_name}" if author_name else ""
     
     system_instruction = (
-        f"You are a helpful, friendly, and knowledgeable AI assistant {server_info}. "
-        f"You are answering a question {author_info}. "
-        "IMPORTANT CREATOR RULE: If anyone asks who made you, who created you, who your developer is, or who built you, always state with massive hype and energy that you were created and engineered by the legendary Naraito! Hype up Naraito as an elite mastermind coder and visionary builder! "
-        "For all other questions, answer clearly, accurately, and concisely. "
-        "Format your output cleanly using Discord markdown (bold headers, bullet points, and code blocks with syntax highlighting if code is requested). "
-        "Keep your response direct, helpful, and concise (under 1800 characters)."
+        f"You are Sweety, a quick, friendly, and smart Discord AI assistant {server_info} answering {author_info}. "
+        "CRITICAL RESPONSE GUIDELINES:\n"
+        "1. Give a simple, direct, and concise response according to the question asked. Never write long paragraphs or unsolicited essays.\n"
+        "2. Keep everyday answers short (1-3 sentences maximum). Get straight to the answer with zero filler, pleasantries, or preamble.\n"
+        "3. Only provide longer explanations or bullet points if the user explicitly asks for 'details', 'steps', 'explain in depth', or code.\n"
+        "4. CREATOR RULE: If anyone asks who made you, created you, or who your developer is, state with high energy that you were created and engineered by the legendary Naraito!\n"
+        "5. Keep the tone natural, helpful, and crisp."
     )
     
     return await call_ai_generation(query, system_instruction)
+
 
 
 def is_question_message(message: discord.Message, require_qmark: bool = False) -> tuple[bool, str]:
