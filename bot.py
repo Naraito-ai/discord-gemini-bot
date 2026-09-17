@@ -1573,185 +1573,177 @@ async def reminder_delivery_loop():
 # ── Social & Anime Action GIFs Suite ───────────────────────────────────────
 ACTION_METADATA = {
     "hug": {
-        "title": "🤗 Warm Hug",
         "color": discord.Color.from_rgb(255, 160, 180),
-        "captions": [
-            "{author} wrapped their arms around {target} in a warm, cozy hug! 🤗",
-            "{author} gave {target} the biggest, tightest hug ever! ❤️",
-            "{author} gently hugged {target}! Everything is going to be okay. ✨",
-            "{author} tackled {target} with a giant, loving bear hug! 🐻"
-        ],
-        "self_caption": "{author} needed some love, so Sweety gives you a big, warm hug! 🤗❤️",
-        "bot_caption": "Sweety blushes happily and gives {author} a giant hug back! (* >ω<) ❤️",
+        "verb": "hugs",
+        "emoji": "(つ >ω<)つ",
+        "self_text": "{author} hugs themselves! (つ´∀｀)つ",
+        "bot_text": "{author} hugs Sweety! (* >ω<) ❤️",
         "gifs": [
-            "https://media.giphy.com/media/u9BxQbM5bxvwA/giphy.gif",
-            "https://media.giphy.com/media/lrr9rHuoJOE0w/giphy.gif",
-            "https://media.giphy.com/media/od5H3PmEG5EVq/giphy.gif",
-            "https://media.giphy.com/media/wnsgren9NtITS/giphy.gif",
-            "https://media.giphy.com/media/3bqtLDeiDtwhq/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/hug/04524ef0040ff2ad.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/c787d02e22435395.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/df0840a507aa481a.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/408915119268a454.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/60927361c059c503.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/52144ce42c01a39c.gif"
         ]
     },
     "slap": {
-        "title": "🖐️ Anime Slap!",
         "color": discord.Color.from_rgb(255, 75, 75),
-        "captions": [
-            "{author} slapped {target} into next week! 💥",
-            "{author} delivered a devastating anime slap to {target}! 🖐️",
-            "*SMACK!* {author} slapped some sense into {target}! ⚡",
-            "{author} backhanded {target}! That’s gotta leave a mark! 😵"
-        ],
-        "self_caption": "{author}, why are you slapping yourself?! Sweety grabs your hand to stop you! 😭",
-        "bot_caption": "Ouch! What did Sweety do to deserve that, {author}?! (ノ_<。) 💔",
+        "verb": "slaps",
+        "emoji": "( `Д´)ノ=3 *SMACK!*",
+        "self_text": "{author} slaps themselves! ( >_< )",
+        "bot_text": "{author} slaps Sweety! (ノ_<。) 💔",
         "gifs": [
-            "https://media.giphy.com/media/jLeyZWgtwWP2U/giphy.gif",
-            "https://media.giphy.com/media/Gf3AUz3eBNbTW/giphy.gif",
-            "https://media.giphy.com/media/Zau0yrl15oqdK480Av/giphy.gif",
-            "https://media.giphy.com/media/mEtSQlxqBtWWA/giphy.gif",
-            "https://media.giphy.com/media/k1uEYPE77QuEA/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/slap/7882244dc2ba254c.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/56d8426acc62f8fb.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/a51d5c14f73d4c4f.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/83850d2e7434d541.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/2215a625136a1cda.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/iycRe43Ygg.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/0d82850a623b04f6.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/YZVDKmmik2.gif"
         ]
     },
     "pat": {
-        "title": "🌸 Gentle Headpat",
         "color": discord.Color.from_rgb(255, 200, 50),
-        "captions": [
-            "{author} gently patted {target} on the head. *There, there!* 🌸",
-            "{author} gave {target} wholesome headpats! Good job! 💖",
-            "{author} patted {target}'s head with affection! (´｡• ᵕ •｡`) ♡"
-        ],
-        "self_caption": "{author} pats their own head! *You did great today!* 🌟",
-        "bot_caption": "Sweety purrs happily from {author}'s headpats! (´꒳`) ✨",
+        "verb": "pats",
+        "emoji": "( ´ ▽ ` )ﾉ *pat pat*",
+        "self_text": "{author} pats their own head! (*´▽`*)",
+        "bot_text": "{author} pats Sweety! (´꒳`) ✨",
         "gifs": [
-            "https://media.giphy.com/media/L2z7dnOduqEow/giphy.gif",
-            "https://media.giphy.com/media/ye7OTQgwmVuNTYSS23/giphy.gif",
-            "https://media.giphy.com/media/5tmRHwHYsuBhDHU0FJ/giphy.gif",
-            "https://media.giphy.com/media/109ltuoSQT212w/giphy.gif",
-            "https://media.giphy.com/media/M3a51DMeWvYUo/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/pat/84f7a138d35d4081.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/13ec930fd42770f6.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/4de26d931b9eb6a3.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/7pUEkSbx3r.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/a606PuT9XA.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/sXhIDsqPO6.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/7bce755fd304f03e.gif"
         ]
     },
     "kiss": {
-        "title": "💋 Sweet Kiss",
         "color": discord.Color.from_rgb(255, 105, 180),
-        "captions": [
-            "{author} gave {target} a sweet and gentle kiss! 💋",
-            "{author} planted a loving kiss on {target}'s cheek! 💖",
-            "{author} pulled {target} close and kissed them! (//ω//)"
-        ],
-        "self_caption": "{author} kisses their reflection in the mirror! Stay confident! 🪞✨",
-        "bot_caption": "Sweety turns bright red and smiles shyly at {author}! (//ω//) 💖",
+        "verb": "kisses",
+        "emoji": "(//ω//) 💋",
+        "self_text": "{author} kisses their reflection! 🪞✨",
+        "bot_text": "{author} kisses Sweety! (//ω//) 💖",
         "gifs": [
-            "https://media.giphy.com/media/FqBTvSNjNzeZG/giphy.gif",
-            "https://media.giphy.com/media/nyGFcsP0kAobm/giphy.gif",
-            "https://media.giphy.com/media/G3va31oEEnIkM/giphy.gif",
-            "https://media.giphy.com/media/bm2O3nXTcKJeU/giphy.gif",
-            "https://media.giphy.com/media/flmwZUuPN062Y/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/kiss/cc21567435858305.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/e8620e4b5d4907df.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/5e1a1159b2d14a2c.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/0e41d66ee4966bea.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/e34493aac9970d50.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/06c217107318c1d6.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/736a111d8ed929b2.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/15a312f23dec92ab.gif"
         ]
     },
     "punch": {
-        "title": "🥊 Super Punch!",
         "color": discord.Color.from_rgb(230, 50, 50),
-        "captions": [
-            "{author} hit {target} with a 100% Detroit Smash! 🥊",
-            "{author} threw a lightning-fast right hook at {target}! 💥",
-            "{author} punched {target} straight into the stratosphere! 🚀"
-        ],
-        "self_caption": "{author} tried to shadowbox themselves and took a hit! 😵",
-        "bot_caption": "Sweety deployed the Auto-Mod Energy Shield and deflected {author}'s punch! 🛡️⚡",
+        "verb": "punches",
+        "emoji": "( ҂`з´) ᕤ *POW!*",
+        "self_text": "{author} shadowboxes and punches themselves! 😵",
+        "bot_text": "{author} punches Sweety! 🛡️ Energy shield deflected!",
         "gifs": [
-            "https://media.giphy.com/media/arbHBoiUWUgmc/giphy.gif",
-            "https://media.giphy.com/media/DGsDLr9nyz2LkVgKFs/giphy.gif",
-            "https://media.giphy.com/media/xUO4t2gkWBxDi/giphy.gif",
-            "https://media.giphy.com/media/11HeubLHnHgaVG/giphy.gif",
-            "https://media.giphy.com/media/3ohc1292yKn6Z1saGs/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/punch/2fd18184c78ec80d.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/3a6417e6568b2e96.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f55xAxN6kKHY.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/a68e34a1994c91f7.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/120ad1827ee066b2.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/05bc002e281ddd92.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/6Nl4IdAcfX.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f179131bd406f951.gif"
         ]
     },
     "cuddle": {
-        "title": "🧸 Cozy Cuddle",
         "color": discord.Color.from_rgb(255, 175, 200),
-        "captions": [
-            "{author} snuggled up and cuddled with {target}! 🧸",
-            "{author} is happily cuddling {target}! So warm and cozy~ 💤"
-        ],
-        "self_caption": "{author} grabs a giant plushie and cuddles up! 🧸",
-        "bot_caption": "Sweety happily cuddles up with {author}! So soft! (´｡• ω •｡`)",
+        "verb": "cuddles with",
+        "emoji": "(つ´꒳` )つ",
+        "self_text": "{author} cuddles a giant plushie! 🧸",
+        "bot_text": "{author} cuddles Sweety! (´｡• ω •｡`)",
         "gifs": [
-            "https://media.giphy.com/media/k95625LKWXPP2/giphy.gif",
-            "https://media.giphy.com/media/vVA8U5NnXpMXLFvtn8/giphy.gif",
-            "https://media.giphy.com/media/3bqtLDeiDtwhq/giphy.gif",
-            "https://media.giphy.com/media/l2QDM9Jnim1YVWL6w/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/cuddle/aa8882919ed9833a.gif",
+            "https://cdn.otakugifs.xyz/gifs/cuddle/57ed752519bfce5d.gif",
+            "https://cdn.otakugifs.xyz/gifs/cuddle/88561f7a088650b8.gif",
+            "https://cdn.otakugifs.xyz/gifs/cuddle/ebc3e23450a4dcba.gif",
+            "https://cdn.otakugifs.xyz/gifs/cuddle/a95eec42fb7ead11.gif",
+            "https://cdn.otakugifs.xyz/gifs/cuddle/f1cc78dc6802a2bc.gif",
+            "https://cdn.otakugifs.xyz/gifs/cuddle/23961beb4ef3c5c9.gif",
+            "https://cdn.otakugifs.xyz/gifs/cuddle/7dca23f6128a1897.gif"
         ]
     },
     "bite": {
-        "title": "🦷 Playful Bite",
         "color": discord.Color.from_rgb(175, 100, 235),
-        "captions": [
-            "{author} took a playful nom out of {target}! 🦷",
-            "*Chomp!* {author} bit {target}! 🧛"
-        ],
-        "self_caption": "{author} bit their own tongue! Ouch! 👅😖",
-        "bot_caption": "Hey {author}! Sweety is not food! (* >ω<) 🍪",
+        "verb": "bites",
+        "emoji": "( `꒳´ ) *nom!*",
+        "self_text": "{author} bit their own tongue! 👅😖",
+        "bot_text": "{author} bites Sweety! (* >ω<) 🍪",
         "gifs": [
-            "https://media.giphy.com/media/5OqXNoq0vUddC/giphy.gif",
-            "https://media.giphy.com/media/105OwsN7a4UQ2Q/giphy.gif",
-            "https://media.giphy.com/media/qF1pWpYp4ahna/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/bite/188ae836d6565df7.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/f317e3d3ff3a7986.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/655d4c17003f602b.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/45f4413ad8709d8f.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/7b9343dc2123353e.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/2b869d0d6cd05a40.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/39880e1cae9bd963.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/qSQsCXHTRi.gif"
         ]
     },
     "highfive": {
-        "title": "✋ Epic High-Five!",
         "color": discord.Color.from_rgb(255, 190, 60),
-        "captions": [
-            "{author} and {target} shared an epic high five! ✋⚡",
-            "*CLAP!* Teamwork makes the dream work! {author} high-fives {target}! 🏆"
-        ],
-        "self_caption": "{author} clapped their hands together! *Self high-five!* 👏",
-        "bot_caption": "Sweety high-fives {author} with high energy! ✋🔥",
+        "verb": "high-fives",
+        "emoji": "✋⚡ ( ＾◡＾)",
+        "self_text": "{author} high-fives themselves! 👏",
+        "bot_text": "{author} high-fives Sweety! ✋🔥",
         "gifs": [
-            "https://media.giphy.com/media/vUUAcl0Sb94qY/giphy.gif",
-            "https://media.giphy.com/media/pHb82xtBPfqEg/giphy.gif",
-            "https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/thumbsup/86c02b24f136e08f.gif",
+            "https://cdn.otakugifs.xyz/gifs/thumbsup/e1ecfd7c7569c53b.gif",
+            "https://cdn.otakugifs.xyz/gifs/thumbsup/SLPQSVVKVQQm.gif",
+            "https://cdn.otakugifs.xyz/gifs/yay/aXUiu8K4FPFi.gif",
+            "https://cdn.otakugifs.xyz/gifs/yay/81d496fb29f6792b.gif",
+            "https://cdn.otakugifs.xyz/gifs/yay/kJl8Mm8hKW.gif",
+            "https://cdn.otakugifs.xyz/gifs/yay/fc1459311d24273a.gif",
+            "https://cdn.otakugifs.xyz/gifs/yay/SeWA76dt7ZYN.gif"
         ]
     },
     "wink": {
-        "title": "😉 Charming Wink",
         "color": discord.Color.from_rgb(100, 200, 255),
-        "captions": [
-            "{author} shot a charming wink at {target}! 😉✨",
-            "{author} gave {target} a knowing wink! (^_<)〜☆"
-        ],
-        "self_caption": "{author} winks at their reflection in the mirror! Looking sharp! 😎",
-        "bot_caption": "Sweety winks back at {author}! (^_<)〜☆",
+        "verb": "winks at",
+        "emoji": "(^_<)〜☆",
+        "self_text": "{author} winks in the mirror! 😎",
+        "bot_text": "{author} winks at Sweety! (^_<)〜☆",
         "gifs": [
-            "https://media.giphy.com/media/11rIergnpiYpvW/giphy.gif",
-            "https://media.giphy.com/media/6tEKS5WnTRAtW/giphy.gif",
-            "https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif"
+            "https://cdn.otakugifs.xyz/gifs/wink/c36ae6e435e81a8e.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/f362fbd86c4a6229.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/15a2298d4003e27e.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/268082c8b1cea0ff.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/36f2630acbe06e06.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/05c05275353e2cc3.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/05aec45acd8452f4.gif"
         ]
     }
 }
 
 def create_action_embed(action_type: str, author: Union[discord.Member, discord.User], target: Union[discord.Member, discord.User], bot_user: Optional[Union[discord.Member, discord.User]] = None) -> discord.Embed:
-    """Creates a beautifully formatted action embed with dynamic captions and animated GIFs."""
+    """Creates a clean OwO-style action embed featuring authentic anime video GIFs."""
     data = ACTION_METADATA.get(action_type.lower(), ACTION_METADATA["hug"])
     
-    author_mention = author.mention
-    target_mention = target.mention
+    author_tag = f"**{getattr(author, 'display_name', str(author))}**"
+    target_tag = f"**{getattr(target, 'display_name', str(target))}**"
     
     if author.id == target.id:
-        desc = data["self_caption"].format(author=author_mention)
+        desc = data["self_text"].format(author=author_tag)
     elif bot_user and target.id == bot_user.id:
-        desc = data["bot_caption"].format(author=author_mention)
+        desc = data["bot_text"].format(author=author_tag)
     else:
-        template = random.choice(data["captions"])
-        desc = template.format(author=author_mention, target=target_mention)
+        desc = f"{author_tag} {data['verb']} {target_tag}! {data['emoji']}"
 
     gif_url = random.choice(data["gifs"])
 
     embed = discord.Embed(
-        title=data["title"],
         description=desc,
         color=data["color"]
     )
     embed.set_image(url=gif_url)
-    embed.set_footer(text=f"Requested by {getattr(author, 'display_name', str(author))}")
-    embed.timestamp = discord.utils.utcnow()
     return embed
 
 # ── Teardown & Nuke Handlers ───────────────────────────────────────────────
