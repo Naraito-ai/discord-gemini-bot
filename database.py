@@ -232,6 +232,29 @@ class DatabaseManager:
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (message_id, user_id)
             );
+            """,
+            # Reminders Table
+            """
+            CREATE TABLE IF NOT EXISTS reminders (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                guild_id TEXT,
+                channel_id TEXT NOT NULL,
+                reminder_text TEXT NOT NULL,
+                remind_at REAL NOT NULL,
+                created_at REAL NOT NULL,
+                delivery_method TEXT DEFAULT 'channel'
+            );
+            """,
+            # AFK Users Table
+            """
+            CREATE TABLE IF NOT EXISTS afk_users (
+                user_id TEXT NOT NULL,
+                guild_id TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                afk_since REAL NOT NULL,
+                PRIMARY KEY (user_id, guild_id)
+            );
             """
         ]
         
@@ -508,6 +531,55 @@ class DatabaseManager:
             cnt = r["count"] if isinstance(r, dict) and "count" in r else r[1]
             tallies[int(opt)] = int(cnt)
         return tallies
+
+    # ── Reminders Methods ───────────────────────────────────────────────────
+    async def add_reminder(self, reminder_id: str, user_id: Any, guild_id: Any, channel_id: Any, reminder_text: str, remind_at: float, created_at: float, delivery_method: str = "channel") -> bool:
+        """Stores a scheduled reminder."""
+        return await self.execute(
+            "INSERT INTO reminders (id, user_id, guild_id, channel_id, reminder_text, remind_at, created_at, delivery_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            str(reminder_id), str(user_id), str(guild_id) if guild_id else None, str(channel_id), reminder_text, float(remind_at), float(created_at), delivery_method
+        )
+
+    async def get_due_reminders(self, current_time: float) -> List[Dict[str, Any]]:
+        """Fetches all reminders that are due to be delivered."""
+        return await self.fetch(
+            "SELECT id, user_id, guild_id, channel_id, reminder_text, remind_at, created_at, delivery_method FROM reminders WHERE remind_at <= ?",
+            float(current_time)
+        )
+
+    async def delete_reminder(self, reminder_id: str) -> bool:
+        """Deletes a reminder after delivery or upon user cancellation."""
+        return await self.execute(
+            "DELETE FROM reminders WHERE id = ?",
+            str(reminder_id)
+        )
+
+    async def get_user_reminders(self, user_id: Any) -> List[Dict[str, Any]]:
+        """Fetches all active pending reminders for a user."""
+        return await self.fetch(
+            "SELECT id, guild_id, channel_id, reminder_text, remind_at, created_at, delivery_method FROM reminders WHERE user_id = ? ORDER BY remind_at ASC",
+            str(user_id)
+        )
+
+    # ── AFK System Methods ──────────────────────────────────────────────────
+    async def set_afk(self, user_id: Any, guild_id: Any, reason: str, afk_since: float) -> bool:
+        """Sets AFK status for a user in a specific guild."""
+        if self.is_postgres:
+            query = "INSERT INTO afk_users (user_id, guild_id, reason, afk_since) VALUES (?, ?, ?, ?) ON CONFLICT (user_id, guild_id) DO UPDATE SET reason = EXCLUDED.reason, afk_since = EXCLUDED.afk_since"
+        else:
+            query = "INSERT OR REPLACE INTO afk_users (user_id, guild_id, reason, afk_since) VALUES (?, ?, ?, ?)"
+        return await self.execute(query, str(user_id), str(guild_id), reason, float(afk_since))
+
+    async def remove_afk(self, user_id: Any, guild_id: Any) -> bool:
+        """Removes AFK status for a user in a guild."""
+        return await self.execute(
+            "DELETE FROM afk_users WHERE user_id = ? AND guild_id = ?",
+            str(user_id), str(guild_id)
+        )
+
+    async def get_all_afk_users(self) -> List[Dict[str, Any]]:
+        """Loads all AFK records from database on startup."""
+        return await self.fetch("SELECT user_id, guild_id, reason, afk_since FROM afk_users")
 
     async def close(self):
         """Closes all database connections."""
