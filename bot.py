@@ -1353,6 +1353,98 @@ def parse_snipe_args(ctx: commands.Context, args: tuple) -> tuple[discord.TextCh
                 index = max(1, val)
     return channel, index
 
+# ── Anti-Ghost-Ping Shield Detector ─────────────────────────────────────────
+_bot_deleted_message_ids: set[int] = set()
+
+async def handle_ghost_ping_detection(message: discord.Message):
+    """Detects and exposes ghost pings if a member mentions others and rapidly deletes their message."""
+    try:
+        if not message.guild or not message.channel:
+            return
+        if not message.author or message.author.bot:
+            return
+
+        # Ignore messages deleted by Auto-Mod or Purge
+        if message.id in _bot_deleted_message_ids:
+            _bot_deleted_message_ids.discard(message.id)
+            return
+
+        # Check if ghost-ping shield is enabled in guild config (default: True)
+        enabled = await db.get_config(message.guild.id, "ghost_ping_detector", True)
+        if not enabled:
+            return
+
+        # Time elapsed check (deleted within 60s of sending)
+        now = discord.utils.utcnow()
+        created_at = getattr(message, "created_at", None)
+        if not created_at:
+            return
+        elapsed = (now - created_at).total_seconds()
+        if elapsed > 60 or elapsed < 0:
+            return
+
+        # Filter out self-pings and bot-pings
+        user_targets = [m for m in getattr(message, "mentions", []) if m.id != message.author.id and not m.bot]
+        role_targets = [r for r in getattr(message, "role_mentions", []) if getattr(r, "name", "") not in ["@everyone", "@here"]]
+        
+        raw_everyone = ("@everyone" in (message.content or "") or "@here" in (message.content or "")) and not getattr(message.author.guild_permissions, "mention_everyone", False)
+
+        if not user_targets and not role_targets and not raw_everyone:
+            return
+
+        target_mentions = []
+        for u in user_targets[:8]:
+            target_mentions.append(u.mention)
+        for r in role_targets[:4]:
+            target_mentions.append(r.mention)
+        if raw_everyone:
+            target_mentions.append("`@everyone / @here`")
+
+        if not target_mentions:
+            return
+
+        targets_display = ", ".join(target_mentions)
+        total_pings = len(user_targets) + len(role_targets)
+        if total_pings > 12:
+            targets_display += f" *(and {total_pings - 12} more)*"
+
+        embed = discord.Embed(
+            title="👻 Ghost Ping Caught!",
+            description=f"**{message.author.mention}** (`{message.author}`) pinged {targets_display} and tried to hide it!",
+            color=discord.Color.from_rgb(155, 89, 182)
+        )
+
+        if getattr(message.author, "display_avatar", None):
+            embed.set_thumbnail(url=message.author.display_avatar.url)
+
+        content = (message.content or "").strip()
+        if not content:
+            content = "*[No text content / File Attachment]*"
+        elif len(content) > 1000:
+            content = content[:990] + "..."
+
+        embed.add_field(
+            name="💬 Original Message Content",
+            value=f">>> {content}",
+            inline=False
+        )
+
+        if getattr(message, "attachments", None):
+            att_names = [f"`{a.filename}`" for a in message.attachments[:5]]
+            embed.add_field(name="📎 Attachments", value=", ".join(att_names), inline=True)
+
+        sec = max(0, int(elapsed))
+        time_str = f"{sec} second{'s' if sec != 1 else ''}" if sec > 0 else "Instantly (<1s)"
+        embed.add_field(name="⏱️ Deleted After", value=f"`{time_str}`", inline=True)
+
+        embed.set_footer(text=f"Author ID: {message.author.id} • Sweety Anti-Ghost-Ping Shield")
+        embed.timestamp = now
+
+        await message.channel.send(embed=embed)
+        logger.info(f"Ghost ping caught in {message.guild.name} (#{getattr(message.channel, 'name', 'channel')}) by {message.author}: pinged {len(target_mentions)} target(s).")
+    except Exception as e:
+        logger.error(f"Error handling ghost ping detection: {e}", exc_info=True)
+
 # ── Teardown & Nuke Handlers ───────────────────────────────────────────────
 
 async def teardown_guild(guild):
@@ -1895,7 +1987,7 @@ async def help_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="🏀 **SpaceYT Basketball Arena & Debates**", value="• `/debate [channel] [ping]` — Post a spicy NBA debate with live voting buttons\n• `/startbenchcut` — Roll a 3-player Start, Bench, Cut challenge\n• `/setdebatechannel <channel>` — Set automated daily debate channel\n• `/setdebatemention <type>` — Configure debate ping tag (@here/none)\n• `/toggledebates <status>` — Turn daily auto-debates on or off", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
@@ -2395,6 +2487,8 @@ async def purge_command(interaction: discord.Interaction, amount: int):
     await interaction.response.defer(ephemeral=True)
     try:
         deleted = await interaction.channel.purge(limit=amount)
+        for msg in deleted:
+            _bot_deleted_message_ids.add(msg.id)
         await interaction.followup.send(f"🧹 Successfully purged `{len(deleted)}` messages.", ephemeral=True)
     except Exception as e:
         logger.error(f"Purge failed: {e}", exc_info=True)
@@ -2449,6 +2543,53 @@ async def clearsnipe_slash_cmd(interaction: discord.Interaction, channel: Option
         color=discord.Color.green()
     )
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="antighostping", description="Configure automated Anti-Ghost-Ping detection and public exposure shield")
+@app_commands.describe(status="Choose to enable, disable, or view Anti-Ghost-Ping status")
+@app_commands.choices(
+    status=[
+        app_commands.Choice(name="🟢 Enable (Expose ghost pings deleted within 60s)", value="enable"),
+        app_commands.Choice(name="🔴 Disable (Turn off ghost ping detection)", value="disable"),
+        app_commands.Choice(name="📊 Status (View current setting)", value="status")
+    ]
+)
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+async def antighostping_command(interaction: discord.Interaction, status: str):
+    if not is_protected(interaction.user) and not interaction.permissions.administrator:
+        await interaction.response.send_message("❌ You need `Administrator` permissions to configure the Anti-Ghost-Ping shield.", ephemeral=True)
+        return
+
+    guild = interaction.guild
+    if status == "status":
+        is_enabled = await db.get_config(guild.id, "ghost_ping_detector", True)
+        embed = discord.Embed(
+            title=f"👻 Anti-Ghost-Ping Shield Status — {guild.name}",
+            color=discord.Color.from_rgb(155, 89, 182) if is_enabled else discord.Color.greyple()
+        )
+        embed.add_field(name="Detector Status", value="🟢 **ENABLED (Active)**" if is_enabled else "🔴 **DISABLED (Inactive)**", inline=False)
+        embed.add_field(name="How it Works", value="If someone mentions a member or role and deletes their message within 60 seconds, Sweety immediately catches and exposes the author, pinged targets, and original message content in chat.", inline=False)
+        embed.set_footer(text="Use /antighostping to toggle this feature.")
+        await interaction.response.send_message(embed=embed)
+        return
+
+    if status == "enable":
+        await db.set_config(guild.id, "ghost_ping_detector", True)
+        embed = discord.Embed(
+            title="👻 Anti-Ghost-Ping Shield ENABLED",
+            description="Sweety will now catch and expose anyone who pings members and quickly deletes their message!",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed)
+    else:
+        await db.set_config(guild.id, "ghost_ping_detector", False)
+        embed = discord.Embed(
+            title="👻 Anti-Ghost-Ping Shield DISABLED",
+            description="Automated ghost-ping detection is now turned off for this server.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="antiraid", description="Configure automated Join-Raid detection and Server Raid Shield")
@@ -3470,6 +3611,43 @@ async def clearsnipe_prefix_cmd(ctx: commands.Context, channel: Optional[discord
     await ctx.send(embed=embed)
 
 
+@bot.command(name="antighostping", aliases=["agp", "ghostping"])
+@commands.guild_only()
+async def antighostping_prefix_cmd(ctx: commands.Context, status: Optional[str] = "status"):
+    """Configure or check Anti-Ghost-Ping shield: !antighostping [enable/disable/status]"""
+    if not is_protected(ctx.author) and not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ Only server administrators or staff can configure the Anti-Ghost-Ping shield.")
+        return
+
+    status = (status or "status").lower().strip()
+    if status in ["on", "enable", "enabled", "1", "true"]:
+        await db.set_config(ctx.guild.id, "ghost_ping_detector", True)
+        embed = discord.Embed(
+            title="👻 Anti-Ghost-Ping Shield ENABLED",
+            description="Sweety will now catch and expose anyone who pings members and quickly deletes their message!",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+    elif status in ["off", "disable", "disabled", "0", "false"]:
+        await db.set_config(ctx.guild.id, "ghost_ping_detector", False)
+        embed = discord.Embed(
+            title="👻 Anti-Ghost-Ping Shield DISABLED",
+            description="Automated ghost-ping detection is now turned off for this server.",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+    else:
+        is_enabled = await db.get_config(ctx.guild.id, "ghost_ping_detector", True)
+        embed = discord.Embed(
+            title=f"👻 Anti-Ghost-Ping Shield Status — {ctx.guild.name}",
+            color=discord.Color.from_rgb(155, 89, 182) if is_enabled else discord.Color.greyple()
+        )
+        embed.add_field(name="Detector Status", value="🟢 **ENABLED (Active)**" if is_enabled else "🔴 **DISABLED (Inactive)**", inline=False)
+        embed.add_field(name="How it Works", value="If someone mentions a member or role and deletes their message within 60 seconds, Sweety immediately catches and exposes the author, pinged targets, and original message content in chat.", inline=False)
+        embed.set_footer(text="Use !antighostping enable/disable to toggle.")
+        await ctx.send(embed=embed)
+
+
 @bot.tree.command(name="mute", description="Timeout (mute) a member in the server")
 @app_commands.describe(
     member="The member to mute", 
@@ -4479,11 +4657,16 @@ async def on_voice_state_update(member, before, after):
 
 @bot.event
 async def on_message_delete(message: discord.Message):
-    """Captures deleted messages into the snipe ring buffer."""
+    """Captures deleted messages into the snipe ring buffer and detects ghost pings."""
     try:
         record_deleted_message(message)
     except Exception as e:
         logger.error(f"Error recording deleted message for snipe: {e}")
+
+    try:
+        await handle_ghost_ping_detection(message)
+    except Exception as e:
+        logger.error(f"Error handling ghost ping detection: {e}")
 
 
 @bot.event
@@ -4538,6 +4721,7 @@ async def on_message(message):
                     
                     if pings_count >= 5 or (has_everyone and not message.author.guild_permissions.mention_everyone):
                         try:
+                            _bot_deleted_message_ids.add(message.id)
                             await message.delete()
                         except Exception:
                             pass
@@ -4555,6 +4739,7 @@ async def on_message(message):
                     is_nsfw, nsfw_kw = _is_nsfw_link(content)
                     if is_nsfw:
                         try:
+                            _bot_deleted_message_ids.add(message.id)
                             await message.delete()
                         except Exception:
                             pass
@@ -4572,6 +4757,7 @@ async def on_message(message):
                     is_spam, spam_reason = _check_spam(message.author.id, content)
                     if is_spam:
                         try:
+                            _bot_deleted_message_ids.add(message.id)
                             await message.delete()
                         except Exception:
                             pass
@@ -4589,6 +4775,7 @@ async def on_message(message):
                     is_toxic, category, term = _check_toxicity_and_profanity(content)
                     if is_toxic:
                         try:
+                            _bot_deleted_message_ids.add(message.id)
                             await message.delete()
                         except Exception as del_err:
                             logger.error(f"Auto-Mod local delete failed: {del_err}")
