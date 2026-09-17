@@ -13,6 +13,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 import aiohttp
 from typing import Optional, Union, List, Dict, Any
+from PIL import Image, ImageDraw, ImageFont
 from database import db
 
 # ── Security: Rate Limit Trackers ──────────────────────────────────────────
@@ -2374,7 +2375,7 @@ class TeamBattleRematchView(discord.ui.View):
         self.row_a = row_a
         self.row_b = row_b
 
-        battle_embed = build_teambattle_embed(self.author, self.opponent, self.row_a, self.row_b)
+        battle_embed = await build_teambattle_embed(self.author, self.opponent, self.row_a, self.row_b)
         await interaction.response.edit_message(
             content=f"🔄 **Rematch Played by {interaction.user.mention}!**",
             embed=battle_embed,
@@ -2384,7 +2385,7 @@ class TeamBattleRematchView(discord.ui.View):
     @discord.ui.button(label="Draft Board", style=discord.ButtonStyle.primary, emoji="🏀", custom_id="btn_battle_draft")
     async def draft_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         view = BuildTeamView(author_id=interaction.user.id)
-        embed = view.make_embed()
+        embed = view.make_draft_embed()
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
@@ -2437,7 +2438,7 @@ class TeamBattleChallengeView(discord.ui.View):
             return
 
         self.stop()
-        battle_embed = build_teambattle_embed(self.author, self.opponent, self.row_a, self.row_b)
+        battle_embed = await build_teambattle_embed(self.author, self.opponent, self.row_a, self.row_b)
         rematch_view = TeamBattleRematchView(self.author, self.opponent, self.row_a, self.row_b)
         await interaction.response.edit_message(
             content=f"🔥 **Challenge Accepted by {self.opponent.mention}! Let the Finals Begin!**",
@@ -2750,15 +2751,144 @@ def extract_picks_from_row(row: Any) -> Dict[str, Dict[str, Any]]:
     return picks
 
 
-def build_myteam_embed(target: Union[discord.Member, discord.User], row: Any) -> discord.Embed:
-    """Builds a comprehensive, rich card embed showcasing a member's $15 Dream Team squad & ratings."""
+NBA_ACHIEVEMENTS: Dict[str, Dict[str, str]] = {
+    "first_champ": {"emoji": "🏆", "title": "First Championship", "desc": "Won first NBA Dream Team battle"},
+    "budget_maestro": {"emoji": "💎", "title": "Budget Maestro", "desc": "Defeated a higher-OVR squad in a battle"},
+    "the_clamps": {"emoji": "🔒", "title": "The Clamps", "desc": "5-0 shutout sweep in all positional duels"},
+    "splash_dynasty": {"emoji": "🎯", "title": "Splash Dynasty", "desc": "Swept both backcourt duels (PG & SG)"},
+    "hof_gm": {"emoji": "👑", "title": "Hall of Fame GM", "desc": "Won 10 or more career team battles"},
+    "showtime_century": {"emoji": "⚡", "title": "Showtime Century", "desc": "Scored 100+ total career points in battles"},
+    "streak_master": {"emoji": "🔥", "title": "On Fire", "desc": "Achieved a 3-game winning streak"}
+}
+
+
+def _get_nba_card_font(size: int, bold: bool = False):
+    """Loads a high-compatibility font for the 2D court card with cross-platform fallbacks."""
+    font_candidates = (
+        ["DejaVuSans-Bold.ttf", "arialbd.ttf", "Arial-Bold.ttf", "LiberationSans-Bold.ttf", "arial.ttf", "DejaVuSans.ttf"]
+        if bold else
+        ["DejaVuSans.ttf", "arial.ttf", "Arial.ttf", "LiberationSans-Regular.ttf"]
+    )
+    for font_name in font_candidates:
+        try:
+            return ImageFont.truetype(font_name, size)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default()
+    except Exception:
+        return None
+
+
+def generate_dream_team_card(user_name: str, picks: Dict[str, Dict[str, Any]], evaluation: Dict[str, Any]) -> io.BytesIO:
+    """Generates a 1000x560 hardwood card graphic displaying the 5 starting player cards, attributes, and tier badges."""
+    width, height = 1000, 560
+    img = Image.new("RGB", (width, height), color=(15, 23, 42))  # Slate dark 900
+    draw = ImageDraw.Draw(img)
+
+    tier_color_rgb = (234, 179, 8) if "S+" in evaluation.get("tier", "") else (59, 130, 246)
+    draw.rectangle([(0, 0), (width, 80)], fill=(30, 41, 59))
+    draw.rectangle([(0, 78), (width, 82)], fill=tier_color_rgb)
+
+    font_title = _get_nba_card_font(28, bold=True)
+    font_bold = _get_nba_card_font(17, bold=True)
+    font_sm = _get_nba_card_font(13, bold=False)
+    font_pos = _get_nba_card_font(15, bold=True)
+
+    draw.text((30, 24), f"{user_name[:20]}'s $15 Dream Team", fill=(255, 255, 255), font=font_title)
+
+    ovr_str = f"{evaluation.get('ovr', 90.0)} OVR • {evaluation.get('tier', 'S Tier').split('•')[0].strip()}"
+    draw.rounded_rectangle([(width - 320, 18), (width - 30, 62)], radius=10, fill=(15, 23, 42), outline=tier_color_rgb, width=2)
+    draw.text((width - 305, 28), ovr_str, fill=tier_color_rgb, font=font_bold)
+
+    positions = ["PG", "SG", "SF", "PF", "C"]
+    card_w = 172
+    card_h = 340
+    start_x = 30
+    gap = 22
+    y_pos = 110
+
+    tier_cost_colors = {
+        5: (239, 68, 68),   # $5 Red
+        4: (168, 85, 247),  # $4 Purple
+        3: (59, 130, 246),  # $3 Blue
+        2: (34, 197, 94),   # $2 Green
+        1: (156, 163, 175)  # $1 Silver
+    }
+
+    for idx, pos in enumerate(positions):
+        x = start_x + idx * (card_w + gap)
+        pl = picks.get(pos, {"name": "Empty", "cost": 0, "team": "NBA", "tag": "N/A", "pts_3": 80, "defense": 80, "inside": 80, "clutch": 80})
+        cost = pl.get("cost", 1)
+        cost_color = tier_cost_colors.get(cost, (156, 163, 175))
+
+        draw.rounded_rectangle([(x, y_pos), (x + card_w, y_pos + card_h)], radius=14, fill=(30, 41, 59), outline=cost_color, width=2)
+        draw.rounded_rectangle([(x + 8, y_pos + 10), (x + card_w - 8, y_pos + 42)], radius=8, fill=(15, 23, 42))
+        draw.text((x + 16, y_pos + 16), pos, fill=(255, 255, 255), font=font_pos)
+        draw.text((x + card_w - 45, y_pos + 16), f"${cost}", fill=cost_color, font=font_pos)
+
+        name = pl.get("name", "Player")
+        name_parts = name.split(" ")
+        first_name = name_parts[0] if len(name_parts) > 1 else ""
+        last_name = name_parts[-1]
+
+        draw.text((x + 14, y_pos + 60), first_name, fill=(148, 163, 184), font=font_sm)
+        draw.text((x + 14, y_pos + 80), last_name, fill=(255, 255, 255), font=font_bold)
+        draw.text((x + 14, y_pos + 110), f"{pl.get('team', '')} • {pl.get('tag', '')[:14]}", fill=(203, 213, 225), font=font_sm)
+        draw.line([(x + 14, y_pos + 135), (x + card_w - 14, y_pos + 135)], fill=(51, 65, 85), width=1)
+
+        stats = [
+            ("3PT", pl.get("pts_3", 80), (59, 130, 246)),
+            ("DEF", pl.get("defense", 80), (34, 197, 94)),
+            ("INS", pl.get("inside", 80), (239, 68, 68)),
+            ("CLU", pl.get("clutch", 80), (234, 179, 8))
+        ]
+        bar_y = y_pos + 155
+        for s_label, s_val, s_col in stats:
+            draw.text((x + 14, bar_y), s_label, fill=(148, 163, 184), font=font_sm)
+            draw.text((x + 48, bar_y), str(s_val), fill=(255, 255, 255), font=font_sm)
+            draw.rounded_rectangle([(x + 76, bar_y + 4), (x + card_w - 14, bar_y + 12)], radius=3, fill=(51, 65, 85))
+            fill_w = int(((s_val - 70) / 30) * (card_w - 90))
+            fill_w = max(4, min(card_w - 90, fill_w))
+            draw.rounded_rectangle([(x + 76, bar_y + 4), (x + 76 + fill_w, bar_y + 12)], radius=3, fill=s_col)
+            bar_y += 38
+
+    draw.rounded_rectangle([(30, height - 75), (width - 30, height - 20)], radius=12, fill=(30, 41, 59))
+    summary_text = (
+        f"🎯 3PT: {evaluation.get('avg_3pt', 85)}  |  🔒 DEF: {evaluation.get('avg_def', 85)}  |  "
+        f"🧠 IQ: {evaluation.get('avg_ply', 85)}  |  💥 INS: {evaluation.get('avg_ins', 85)}  |  "
+        f"👑 CLU: {evaluation.get('avg_clu', 85)}  |  💰 Salary Cap: ${evaluation.get('total_cost', 15)}/$15"
+    )
+    draw.text((45, height - 58), summary_text, fill=(241, 245, 249), font=font_bold)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+async def build_myteam_embed(target: Union[discord.Member, discord.User], row: Any) -> tuple[discord.Embed, discord.File]:
+    """Builds a comprehensive card embed and visual PIL starting-5 graphic showcasing a member's $15 Dream Team squad, ratings, career record, and GM badges."""
     picks = extract_picks_from_row(row)
     evaluation = evaluate_dream_team(picks)
     total_cost = evaluation["total_cost"]
 
+    # Fetch career battle record and achievements
+    stats = await db.get_team_battle_stats(target.id)
+    wins = stats["wins"]
+    losses = stats["losses"]
+    total_games = wins + losses + stats["ties"]
+    win_rate = (wins / total_games * 100.0) if total_games > 0 else 0.0
+    streak = stats["streak"]
+    streak_fmt = f"🔥 {streak}W Streak" if streak > 0 else (f"❄️ {abs(streak)}L Cold" if streak < 0 else "⚪ Even")
+
     card_embed = discord.Embed(
         title=f"🏆 {target.display_name}'s $15 All-Time Dream Team",
-        description=f"**Rating**: `{evaluation['ovr']} OVR` • **{evaluation['tier']}**\n**Salary Cap**: `${total_cost} / $15`",
+        description=(
+            f"**Rating**: `{evaluation['ovr']} OVR` • **{evaluation['tier']}**\n"
+            f"**Salary Cap**: `${total_cost} / $15`\n"
+            f"**Career Record**: 📊 **`{wins}W — {losses}L`** (`{win_rate:.1f}% WR`) • **{streak_fmt}** *(Best: 🔥 {stats['best_streak']}W)*"
+        ),
         color=evaluation["color"]
     )
     if hasattr(target, "display_avatar") and target.display_avatar:
@@ -2781,17 +2911,35 @@ def build_myteam_embed(target: Union[discord.Member, discord.User], row: Any) ->
         f"• 👑 **Clutch Rating**: `{evaluation['avg_clu']}/99`"
     )
     card_embed.add_field(name="📊 Team Attribute Breakdown", value=stats_text, inline=True)
+
+    # GM Badges & Accolades
+    unlocked = stats.get("achievements", [])
+    if unlocked:
+        badge_lines = []
+        for ach_id in unlocked:
+            if ach_id in NBA_ACHIEVEMENTS:
+                meta = NBA_ACHIEVEMENTS[ach_id]
+                badge_lines.append(f"{meta['emoji']} **{meta['title']}** — *{meta['desc']}*")
+        card_embed.add_field(name=f"🏅 GM Badges & Accolades ({len(unlocked)} Unlocked)", value="\n".join(badge_lines), inline=False)
+    else:
+        card_embed.add_field(name="🏅 GM Badges & Accolades", value="*No badges unlocked yet. Challenge members with `/teambattle` to unlock permanent titles!*", inline=False)
+
     card_embed.add_field(name="🔥 Squad Strengths", value="\n".join(evaluation["strengths"]), inline=False)
     if evaluation["weaknesses"]:
         card_embed.add_field(name="⚠️ Potential Weaknesses", value="\n".join(evaluation["weaknesses"]), inline=False)
 
-    card_embed.set_footer(text="Challenge friends to a Best-of-7 Finals series using /teambattle @user or !teambattle @user!")
+    # Generate PIL 2D starting 5 court graphic
+    img_buf = generate_dream_team_card(target.display_name, picks, evaluation)
+    card_file = discord.File(img_buf, filename="my_dream_team.png")
+    card_embed.set_image(url="attachment://my_dream_team.png")
+
+    card_embed.set_footer(text="Challenge friends using /teambattle @user or join the queue with /teamqueue!")
     card_embed.timestamp = discord.utils.utcnow()
-    return card_embed
+    return card_embed, card_file
 
 
-def build_teambattle_embed(author: Union[discord.Member, discord.User], opponent: Union[discord.Member, discord.User], row_a: Any, row_b: Any) -> discord.Embed:
-    """Simulates a Footdex-style positional head-to-head card battle between two $15 NBA lineups."""
+async def build_teambattle_embed(author: Union[discord.Member, discord.User], opponent: Union[discord.Member, discord.User], row_a: Any, row_b: Any) -> discord.Embed:
+    """Simulates a Footdex-style positional head-to-head card battle, updates career records & streaks in DB, and awards GM achievements."""
     picks_a = extract_picks_from_row(row_a)
     picks_b = extract_picks_from_row(row_b)
 
@@ -2803,13 +2951,76 @@ def build_teambattle_embed(author: Union[discord.Member, discord.User], opponent
     winner_name = battle["winner"]
     winner_is_a = battle["winner_is_a"]
     winner_member = author if winner_is_a else opponent
+    loser_member = opponent if winner_is_a else author
+
+    winner_pts = battle["score_a"] if winner_is_a else battle["score_b"]
+    loser_pts = battle["score_b"] if winner_is_a else battle["score_a"]
+    winner_duels = battle["duels_won_a"] if winner_is_a else battle["duels_won_b"]
+    loser_duels = battle["duels_won_b"] if winner_is_a else battle["duels_won_a"]
+
+    # Evaluate GM Achievements
+    new_achievements_winner = ["first_champ"]
+    if (winner_is_a and eval_a["ovr"] < eval_b["ovr"]) or (not winner_is_a and eval_b["ovr"] < eval_a["ovr"]):
+        new_achievements_winner.append("budget_maestro")
+    if winner_duels == 5:
+        new_achievements_winner.append("the_clamps")
+
+    # Check backcourt sweep (PG and SG)
+    duels_map = {d["pos"]: d["a_won"] for d in battle["duels"]}
+    if winner_is_a and duels_map.get("PG") and duels_map.get("SG"):
+        new_achievements_winner.append("splash_dynasty")
+    elif not winner_is_a and (not duels_map.get("PG")) and (not duels_map.get("SG")):
+        new_achievements_winner.append("splash_dynasty")
+
+    # Fetch stats before update to check cumulative achievements
+    stats_w = await db.get_team_battle_stats(winner_member.id)
+    stats_l = await db.get_team_battle_stats(loser_member.id)
+
+    if (stats_w["wins"] + 1) >= 10:
+        new_achievements_winner.append("hof_gm")
+    if (stats_w["total_points"] + winner_pts) >= 100:
+        new_achievements_winner.append("showtime_century")
+    cur_w_streak = stats_w["streak"] if stats_w["streak"] > 0 else 0
+    if (cur_w_streak + 1) >= 3:
+        new_achievements_winner.append("streak_master")
+
+    new_achievements_loser = []
+    if (stats_l["total_points"] + loser_pts) >= 100:
+        new_achievements_loser.append("showtime_century")
+
+    # Unlocked alerts (only those not previously unlocked)
+    newly_unlocked = [ach for ach in new_achievements_winner if ach not in stats_w.get("achievements", [])]
+
+    # Update database records
+    await db.update_team_battle_record(
+        user_id=winner_member.id,
+        won=True,
+        is_tie=False,
+        duels_won=winner_duels,
+        points_scored=winner_pts,
+        new_achievements=new_achievements_winner
+    )
+    await db.update_team_battle_record(
+        user_id=loser_member.id,
+        won=False,
+        is_tie=False,
+        duels_won=loser_duels,
+        points_scored=loser_pts,
+        new_achievements=new_achievements_loser
+    )
+
+    # Fetch fresh stats for embed header display
+    updated_stats_a = await db.get_team_battle_stats(author.id)
+    updated_stats_b = await db.get_team_battle_stats(opponent.id)
+    streak_a_fmt = f"🔥 {updated_stats_a['streak']}W" if updated_stats_a['streak'] > 0 else (f"❄️ {abs(updated_stats_a['streak'])}L" if updated_stats_a['streak'] < 0 else "⚪ 0")
+    streak_b_fmt = f"🔥 {updated_stats_b['streak']}W" if updated_stats_b['streak'] > 0 else (f"❄️ {abs(updated_stats_b['streak'])}L" if updated_stats_b['streak'] < 0 else "⚪ 0")
 
     embed = discord.Embed(
         title=f"⚔️ NBA CARD BATTLE: {author.display_name} vs {opponent.display_name}",
         description=(
             f"**Match Result**: 👑 **`{battle['winner']}`** wins **`{battle['score_a']} - {battle['score_b']}`**! *(Duels Won: `{battle['duels_won_a']} - {battle['duels_won_b']}`)*\n\n"
-            f"• **{author.display_name} ({eval_a['ovr']} OVR)**: {eval_a['tier'].split('•')[0].strip()}\n"
-            f"• **{opponent.display_name} ({eval_b['ovr']} OVR)**: {eval_b['tier'].split('•')[0].strip()}\n"
+            f"• **{author.display_name} ({eval_a['ovr']} OVR)**: {eval_a['tier'].split('•')[0].strip()} • `Record: {updated_stats_a['wins']}W-{updated_stats_a['losses']}L ({streak_a_fmt})`\n"
+            f"• **{opponent.display_name} ({eval_b['ovr']} OVR)**: {eval_b['tier'].split('•')[0].strip()} • `Record: {updated_stats_b['wins']}W-{updated_stats_b['losses']}L ({streak_b_fmt})`\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         ),
         color=discord.Color.gold() if winner_is_a else discord.Color.purple()
@@ -2841,6 +3052,14 @@ def build_teambattle_embed(author: Union[discord.Member, discord.User], opponent
         f"📊 **Statline**: `{battle['mvp_pts']} PTS` • `{battle['mvp_reb']} REB` • `{battle['mvp_ast']} AST` • `{battle['mvp_blk']} BLK`"
     )
     embed.add_field(name="🏆 Player of the Match (MVP)", value=mvp_text, inline=False)
+
+    if newly_unlocked:
+        ach_texts = [f"{NBA_ACHIEVEMENTS[a]['emoji']} **{NBA_ACHIEVEMENTS[a]['title']}**" for a in newly_unlocked if a in NBA_ACHIEVEMENTS]
+        embed.add_field(
+            name="🏅 GM Accolades Unlocked!",
+            value=f"👑 **{winner_member.display_name}** unlocked: {', '.join(ach_texts)}!",
+            inline=False
+        )
 
     embed.set_footer(text="Sweety NBA Positional Duel Engine • Challenge members with /teambattle @user")
     embed.timestamp = discord.utils.utcnow()
@@ -2887,16 +3106,198 @@ def build_teamleaderboard_embed(rows: List[Any]) -> discord.Embed:
     return embed
 
 
+# ── NBA Dream Team Matchmaking Queue System ──────────────────────────────────
+BATTLE_MATCHMAKING_QUEUE: Dict[int, Dict[int, Dict[str, Any]]] = {}
+
+
+class QuickMatchQueueView(discord.ui.View):
+    """View allowing a queued General Manager to cancel their matchmaking search."""
+    def __init__(self, user_id: int, guild_id: int):
+        super().__init__(timeout=90)
+        self.user_id = user_id
+        self.guild_id = guild_id
+
+    @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.danger, emoji="🚫", custom_id="btn_leave_queue")
+    async def leave_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ This is not your matchmaking queue session!", ephemeral=True)
+            return
+
+        guild_queue = BATTLE_MATCHMAKING_QUEUE.get(self.guild_id, {})
+        if self.user_id in guild_queue:
+            guild_queue.pop(self.user_id, None)
+
+        self.stop()
+        self.clear_items()
+        leave_embed = discord.Embed(
+            title="🚫 Left Matchmaking Queue",
+            description="You have left the matchmaking queue. Use `/teamqueue` or click `Find Match` to search again.",
+            color=discord.Color.dark_grey()
+        )
+        await interaction.response.edit_message(embed=leave_embed, view=self)
+
+    async def on_timeout(self):
+        guild_queue = BATTLE_MATCHMAKING_QUEUE.get(self.guild_id, {})
+        if self.user_id in guild_queue:
+            guild_queue.pop(self.user_id, None)
+
+
+async def handle_team_queue(interaction: Optional[discord.Interaction] = None, ctx: Optional[commands.Context] = None):
+    """Handles auto-matchmaking queue logic for finding live NBA Dream Team opponents."""
+    user = interaction.user if interaction else ctx.author
+    guild = interaction.guild if interaction else ctx.guild
+
+    if not guild:
+        msg = "❌ Matchmaking queue can only be used in a server channel."
+        if interaction:
+            await interaction.response.send_message(msg, ephemeral=True)
+        else:
+            await ctx.send(msg)
+        return
+
+    row_user = await db.get_dream_team(user.id)
+    if not row_user:
+        msg = "❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` or `!buildteam` to draft your squad before queuing."
+        if interaction:
+            await interaction.response.send_message(msg, ephemeral=True)
+        else:
+            await ctx.send(msg)
+        return
+
+    now = time.time()
+    if guild.id not in BATTLE_MATCHMAKING_QUEUE:
+        BATTLE_MATCHMAKING_QUEUE[guild.id] = {}
+
+    guild_queue = BATTLE_MATCHMAKING_QUEUE[guild.id]
+
+    # Clean up stale entries older than 90s
+    stale_keys = [uid for uid, item in guild_queue.items() if now - item.get("time", 0) > 90]
+    for sk in stale_keys:
+        guild_queue.pop(sk, None)
+
+    # If user is already queued, let them know
+    if user.id in guild_queue:
+        msg = "⚠️ You are already in the matchmaking queue! Click **Leave Queue** if you wish to cancel."
+        q_view = QuickMatchQueueView(user.id, guild.id)
+        if interaction:
+            await interaction.response.send_message(msg, view=q_view, ephemeral=True)
+        else:
+            await ctx.send(f"{user.mention} {msg}", view=q_view)
+        return
+
+    # Check for another available player in queue
+    matched_uid = None
+    for other_uid in list(guild_queue.keys()):
+        if other_uid != user.id:
+            matched_uid = other_uid
+            break
+
+    if matched_uid:
+        matched_item = guild_queue.pop(matched_uid)
+        matched_user = matched_item["user"]
+        row_matched = matched_item["row"]
+
+        # Run match simulation immediately
+        battle_embed = await build_teambattle_embed(matched_user, user, row_matched, row_user)
+        rematch_view = TeamBattleRematchView(matched_user, user, row_matched, row_user)
+
+        announcement = (
+            f"⚔️ **MATCH FOUND!**\n"
+            f"🏀 {matched_user.mention} vs {user.mention}\n"
+            f"The 5-round positional card battle begins now!"
+        )
+
+        if interaction:
+            if interaction.response.is_done():
+                await interaction.followup.send(content=announcement, embed=battle_embed, view=rematch_view)
+            else:
+                await interaction.response.send_message(content=announcement, embed=battle_embed, view=rematch_view)
+        else:
+            await ctx.send(content=announcement, embed=battle_embed, view=rematch_view)
+
+        # Notify the waiting player message if present
+        waiting_msg = matched_item.get("message")
+        if waiting_msg:
+            try:
+                found_embed = discord.Embed(
+                    title="⚔️ Match Found!",
+                    description=f"Matched against **{user.display_name}**! Check the arena for battle results.",
+                    color=discord.Color.green()
+                )
+                await waiting_msg.edit(embed=found_embed, view=None)
+            except Exception:
+                pass
+    else:
+        # Put user in queue
+        picks_user = extract_picks_from_row(row_user)
+        eval_user = evaluate_dream_team(picks_user)
+        guild_queue[user.id] = {
+            "user": user,
+            "row": row_user,
+            "eval": eval_user,
+            "time": now,
+            "message": None
+        }
+
+        q_view = QuickMatchQueueView(user.id, guild.id)
+        queue_embed = discord.Embed(
+            title="⚔️ NBA Dream Team Matchmaking Queue",
+            description=(
+                f"🔍 **Searching for an opponent...**\n\n"
+                f"• **Coach**: {user.mention} (`{user.display_name}`)\n"
+                f"• **Roster Rating**: `{eval_user['ovr']} OVR` • {eval_user['tier'].split('•')[0].strip()}\n"
+                f"• **Queue Status**: ⏳ Waiting for another GM to join...\n\n"
+                f"*Queue will automatically time out after 90 seconds if no opponent joins.*"
+            ),
+            color=discord.Color.blue()
+        )
+        queue_embed.set_footer(text="Click 'Leave Queue' below to cancel search at any time.")
+        queue_embed.timestamp = discord.utils.utcnow()
+
+        if interaction:
+            await interaction.response.send_message(embed=queue_embed, view=q_view)
+            try:
+                msg = await interaction.original_response()
+                guild_queue[user.id]["message"] = msg
+            except Exception:
+                pass
+        else:
+            msg = await ctx.send(embed=queue_embed, view=q_view)
+            guild_queue[user.id]["message"] = msg
+
+
 class HubDraftButtonView(discord.ui.View):
     """Persistent view attached to the NBA Dream Team channel welcome embed."""
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Draft $15 Dream Team", style=discord.ButtonStyle.success, emoji="🏀", custom_id="hub_draft_btn")
+    @discord.ui.button(label="Draft $15 Squad", style=discord.ButtonStyle.success, emoji="🏀", custom_id="hub_draft_btn")
     async def draft_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         view = BuildTeamView(author_id=interaction.user.id)
         embed = view.make_draft_embed()
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="Find Match (Queue)", style=discord.ButtonStyle.primary, emoji="⚔️", custom_id="hub_find_match_btn")
+    async def find_match_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await handle_team_queue(interaction=interaction)
+
+    @discord.ui.button(label="My Team Card", style=discord.ButtonStyle.secondary, emoji="📋", custom_id="hub_myteam_btn")
+    async def myteam_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        row = await db.get_dream_team(interaction.user.id)
+        if not row:
+            await interaction.response.send_message(
+                "❌ **You haven't built a $15 Dream Team yet!**\nClick **Draft $15 Squad** above to build your roster.",
+                ephemeral=True
+            )
+            return
+        card_embed, card_file = await build_myteam_embed(interaction.user, row)
+        await interaction.response.send_message(embed=card_embed, file=card_file, ephemeral=True)
+
+    @discord.ui.button(label="GM Leaderboard", style=discord.ButtonStyle.secondary, emoji="🏆", custom_id="hub_gm_lb_btn")
+    async def leaderboard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        rows = await db.get_top_dream_teams(10)
+        lb_embed = build_teamleaderboard_embed(rows)
+        await interaction.response.send_message(embed=lb_embed, ephemeral=True)
 
 
 async def setup_nba_dreamteam_channel(guild: discord.Guild, target_category_name: Optional[str] = "2k mobile hub") -> tuple[discord.TextChannel, str]:
@@ -2966,8 +3367,9 @@ async def setup_nba_dreamteam_channel(guild: discord.Guild, target_category_name
         name="🎮 GM Commands",
         value=(
             "• `/buildteam` or `!buildteam` — Open interactive draft room\n"
-            "• `/myteam [@user]` or `!myteam` — View your squad card & synergy\n"
-            "• `/teambattle <@user>` or `!teambattle` — Challenge member to 7-Game Finals\n"
+            "• `/myteam [@user]` or `!myteam` — View squad card, career record & GM badges\n"
+            "• `/teamqueue` or `!teamqueue` — Join live matchmaking queue\n"
+            "• `/teambattle <@user>` or `!teambattle` — Challenge member to 5-round card battle\n"
             "• `/teamleaderboard` or `!teamlb` — View server top GM leaderboard"
         ),
         inline=False
@@ -3693,7 +4095,7 @@ def make_help_embed() -> discord.Embed:
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect & Channels**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/createchannel <name> [category]` — Create custom text/voice channel\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View your (or someone's) squad, OVR rating & synergy\n• `/teambattle <opponent>` / `!teambattle` — Footdex-style positional NBA card battle\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server\n• `/setupnbachannel [cat]` — Create dedicated arena channel in 2K Mobile Hub category", inline=False)
+    embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View squad card, career record, win streaks & GM badges\n• `/teamqueue` / `!teamqueue` — Auto-matchmaking queue to find live opponents\n• `/teambattle <opponent>` / `!teambattle` — Footdex-style positional NBA card battle\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server\n• `/setupnbachannel [cat]` — Create dedicated arena channel in 2K Mobile Hub category", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
@@ -4443,7 +4845,7 @@ async def buildteam_slash_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 
-@bot.tree.command(name="myteam", description="🏀 View your (or another member's) active $15 All-Time Dream Team squad & OVR ratings")
+@bot.tree.command(name="myteam", description="🏀 View your (or another member's) active $15 Dream Team card, career record & GM badges")
 @app_commands.describe(user="The member whose dream team you want to view (defaults to yourself)")
 @app_commands.guild_only()
 async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[discord.Member] = None):
@@ -4456,8 +4858,14 @@ async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[disc
             await interaction.response.send_message(f"❌ **{target.display_name}** hasn't drafted a $15 Dream Team yet. Tell them to run `/buildteam`!", ephemeral=True)
         return
 
-    card_embed = build_myteam_embed(target, row)
-    await interaction.response.send_message(embed=card_embed)
+    card_embed, card_file = await build_myteam_embed(target, row)
+    await interaction.response.send_message(embed=card_embed, file=card_file)
+
+
+@bot.tree.command(name="teamqueue", description="⚔️ Join the live matchmaking queue to battle another member's $15 Dream Team")
+@app_commands.guild_only()
+async def teamqueue_slash_cmd(interaction: discord.Interaction):
+    await handle_team_queue(interaction=interaction)
 
 
 @bot.tree.command(name="teambattle", description="⚔️ Challenge another member's $15 Dream Team to a tactical live NBA card battle!")
@@ -5932,7 +6340,7 @@ async def buildteam_prefix_cmd(ctx: commands.Context):
 @bot.command(name="myteam", aliases=["squad", "dreamteam"])
 @commands.guild_only()
 async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """View your (or another member's) active $15 Dream Team squad & OVR ratings: !myteam [@user]"""
+    """View your (or another member's) active $15 Dream Team squad, career record & GM badges: !myteam [@user]"""
     target = member or ctx.author
     row = await db.get_dream_team(target.id)
     if not row:
@@ -5942,8 +6350,15 @@ async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Memb
             await ctx.send(f"❌ **{target.display_name}** hasn't drafted a $15 Dream Team yet. Tell them to run `!buildteam`!")
         return
 
-    card_embed = build_myteam_embed(target, row)
-    await ctx.send(embed=card_embed)
+    card_embed, card_file = await build_myteam_embed(target, row)
+    await ctx.send(embed=card_embed, file=card_file)
+
+
+@bot.command(name="teamqueue", aliases=["matchmaking", "queue", "findmatch"])
+@commands.guild_only()
+async def teamqueue_prefix_cmd(ctx: commands.Context):
+    """Join the live matchmaking queue to battle another member's $15 Dream Team: !teamqueue"""
+    await handle_team_queue(ctx=ctx)
 
 
 @bot.command(name="teambattle", aliases=["finals", "nbabattle", "squadbattle"])

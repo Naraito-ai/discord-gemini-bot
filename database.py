@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import asyncio
 from datetime import datetime
@@ -258,6 +259,21 @@ class DatabaseManager:
                 total_cost INTEGER NOT NULL,
                 ovr_rating REAL NOT NULL,
                 team_data TEXT,
+                updated_at REAL NOT NULL
+            );
+            """,
+            # Team Battle Stats & Career Records Table
+            """
+            CREATE TABLE IF NOT EXISTS team_battle_stats (
+                user_id TEXT PRIMARY KEY,
+                wins INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                ties INTEGER DEFAULT 0,
+                streak INTEGER DEFAULT 0,
+                best_streak INTEGER DEFAULT 0,
+                total_duels_won INTEGER DEFAULT 0,
+                total_points INTEGER DEFAULT 0,
+                achievements TEXT DEFAULT '[]',
                 updated_at REAL NOT NULL
             );
             """
@@ -554,6 +570,86 @@ class DatabaseManager:
     async def get_top_dream_teams(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Fetches the top dream teams ranked by OVR rating."""
         return await self.fetch("SELECT user_id, guild_id, pg, sg, sf, pf, c, total_cost, ovr_rating, updated_at FROM dream_teams ORDER BY ovr_rating DESC, updated_at ASC LIMIT ?", int(limit))
+
+    # ── Team Battle Career Stats & Leaderboard ──────────────────────────────
+    async def get_team_battle_stats(self, user_id: Any) -> Dict[str, Any]:
+        """Fetches a member's career NBA team battle record, streak, and achievements."""
+        row = await self.fetchrow("SELECT user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, achievements, updated_at FROM team_battle_stats WHERE user_id = ?", str(user_id))
+        if row:
+            try:
+                achievements = json.loads(row.get("achievements") or "[]")
+            except Exception:
+                achievements = []
+            return {
+                "wins": row.get("wins", 0),
+                "losses": row.get("losses", 0),
+                "ties": row.get("ties", 0),
+                "streak": row.get("streak", 0),
+                "best_streak": row.get("best_streak", 0),
+                "total_duels_won": row.get("total_duels_won", 0),
+                "total_points": row.get("total_points", 0),
+                "achievements": achievements
+            }
+        return {
+            "wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0,
+            "total_duels_won": 0, "total_points": 0, "achievements": []
+        }
+
+    async def update_team_battle_record(self, user_id: Any, won: bool, is_tie: bool, duels_won: int, points_scored: int, new_achievements: Optional[List[str]] = None):
+        """Updates career record, streaks, points, and unlocks achievements."""
+        stats = await self.get_team_battle_stats(user_id)
+        wins = stats["wins"]
+        losses = stats["losses"]
+        ties = stats["ties"]
+        streak = stats["streak"]
+        best_streak = stats["best_streak"]
+        total_duels = stats["total_duels_won"] + duels_won
+        total_pts = stats["total_points"] + points_scored
+        achievements_set = set(stats["achievements"])
+
+        if new_achievements:
+            for ach in new_achievements:
+                achievements_set.add(ach)
+
+        if is_tie:
+            ties += 1
+            streak = 0
+        elif won:
+            wins += 1
+            streak = streak + 1 if streak > 0 else 1
+            if streak > best_streak:
+                best_streak = streak
+        else:
+            losses += 1
+            streak = streak - 1 if streak < 0 else -1
+
+        now = datetime.now().timestamp()
+        ach_json = json.dumps(list(achievements_set))
+
+        if self.is_postgres:
+            query = """
+                INSERT INTO team_battle_stats (user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, achievements, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    wins = EXCLUDED.wins, losses = EXCLUDED.losses, ties = EXCLUDED.ties,
+                    streak = EXCLUDED.streak, best_streak = EXCLUDED.best_streak,
+                    total_duels_won = EXCLUDED.total_duels_won, total_points = EXCLUDED.total_points,
+                    achievements = EXCLUDED.achievements, updated_at = EXCLUDED.updated_at
+            """
+        else:
+            query = "INSERT OR REPLACE INTO team_battle_stats (user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, achievements, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+
+        await self.execute(query, str(user_id), wins, losses, ties, streak, best_streak, total_duels, total_pts, ach_json, now)
+
+    async def get_top_battle_records(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Fetches top coaches ranked by wins and win streak."""
+        query = """
+            SELECT user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, achievements
+            FROM team_battle_stats
+            ORDER BY wins DESC, streak DESC, total_points DESC
+            LIMIT ?
+        """
+        return await self.fetch(query, int(limit))
 
     async def close(self):
         """Closes all database connections."""
