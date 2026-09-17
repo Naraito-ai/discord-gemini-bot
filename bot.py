@@ -2150,6 +2150,113 @@ def build_teamleaderboard_embed(rows: List[Any]) -> discord.Embed:
     return embed
 
 
+class HubDraftButtonView(discord.ui.View):
+    """Persistent view attached to the NBA Dream Team channel welcome embed."""
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Draft $15 Dream Team", style=discord.ButtonStyle.success, emoji="🏀", custom_id="hub_draft_btn")
+    async def draft_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = BuildTeamView(author_id=interaction.user.id)
+        embed = view.make_draft_embed()
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+async def setup_nba_dreamteam_channel(guild: discord.Guild, target_category_name: Optional[str] = "2k mobile hub") -> tuple[discord.TextChannel, str]:
+    """Finds or creates a matching category (e.g. 2K Mobile Hub) and creates the #🏀・dream-team-builder channel with the interactive hub view."""
+    target_category = None
+    search_term = (target_category_name or "2k mobile hub").strip().lower()
+
+    # 1. Look for exact or fuzzy matching category in the server
+    for cat in guild.categories:
+        cname = cat.name.lower()
+        if search_term in cname or ("2k" in cname and "mobile" in cname) or ("2k" in cname and "hub" in cname):
+            target_category = cat
+            break
+            
+    if not target_category:
+        for cat in guild.categories:
+            cname = cat.name.lower()
+            if "2k" in cname or "nba" in cname or "basketball" in cname:
+                target_category = cat
+                break
+
+    # 2. If no category found, create it with clean aesthetic styling
+    if not target_category:
+        cat_title = "🏀 2K MOBILE HUB" if "2k" in search_term else f"🏀 {target_category_name.upper()}"
+        target_category = await guild.create_category(
+            name=cat_title,
+            reason="Automated category creation for NBA Dream Team & 2K Mobile Hub"
+        )
+        try:
+            await db.add_resource(guild.id, "categories", target_category.id)
+        except Exception:
+            pass
+
+    # 3. Check if channel already exists in target category
+    channel_name = "🏀・dream-team-builder"
+    existing_channel = None
+    for tc in target_category.text_channels:
+        if tc.name == channel_name or "dream-team" in tc.name or "nbadraft" in tc.name:
+            existing_channel = tc
+            break
+
+    if not existing_channel:
+        topic_str = "🏀 Build your $15 All-Time NBA Starting 5, challenge friends to 7-Game Finals series, and climb the GM leaderboard! Use /buildteam or click below."
+        existing_channel = await guild.create_text_channel(
+            name=channel_name,
+            category=target_category,
+            topic=topic_str,
+            reason="NBA Dream Team Builder & Battles Channel"
+        )
+        try:
+            await db.add_resource(guild.id, "channels", existing_channel.id)
+        except Exception:
+            pass
+
+    # 4. Post interactive Welcome & Quick-Draft Board embed into the channel
+    hub_embed = discord.Embed(
+        title="🏀 2K Mobile Hub • $15 All-Time NBA Dream Team Arena",
+        description=(
+            "Welcome to the **NBA Dream Team & Finals Battleground**!\n\n"
+            "Test your General Manager IQ by building the ultimate 5-man starting lineup under a **strict $15 salary cap**, "
+            "then challenge server members to simulated **7-game NBA Finals series** with full game logs and Finals MVP trophies!\n"
+        ),
+        color=discord.Color.gold()
+    )
+    
+    hub_embed.add_field(
+        name="🎮 GM Commands",
+        value=(
+            "• `/buildteam` or `!buildteam` — Open interactive draft room\n"
+            "• `/myteam [@user]` or `!myteam` — View your squad card & synergy\n"
+            "• `/teambattle <@user>` or `!teambattle` — Challenge member to 7-Game Finals\n"
+            "• `/teamleaderboard` or `!teamlb` — View server top GM leaderboard"
+        ),
+        inline=False
+    )
+    
+    hub_embed.add_field(
+        name="💵 Legend Salary Board ($1 - $5)",
+        value=(
+            "• **$5**: 🎯 Curry (PG) • 🐐 Jordan (SG) • 👑 LeBron (SF) • 🏛️ Duncan (PF) • 💥 Shaq (C)\n"
+            "• **$4**: 🪄 Magic (PG) • 🐍 Kobe (SG) • 🎯 Durant (SF) • 🍀 Bird (PF) • 🌪️ Hakeem (C)\n"
+            "• **$3**: 🧠 CP3 (PG) • ⚡ Wade (SG) • 🤖 Kawhi (SF) • 🇩🇪 Dirk (PF) • 🃏 Jokić (C)\n"
+            "• **$2**: ⚡ Kyrie (PG) • 🔥 Klay (SG) • ☕ Butler (SF) • 〰️ AD (PF) • 🦌 Giannis (C)\n"
+            "• **$1**: 🔒 Jrue (PG) • 🦬 White (SG) • 🦅 Caruso (SF) • 🐺 Naz Reid (PF) • 👽 Wemby (C)"
+        ),
+        inline=False
+    )
+    
+    hub_embed.set_footer(text="Click 'Draft $15 Dream Team' below to launch your private draft room anytime!")
+    hub_embed.timestamp = discord.utils.utcnow()
+
+    view = HubDraftButtonView()
+    await existing_channel.send(embed=hub_embed, view=view)
+    
+    return existing_channel, target_category.name
+
+
 # ── Social & Anime Action GIFs Suite ───────────────────────────────────────
 ACTION_METADATA = {
     "hug": {
@@ -2645,6 +2752,9 @@ class GeminiBot(commands.Bot):
             except Exception as api_err:
                 logger.warning(f"FastAPI dashboard startup error: {api_err}")
 
+        # 4. Register persistent UI views
+        self.add_view(HubDraftButtonView())
+
     @tasks.loop(minutes=10)
     async def presence_keepalive(self):
         """Periodically broadcasts presence so the bot stays visible as Online across all guilds."""
@@ -2845,8 +2955,8 @@ def make_help_embed() -> discord.Embed:
         description="An all-in-one AI Architect, Auto-Mod, Community Restorer Bot, and NBA Game Engine powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
-    embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View your (or someone's) squad, OVR rating & synergy\n• `/teambattle <opponent>` / `!teambattle` — Simulated 7-game NBA Finals Series showdown\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server", inline=False)
+    embed.add_field(name="🏗️ **AI Server Architect & Channels**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/createchannel <name> [category]` — Create custom text/voice channel\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
+    embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View your (or someone's) squad, OVR rating & synergy\n• `/teambattle <opponent>` / `!teambattle` — Simulated 7-game NBA Finals Series showdown\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server\n• `/setupnbachannel [cat]` — Create dedicated arena channel in 2K Mobile Hub category", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
@@ -3641,6 +3751,103 @@ async def teamleaderboard_slash_cmd(interaction: discord.Interaction):
     rows = await db.get_top_dream_teams(10)
     lb_embed = build_teamleaderboard_embed(rows)
     await interaction.response.send_message(embed=lb_embed)
+
+
+@bot.tree.command(name="setupnbachannel", description="🏀 Create a dedicated NBA Dream Team arena channel in the 2K Mobile Hub category")
+@app_commands.describe(category_name="Name of the category to place the channel in (defaults to '2K Mobile Hub')")
+@app_commands.default_permissions(manage_channels=True)
+@app_commands.guild_only()
+async def setupnbachannel_slash_cmd(interaction: discord.Interaction, category_name: Optional[str] = "2K Mobile Hub"):
+    if not is_protected(interaction.user) and not interaction.permissions.manage_channels:
+        await interaction.response.send_message("❌ You lack `Manage Channels` permission.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    try:
+        channel, cat_name = await setup_nba_dreamteam_channel(interaction.guild, category_name)
+        embed = discord.Embed(
+            title="🏀 NBA Dream Team Channel Created!",
+            description=f"✅ Successfully created and initialized {channel.mention} inside category **`{cat_name}`**!\n\n"
+                        f"• Pinned interactive GM Draft Board posted with 1-click button\n"
+                        f"• Members can build squads with `/buildteam` or `!buildteam`\n"
+                        f"• Members can battle squads with `/teambattle` or `!teambattle`\n"
+                        f"• General Manager Leaderboard live with `/teamleaderboard`",
+            color=discord.Color.green()
+        )
+        embed.timestamp = discord.utils.utcnow()
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    except Exception as e:
+        logger.error(f"Error in /setupnbachannel: {e}", exc_info=True)
+        await interaction.followup.send(f"❌ Failed to create NBA Dream Team channel: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="createchannel", description="Create a new text or voice channel inside a specific category")
+@app_commands.describe(
+    name="Name of the new channel (e.g. '🏀・dream-team-builder')",
+    category_name="Category name to place the channel in",
+    channel_type="Type of channel (text or voice)",
+    topic="Topic description for the channel (optional)"
+)
+@app_commands.choices(
+    channel_type=[
+        app_commands.Choice(name="Text Channel", value="text"),
+        app_commands.Choice(name="Voice Channel", value="voice"),
+    ]
+)
+@app_commands.default_permissions(manage_channels=True)
+@app_commands.guild_only()
+async def createchannel_slash_cmd(
+    interaction: discord.Interaction, 
+    name: str, 
+    category_name: Optional[str] = None, 
+    channel_type: Optional[str] = "text",
+    topic: Optional[str] = None
+):
+    if not is_protected(interaction.user) and not interaction.permissions.manage_channels:
+        await interaction.response.send_message("❌ You lack `Manage Channels` permission.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    guild = interaction.guild
+    target_category = None
+    
+    if category_name:
+        for cat in guild.categories:
+            if category_name.lower() in cat.name.lower():
+                target_category = cat
+                break
+        if not target_category:
+            target_category = await guild.create_category(name=category_name, reason="Created via /createchannel")
+            try:
+                await db.add_resource(guild.id, "categories", target_category.id)
+            except Exception:
+                pass
+
+    clean_name = name.strip().lower().replace(" ", "-")
+    try:
+        if channel_type == "voice":
+            new_chan = await guild.create_voice_channel(
+                name=clean_name,
+                category=target_category,
+                reason=f"Created via /createchannel by {interaction.user}"
+            )
+        else:
+            new_chan = await guild.create_text_channel(
+                name=clean_name,
+                category=target_category,
+                topic=topic,
+                reason=f"Created via /createchannel by {interaction.user}"
+            )
+        try:
+            await db.add_resource(guild.id, "channels", new_chan.id)
+        except Exception:
+            pass
+
+        cat_str = f" in category **`{target_category.name}`**" if target_category else ""
+        await interaction.followup.send(f"✅ Created channel {new_chan.mention}{cat_str}!", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Error in /createchannel: {e}", exc_info=True)
+        await interaction.followup.send(f"❌ Failed to create channel: {e}", ephemeral=True)
 
 
 # ── Social & Wholesome Anime Action Slash Commands ──────────────────────────
@@ -5017,6 +5224,74 @@ async def teamleaderboard_prefix_cmd(ctx: commands.Context):
     rows = await db.get_top_dream_teams(10)
     lb_embed = build_teamleaderboard_embed(rows)
     await ctx.send(embed=lb_embed)
+
+
+@bot.command(name="setupnbachannel", aliases=["setupdreamteam", "nbachannel"])
+@commands.guild_only()
+async def setupnbachannel_prefix_cmd(ctx: commands.Context, *, category_name: Optional[str] = "2K Mobile Hub"):
+    """Create a dedicated NBA Dream Team channel in the 2K Mobile Hub category: !setupnbachannel [category_name]"""
+    if not is_protected(ctx.author) and not ctx.author.guild_permissions.manage_channels:
+        await ctx.send("❌ You need `Manage Channels` permission to run this command.")
+        return
+
+    try:
+        channel, cat_name = await setup_nba_dreamteam_channel(ctx.guild, category_name)
+        embed = discord.Embed(
+            title="🏀 NBA Dream Team Channel Created!",
+            description=f"✅ Successfully created and initialized {channel.mention} inside category **`{cat_name}`**!\n\n"
+                        f"• Pinned interactive GM Draft Board posted with 1-click button\n"
+                        f"• Members can build squads with `/buildteam` or `!buildteam`\n"
+                        f"• Members can battle squads with `/teambattle` or `!teambattle`\n"
+                        f"• General Manager Leaderboard live with `/teamleaderboard`",
+            color=discord.Color.green()
+        )
+        embed.timestamp = discord.utils.utcnow()
+        await ctx.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Error in !setupnbachannel: {e}", exc_info=True)
+        await ctx.send(f"❌ Failed to create NBA Dream Team channel: {e}")
+
+
+@bot.command(name="createchannel", aliases=["addchannel", "makechannel"])
+@commands.guild_only()
+async def createchannel_prefix_cmd(ctx: commands.Context, name: str, category_name: Optional[str] = None):
+    """Create a new channel inside a category: !createchannel <channel_name> [category_name]"""
+    if not is_protected(ctx.author) and not ctx.author.guild_permissions.manage_channels:
+        await ctx.send("❌ You need `Manage Channels` permission to run this command.")
+        return
+
+    guild = ctx.guild
+    target_category = None
+    
+    if category_name:
+        for cat in guild.categories:
+            if category_name.lower() in cat.name.lower():
+                target_category = cat
+                break
+        if not target_category:
+            target_category = await guild.create_category(name=category_name, reason=f"Created via !createchannel by {ctx.author}")
+            try:
+                await db.add_resource(guild.id, "categories", target_category.id)
+            except Exception:
+                pass
+
+    clean_name = name.strip().lower().replace(" ", "-")
+    try:
+        new_chan = await guild.create_text_channel(
+            name=clean_name,
+            category=target_category,
+            reason=f"Created via !createchannel by {ctx.author}"
+        )
+        try:
+            await db.add_resource(guild.id, "channels", new_chan.id)
+        except Exception:
+            pass
+
+        cat_str = f" in category **`{target_category.name}`**" if target_category else ""
+        await ctx.send(f"✅ Created channel {new_chan.mention}{cat_str}!")
+    except Exception as e:
+        logger.error(f"Error in !createchannel: {e}", exc_info=True)
+        await ctx.send(f"❌ Failed to create channel: {e}")
 
 
 @bot.tree.command(name="mute", description="Timeout (mute) a member in the server")
