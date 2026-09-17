@@ -2104,9 +2104,10 @@ class InteractiveTeamBattleView(discord.ui.View):
         eval_a: Dict[str, Any],
         eval_b: Dict[str, Any],
         row_a: Any = None,
-        row_b: Any = None
+        row_b: Any = None,
+        message: Optional[discord.Message] = None
     ):
-        super().__init__(timeout=240)
+        super().__init__(timeout=600)
         self.author = author
         self.opponent = opponent
         self.picks_a = picks_a
@@ -2115,6 +2116,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.eval_b = eval_b
         self.row_a = row_a
         self.row_b = row_b
+        self.message = message
         
         self.positions = ["PG", "SG", "SF", "PF", "C"]
         self.pos_fullnames = {
@@ -2144,8 +2146,8 @@ class InteractiveTeamBattleView(discord.ui.View):
         scheme_keys = list(DEFENSIVE_SCHEMES.keys())
         self.round_schemes = []
         for pos in self.positions:
-            def_p = self.picks_b[pos]
-            if def_p.get("defense", 80) >= 95:
+            def_p = self.picks_b.get(pos, {})
+            if isinstance(def_p, dict) and def_p.get("defense", 80) >= 95:
                 if pos in ["PF", "C"]:
                     chosen_s = random.choice(["drop_coverage", "isolation_lock"])
                 else:
@@ -2154,8 +2156,13 @@ class InteractiveTeamBattleView(discord.ui.View):
                 chosen_s = random.choice(scheme_keys)
             self.round_schemes.append(chosen_s)
 
-        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a['ovr']} OVR) vs {opponent.display_name} ({eval_b['ovr']} OVR).\n*Read the opponent's defensive scout look below and execute tactical counters!*"
-        self.player_points = {self.author.display_name: {}, self.opponent.display_name: {}}
+        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a.get('ovr', 90)} OVR) vs {opponent.display_name} ({eval_b.get('ovr', 90)} OVR).\n*Read the opponent's defensive scout look below and execute tactical counters!*"
+        self.player_points = {
+            self.author.id: {},
+            self.opponent.id: {},
+            self.author.display_name: {},
+            self.opponent.display_name: {}
+        }
         self.is_game_over = False
         self.final_embed: Optional[discord.Embed] = None
         self._build_controls()
@@ -2211,64 +2218,98 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.add_item(btn_sim)
 
     async def handle_timeout_action(self, interaction: discord.Interaction):
-        if interaction.user.id not in [self.author.id, self.opponent.id]:
-            await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
-            return
+        try:
+            if interaction.user.id not in [self.author.id, self.opponent.id]:
+                await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
+                return
 
-        if self.timeouts_left_a <= 0:
-            await interaction.response.send_message("❌ You have already used your 1 Coach Timeout for this game!", ephemeral=True)
-            return
+            if self.timeouts_left_a <= 0:
+                await interaction.response.send_message("❌ You have already used your 1 Coach Timeout for this game!", ephemeral=True)
+                return
 
-        self.timeouts_left_a -= 1
-        self.has_timeout_boost_a = True
-        prev_opp_mom = self.momentum_b
-        self.momentum_b = 0
-        self.last_commentary = (
-            f"⏱️ **COACH TIMEOUT CALLED BY {interaction.user.display_name}!**\n"
-            f"• Iced opponent's heat momentum (`{prev_opp_mom} 🔥 ➔ 0`)!\n"
-            f"• Drew up a high-percentage **ATO Set-Play (+20% Precision Boost)** for the next possession!"
-        )
-        self._build_controls()
-        embed = self.make_battle_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
+            self.timeouts_left_a -= 1
+            self.has_timeout_boost_a = True
+            prev_opp_mom = self.momentum_b
+            self.momentum_b = 0
+            self.last_commentary = (
+                f"⏱️ **COACH TIMEOUT CALLED BY {interaction.user.display_name}!**\n"
+                f"• Iced opponent's heat momentum (`{prev_opp_mom} 🔥 ➔ 0`)!\n"
+                f"• Drew up a high-percentage **ATO Set-Play (+20% Precision Boost)** for the next possession!"
+            )
+            self._build_controls()
+            embed = self.make_battle_embed()
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=self)
+        except Exception as e:
+            logger.error(f"[InteractiveTeamBattleView] handle_timeout_action error: {e}", exc_info=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"⚠️ Timeout error: `{e}`", ephemeral=True)
+            except Exception:
+                pass
 
     async def rematch_callback(self, interaction: discord.Interaction):
-        if interaction.user.id not in [self.author.id, self.opponent.id]:
-            await interaction.response.send_message("❌ Only the match participants can trigger a rematch!", ephemeral=True)
-            return
+        try:
+            if interaction.user.id not in [self.author.id, self.opponent.id]:
+                await interaction.response.send_message("❌ Only the match participants can trigger a rematch!", ephemeral=True)
+                return
 
-        row_a = await db.get_dream_team(self.author.id) or self.row_a
-        if getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id):
-            row_b = await ensure_sweety_ai_team(target_id=self.opponent.id) or self.row_b
-        else:
-            row_b = await db.get_dream_team(self.opponent.id) or self.row_b
-        picks_a = extract_picks_from_row(row_a)
-        picks_b = extract_picks_from_row(row_b)
-        eval_a = evaluate_dream_team(picks_a)
-        eval_b = evaluate_dream_team(picks_b)
+            row_a = await db.get_dream_team(self.author.id) or self.row_a
+            if getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id):
+                row_b = await ensure_sweety_ai_team(target_id=self.opponent.id) or self.row_b
+            else:
+                row_b = await db.get_dream_team(self.opponent.id) or self.row_b
+            picks_a = extract_picks_from_row(row_a)
+            picks_b = extract_picks_from_row(row_b)
+            eval_a = evaluate_dream_team(picks_a)
+            eval_b = evaluate_dream_team(picks_b)
 
-        fresh_view = InteractiveTeamBattleView(self.author, self.opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
-        embed = fresh_view.make_battle_embed()
-        await interaction.response.edit_message(
-            content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
-            embed=embed,
-            view=fresh_view
-        )
+            fresh_view = InteractiveTeamBattleView(self.author, self.opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
+            embed = fresh_view.make_battle_embed()
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(
+                    content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
+                    embed=embed,
+                    view=fresh_view
+                )
+            else:
+                await interaction.followup.edit_message(
+                    message_id=interaction.message.id,
+                    content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
+                    embed=embed,
+                    view=fresh_view
+                )
+        except Exception as e:
+            logger.error(f"[InteractiveTeamBattleView] rematch_callback error: {e}", exc_info=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"⚠️ Rematch error: `{e}`", ephemeral=True)
+            except Exception:
+                pass
 
     async def draft_callback(self, interaction: discord.Interaction):
-        view = BuildTeamView(author_id=interaction.user.id)
-        embed = view.make_draft_embed()
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        try:
+            view = BuildTeamView(author_id=interaction.user.id)
+            embed = view.make_draft_embed()
+            if not interaction.response.is_done():
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            else:
+                await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        except Exception as e:
+            logger.error(f"[InteractiveTeamBattleView] draft_callback error: {e}", exc_info=True)
 
     def make_battle_embed(self) -> discord.Embed:
         if self.is_game_over and self.final_embed:
             return self.final_embed
 
-        cur_pos = self.positions[self.current_round]
-        pos_title = self.pos_fullnames[cur_pos]
-        pl_a = self.picks_a[cur_pos]
-        pl_b = self.picks_b[cur_pos]
-        cur_scheme_key = self.round_schemes[self.current_round]
+        cur_idx = min(self.current_round, len(self.positions) - 1)
+        cur_pos = self.positions[cur_idx]
+        pos_title = self.pos_fullnames.get(cur_pos, cur_pos)
+        pl_a = self.picks_a.get(cur_pos, {})
+        pl_b = self.picks_b.get(cur_pos, {})
+        cur_scheme_key = self.round_schemes[cur_idx] if cur_idx < len(self.round_schemes) else "drop_coverage"
         scheme_data = DEFENSIVE_SCHEMES.get(cur_scheme_key, DEFENSIVE_SCHEMES["drop_coverage"])
 
         if self.duels_won_a > self.duels_won_b:
@@ -2288,7 +2329,7 @@ class InteractiveTeamBattleView(discord.ui.View):
             title=f"⚔️ LIVE NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}",
             description=(
                 f"### 🏀 Series Status: {status_text}\n"
-                f"**Quarter `{self.current_round + 1}/5`**: **{pos_title} ({cur_pos}) Matchup**\n"
+                f"**Quarter `{cur_idx + 1}/5`**: **{pos_title} ({cur_pos}) Matchup**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             ),
             color=status_color
@@ -2305,9 +2346,9 @@ class InteractiveTeamBattleView(discord.ui.View):
         att_str_fmt = " • ".join(att_strengths) if att_strengths else f"⭐ {pl_a.get('tag', 'Legend')}"
 
         matchup_value = (
-            f"🟢 **{self.author.display_name}**: {pl_a['emoji']} **{pl_a['name']}** (`${pl_a['cost']}`) `[MOM: {mom_bar_a}]`\n"
+            f"🟢 **{self.author.display_name}**: {pl_a.get('emoji', '🏀')} **{pl_a.get('name', 'Player A')}** (`${pl_a.get('cost', 1)}`) `[MOM: {mom_bar_a}]`\n"
             f"> ⭐ **Signature**: {att_str_fmt}\n"
-            f"🔴 **{self.opponent.display_name}**: {pl_b['emoji']} **{pl_b['name']}** (`${pl_b['cost']}`) `[MOM: {mom_bar_b}]`\n"
+            f"🔴 **{self.opponent.display_name}**: {pl_b.get('emoji', '🏀')} **{pl_b.get('name', 'Player B')}** (`${pl_b.get('cost', 1)}`) `[MOM: {mom_bar_b}]`\n"
             f"> 🛡️ **Defense Rating**: `{pl_b.get('defense', 85)} DEF` • *{pl_b.get('tag', 'Archetype')}*"
         )
         embed.add_field(name=f"⭐ Positional Duel • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
@@ -2319,7 +2360,7 @@ class InteractiveTeamBattleView(discord.ui.View):
             f"💡 **Scout Recommendation**: {scheme_data['scout_tip']}"
         )
         if self.play_streak_a >= 2:
-            scout_value += f"\n⚠️ **Defensive Anticipation**: You ran `{self.last_play_a.upper()}` last turn (-15% repeated play penalty)! Call a different counter."
+            scout_value += f"\n⚠️ **Defensive Anticipation**: You ran `{str(self.last_play_a).upper()}` last turn (-15% repeated play penalty)! Call a different counter."
         if self.has_timeout_boost_a:
             scout_value += "\n⏱️ **ATO Set-Play Boost**: +20% Precision Bonus active on your next call!"
 
@@ -2374,63 +2415,78 @@ class InteractiveTeamBattleView(discord.ui.View):
 
         # Achievements
         new_achievements_winner = ["first_champ"]
-        if winner_eval["ovr"] < loser_eval["ovr"]:
+        if winner_eval.get("ovr", 0) < loser_eval.get("ovr", 0):
             new_achievements_winner.append("budget_maestro")
         if winner_duels == 5:
             new_achievements_winner.append("the_clamps")
 
         # Backcourt check (PG and SG)
-        pg_won = any(r["pos"] == "PG" and ((winner_is_a and r["a_won"]) or (not winner_is_a and not r["a_won"])) for r in self.round_history)
-        sg_won = any(r["pos"] == "SG" and ((winner_is_a and r["a_won"]) or (not winner_is_a and not r["a_won"])) for r in self.round_history)
+        pg_won = any(r.get("pos") == "PG" and ((winner_is_a and r.get("a_won")) or (not winner_is_a and not r.get("a_won"))) for r in self.round_history)
+        sg_won = any(r.get("pos") == "SG" and ((winner_is_a and r.get("a_won")) or (not winner_is_a and not r.get("a_won"))) for r in self.round_history)
         if pg_won and sg_won:
             new_achievements_winner.append("splash_dynasty")
 
-        stats_w = await db.get_team_battle_stats(winner_member.id)
-        stats_l = await db.get_team_battle_stats(loser_member.id)
+        stats_w = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "achievements": []}
+        stats_l = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "achievements": []}
+        try:
+            stats_w = await db.get_team_battle_stats(winner_member.id)
+            stats_l = await db.get_team_battle_stats(loser_member.id)
+        except Exception as e:
+            logger.error(f"[InteractiveTeamBattleView] Error fetching stats: {e}")
 
-        if (stats_w["wins"] + 1) >= 10:
+        if (stats_w.get("wins", 0) + 1) >= 10:
             new_achievements_winner.append("hof_gm")
-        if (stats_w["total_points"] + winner_pts) >= 100:
+        if (stats_w.get("total_points", 0) + winner_pts) >= 100:
             new_achievements_winner.append("showtime_century")
-        cur_w_streak = stats_w["streak"] if stats_w["streak"] > 0 else 0
+        cur_w_streak = stats_w.get("streak", 0) if stats_w.get("streak", 0) > 0 else 0
         if (cur_w_streak + 1) >= 3:
             new_achievements_winner.append("streak_master")
 
         new_achievements_loser = []
-        if (stats_l["total_points"] + loser_pts) >= 100:
+        if (stats_l.get("total_points", 0) + loser_pts) >= 100:
             new_achievements_loser.append("showtime_century")
 
         newly_unlocked = [ach for ach in new_achievements_winner if ach not in stats_w.get("achievements", [])]
 
-        await db.update_team_battle_record(
-            user_id=winner_member.id,
-            won=True,
-            is_tie=False,
-            duels_won=winner_duels,
-            points_scored=winner_pts,
-            new_achievements=new_achievements_winner
-        )
-        await db.update_team_battle_record(
-            user_id=loser_member.id,
-            won=False,
-            is_tie=False,
-            duels_won=loser_duels,
-            points_scored=loser_pts,
-            new_achievements=new_achievements_loser
-        )
+        try:
+            await db.update_team_battle_record(
+                user_id=winner_member.id,
+                won=True,
+                is_tie=False,
+                duels_won=winner_duels,
+                points_scored=winner_pts,
+                new_achievements=new_achievements_winner
+            )
+            await db.update_team_battle_record(
+                user_id=loser_member.id,
+                won=False,
+                is_tie=False,
+                duels_won=loser_duels,
+                points_scored=loser_pts,
+                new_achievements=new_achievements_loser
+            )
+            updated_stats_a = await db.get_team_battle_stats(self.author.id)
+            updated_stats_b = await db.get_team_battle_stats(self.opponent.id)
+        except Exception as e:
+            logger.error(f"[InteractiveTeamBattleView] Error updating records: {e}")
+            updated_stats_a = stats_w if winner_is_a else stats_l
+            updated_stats_b = stats_l if winner_is_a else stats_w
 
-        updated_stats_a = await db.get_team_battle_stats(self.author.id)
-        updated_stats_b = await db.get_team_battle_stats(self.opponent.id)
-        streak_a_fmt = f"🔥 {updated_stats_a['streak']}W" if updated_stats_a['streak'] > 0 else (f"❄️ {abs(updated_stats_a['streak'])}L" if updated_stats_a['streak'] < 0 else "⚪ 0")
-        streak_b_fmt = f"🔥 {updated_stats_b['streak']}W" if updated_stats_b['streak'] > 0 else (f"❄️ {abs(updated_stats_b['streak'])}L" if updated_stats_b['streak'] < 0 else "⚪ 0")
+        streak_a_val = updated_stats_a.get("streak", 0)
+        streak_b_val = updated_stats_b.get("streak", 0)
+        streak_a_fmt = f"🔥 {streak_a_val}W" if streak_a_val > 0 else (f"❄️ {abs(streak_a_val)}L" if streak_a_val < 0 else "⚪ 0")
+        streak_b_fmt = f"🔥 {streak_b_val}W" if streak_b_val > 0 else (f"❄️ {abs(streak_b_val)}L" if streak_b_val < 0 else "⚪ 0")
+
+        tier_a = self.eval_a.get("tier", "Starting 5").split("•")[0].strip()
+        tier_b = self.eval_b.get("tier", "Starting 5").split("•")[0].strip()
 
         embed = discord.Embed(
             title=f"🏆 FINAL WHISTLE: {self.author.display_name} vs {self.opponent.display_name}",
             description=(
                 f"# 👑 `{winner_name}` WINS THE SERIES!\n\n"
                 f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Duels Won: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
-                f"• 🟢 **{self.author.display_name} ({self.eval_a['ovr']} OVR)**: {self.eval_a['tier'].split('•')[0].strip()} • `Record: {updated_stats_a['wins']}W-{updated_stats_a['losses']}L ({streak_a_fmt})`\n"
-                f"• 🔴 **{self.opponent.display_name} ({self.eval_b['ovr']} OVR)**: {self.eval_b['tier'].split('•')[0].strip()} • `Record: {updated_stats_b['wins']}W-{updated_stats_b['losses']}L ({streak_b_fmt})`\n"
+                f"• 🟢 **{self.author.display_name} ({self.eval_a.get('ovr', 90)} OVR)**: {tier_a} • `Record: {updated_stats_a.get('wins', 0)}W-{updated_stats_a.get('losses', 0)}L ({streak_a_fmt})`\n"
+                f"• 🔴 **{self.opponent.display_name} ({self.eval_b.get('ovr', 90)} OVR)**: {tier_b} • `Record: {updated_stats_b.get('wins', 0)}W-{updated_stats_b.get('losses', 0)}L ({streak_b_fmt})`\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             ),
             color=discord.Color.gold() if winner_is_a else discord.Color.purple()
@@ -2440,12 +2496,14 @@ class InteractiveTeamBattleView(discord.ui.View):
 
         box_lines = []
         for r in self.round_history:
-            pos = r["pos"]
-            p_a = r["pl_a"]["name"]
-            p_b = r["pl_b"]["name"]
-            pts_a = r["pts_a"]
-            pts_b = r["pts_b"]
-            if r["a_won"]:
+            pos = r.get("pos", "??")
+            p_a_obj = r.get("pl_a", {})
+            p_b_obj = r.get("pl_b", {})
+            p_a = p_a_obj.get("name", "Player A") if isinstance(p_a_obj, dict) else str(p_a_obj)
+            p_b = p_b_obj.get("name", "Player B") if isinstance(p_b_obj, dict) else str(p_b_obj)
+            pts_a = r.get("pts_a", 0)
+            pts_b = r.get("pts_b", 0)
+            if r.get("a_won"):
                 res_icon = "🟢"
                 p_a_fmt = f"**{p_a}** `(+{pts_a})`"
                 p_b_fmt = f"{p_b} `(+{pts_b})`"
@@ -2459,28 +2517,55 @@ class InteractiveTeamBattleView(discord.ui.View):
                 p_b_fmt = f"**{p_b}** `(+{pts_b})`"
             box_lines.append(f"`{pos:<2}` {res_icon} {p_a_fmt} ── **`{pts_a} - {pts_b}`** ── {p_b_fmt}")
 
-        embed.add_field(name="🏀 Positional Duels Breakdown (Best of 5)", value="\n".join(box_lines), inline=False)
+        embed.add_field(name="🏀 Positional Duels Breakdown (Best of 5)", value="\n".join(box_lines) if box_lines else "*No duels recorded*", inline=False)
 
         winning_picks = self.picks_a if winner_is_a else self.picks_b
-        winning_user = self.author.display_name if winner_is_a else self.opponent.display_name
-        scores_map = self.player_points.get(winning_user, {})
-        best_p_name = max(scores_map, key=scores_map.get) if scores_map else list(winning_picks.keys())[0]
+        winning_user_id = winner_member.id
+        winning_user_name = winner_name
+        scores_map = self.player_points.get(winning_user_id) or self.player_points.get(winning_user_name) or {}
+
+        best_p_name = None
+        if scores_map:
+            try:
+                best_p_name = max(scores_map, key=scores_map.get)
+            except Exception:
+                best_p_name = None
 
         mvp_player = None
-        for p in winning_picks.values():
-            if p["name"] == best_p_name:
-                mvp_player = p
-                break
-        if not mvp_player:
-            mvp_player = list(winning_picks.values())[0]
+        if best_p_name and isinstance(winning_picks, dict):
+            for p in winning_picks.values():
+                if isinstance(p, dict) and p.get("name") == best_p_name:
+                    mvp_player = p
+                    break
 
-        mvp_pts = random.randint(28, 38) + (scores_map.get(mvp_player["name"], 0) * 2)
+        if not mvp_player and isinstance(winning_picks, dict) and winning_picks:
+            for p in winning_picks.values():
+                if isinstance(p, dict):
+                    mvp_player = p
+                    break
+
+        if not mvp_player or not isinstance(mvp_player, dict):
+            mvp_player = {
+                "name": "Team Captain",
+                "team": "NBA",
+                "emoji": "🏀",
+                "cost": 1,
+                "tag": "Legend"
+            }
+
+        p_name = mvp_player.get("name", "Team Captain")
+        p_emoji = mvp_player.get("emoji", "🏀")
+        p_team = mvp_player.get("team", "NBA")
+        p_tag = mvp_player.get("tag", "Legend")
+        extra_pts = scores_map.get(p_name, 0) if isinstance(scores_map, dict) else 0
+
+        mvp_pts = random.randint(28, 38) + (extra_pts * 2)
         mvp_reb = random.randint(6, 14)
         mvp_ast = random.randint(5, 13)
         mvp_blk = random.randint(1, 4)
 
         mvp_value = (
-            f"{mvp_player['emoji']} **{mvp_player['name']}** ({mvp_player['team']}) — *{mvp_player['tag']}*\n"
+            f"{p_emoji} **{p_name}** ({p_team}) — *{p_tag}*\n"
             f"📊 **Final Statline**: **`{mvp_pts} PTS`** • **`{mvp_reb} REB`** • **`{mvp_ast} AST`** • **`{mvp_blk} BLK`**"
         )
         embed.add_field(name="🎖️ Player of the Match (MVP) Trophy", value=mvp_value, inline=False)
@@ -2499,136 +2584,111 @@ class InteractiveTeamBattleView(discord.ui.View):
         return embed
 
     async def handle_tactical_action(self, interaction: discord.Interaction, action_key: str):
-        if interaction.user.id not in [self.author.id, self.opponent.id]:
-            await interaction.response.send_message("❌ This is not your game! Start your own with `/teambattle @user`.", ephemeral=True)
-            return
+        try:
+            if interaction.user.id not in [self.author.id, self.opponent.id]:
+                await interaction.response.send_message("❌ This is not your game! Start your own with `/teambattle @user`.", ephemeral=True)
+                return
 
-        cur_pos = self.positions[self.current_round]
-        pos_title = self.pos_fullnames[cur_pos]
-        pl_a = self.picks_a[cur_pos]
-        pl_b = self.picks_b[cur_pos]
-        cur_scheme_key = self.round_schemes[self.current_round]
+            if self.is_game_over:
+                if self.final_embed:
+                    if not interaction.response.is_done():
+                        await interaction.response.edit_message(embed=self.final_embed, view=self)
+                return
 
-        # Update play streak
-        if self.last_play_a == action_key:
-            self.play_streak_a += 1
-        else:
-            self.last_play_a = action_key
-            self.play_streak_a = 1
+            cur_idx = self.current_round
+            if cur_idx >= len(self.positions):
+                self.is_game_over = True
+                self._build_controls()
+                embed = await self._process_game_over()
+                if not interaction.response.is_done():
+                    await interaction.response.edit_message(embed=embed, view=self)
+                return
 
-        # 1. Resolve Challenger Attack Possession
-        res_a = resolve_possession(
-            action_key=action_key,
-            pl_att=pl_a,
-            pl_def=pl_b,
-            momentum_att=self.momentum_a,
-            momentum_def=self.momentum_b,
-            scheme_key=cur_scheme_key,
-            play_streak=self.play_streak_a,
-            has_timeout_boost=self.has_timeout_boost_a
-        )
-        self.has_timeout_boost_a = False
-        self.round_pts_a += res_a["pts"]
-        self.player_points[self.author.display_name][pl_a["name"]] = self.player_points[self.author.display_name].get(pl_a["name"], 0) + res_a["pts"]
+            cur_pos = self.positions[cur_idx]
+            pos_title = self.pos_fullnames.get(cur_pos, cur_pos)
+            pl_a = self.picks_a.get(cur_pos, {})
+            pl_b = self.picks_b.get(cur_pos, {})
+            cur_scheme_key = self.round_schemes[cur_idx] if cur_idx < len(self.round_schemes) else "drop_coverage"
 
-        if res_a["success"]:
-            self.momentum_a = min(3, self.momentum_a + 1)
-        else:
-            self.momentum_a = max(0, self.momentum_a - 1)
+            # Update play streak
+            if self.last_play_a == action_key:
+                self.play_streak_a += 1
+            else:
+                self.last_play_a = action_key
+                self.play_streak_a = 1
 
-        # 2. Opponent dynamic tactical AI counter
-        opp_tactics = ["three", "drive", "pnr", "defense", "iso"]
-        if pl_b.get("pts_3", 0) >= 92 and random.random() < 0.45:
-            opp_choice = "three"
-        elif pl_b.get("inside", 0) >= 92 and random.random() < 0.45:
-            opp_choice = "drive"
-        elif pl_b.get("defense", 0) >= 92 and random.random() < 0.45:
-            opp_choice = "defense"
-        elif pl_b.get("playmaking", 0) >= 92 and random.random() < 0.45:
-            opp_choice = "pnr"
-        else:
-            opp_choice = random.choice(opp_tactics)
-
-        opp_def_scheme = random.choice(list(DEFENSIVE_SCHEMES.keys()))
-        res_b = resolve_possession(
-            action_key=opp_choice,
-            pl_att=pl_b,
-            pl_def=pl_a,
-            momentum_att=self.momentum_b,
-            momentum_def=self.momentum_a,
-            scheme_key=opp_def_scheme,
-            play_streak=1,
-            has_timeout_boost=False
-        )
-        self.round_pts_b += res_b["pts"]
-        self.player_points[self.opponent.display_name][pl_b["name"]] = self.player_points[self.opponent.display_name].get(pl_b["name"], 0) + res_b["pts"]
-
-        if res_b["success"]:
-            self.momentum_b = min(3, self.momentum_b + 1)
-        else:
-            self.momentum_b = max(0, self.momentum_b - 1)
-
-        # Round winner evaluation
-        round_a_won = (res_a["pts"] > res_b["pts"]) or (res_a["pts"] == res_b["pts"] and res_a["success"])
-        if round_a_won:
-            self.duels_won_a += 1
-        elif res_b["pts"] > res_a["pts"]:
-            self.duels_won_b += 1
-
-        self.last_commentary = f"{res_a['read_note']}\n• **{self.author.display_name}**: {res_a['commentary']}\n• **{self.opponent.display_name}**: {res_b['commentary']}"
-
-        self.round_history.append({
-            "pos": cur_pos,
-            "pos_title": pos_title,
-            "pl_a": pl_a,
-            "pl_b": pl_b,
-            "pts_a": res_a["pts"],
-            "pts_b": res_b["pts"],
-            "a_won": round_a_won,
-            "commentary": res_a["commentary"]
-        })
-
-        self.current_round += 1
-        self._build_controls()
-        if self.current_round >= 5:
-            self.is_game_over = True
-            self._build_controls()
-            embed = await self._process_game_over()
-        else:
-            embed = self.make_battle_embed()
-
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    async def handle_simulate_remainder(self, interaction: discord.Interaction):
-        if interaction.user.id not in [self.author.id, self.opponent.id]:
-            await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
-            return
-
-        tactics_list = ["three", "drive", "pnr", "defense", "iso"]
-        while self.current_round < 5:
-            cur_pos = self.positions[self.current_round]
-            pos_title = self.pos_fullnames[cur_pos]
-            pl_a = self.picks_a[cur_pos]
-            pl_b = self.picks_b[cur_pos]
-            cur_scheme_key = self.round_schemes[self.current_round]
-
-            choice_a = random.choice(tactics_list)
-            choice_b = random.choice(tactics_list)
-
-            res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b, cur_scheme_key, 1, self.has_timeout_boost_a)
+            # 1. Resolve Challenger Attack Possession
+            res_a = resolve_possession(
+                action_key=action_key,
+                pl_att=pl_a,
+                pl_def=pl_b,
+                momentum_att=self.momentum_a,
+                momentum_def=self.momentum_b,
+                scheme_key=cur_scheme_key,
+                play_streak=self.play_streak_a,
+                has_timeout_boost=self.has_timeout_boost_a
+            )
             self.has_timeout_boost_a = False
-            res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False)
-
             self.round_pts_a += res_a["pts"]
-            self.round_pts_b += res_b["pts"]
-            self.player_points[self.author.display_name][pl_a["name"]] = self.player_points[self.author.display_name].get(pl_a["name"], 0) + res_a["pts"]
-            self.player_points[self.opponent.display_name][pl_b["name"]] = self.player_points[self.opponent.display_name].get(pl_b["name"], 0) + res_b["pts"]
+            p_name_a = pl_a.get("name", "Player A")
+            if self.author.id not in self.player_points:
+                self.player_points[self.author.id] = {}
+            self.player_points[self.author.id][p_name_a] = self.player_points[self.author.id].get(p_name_a, 0) + res_a["pts"]
+            if self.author.display_name not in self.player_points:
+                self.player_points[self.author.display_name] = {}
+            self.player_points[self.author.display_name][p_name_a] = self.player_points[self.author.display_name].get(p_name_a, 0) + res_a["pts"]
 
+            if res_a["success"]:
+                self.momentum_a = min(3, self.momentum_a + 1)
+            else:
+                self.momentum_a = max(0, self.momentum_a - 1)
+
+            # 2. Opponent dynamic tactical AI counter
+            opp_tactics = ["three", "drive", "pnr", "defense", "iso"]
+            if pl_b.get("pts_3", 0) >= 92 and random.random() < 0.45:
+                opp_choice = "three"
+            elif pl_b.get("inside", 0) >= 92 and random.random() < 0.45:
+                opp_choice = "drive"
+            elif pl_b.get("defense", 0) >= 92 and random.random() < 0.45:
+                opp_choice = "defense"
+            elif pl_b.get("playmaking", 0) >= 92 and random.random() < 0.45:
+                opp_choice = "pnr"
+            else:
+                opp_choice = random.choice(opp_tactics)
+
+            opp_def_scheme = random.choice(list(DEFENSIVE_SCHEMES.keys()))
+            res_b = resolve_possession(
+                action_key=opp_choice,
+                pl_att=pl_b,
+                pl_def=pl_a,
+                momentum_att=self.momentum_b,
+                momentum_def=self.momentum_a,
+                scheme_key=opp_def_scheme,
+                play_streak=1,
+                has_timeout_boost=False
+            )
+            self.round_pts_b += res_b["pts"]
+            p_name_b = pl_b.get("name", "Player B")
+            if self.opponent.id not in self.player_points:
+                self.player_points[self.opponent.id] = {}
+            self.player_points[self.opponent.id][p_name_b] = self.player_points[self.opponent.id].get(p_name_b, 0) + res_b["pts"]
+            if self.opponent.display_name not in self.player_points:
+                self.player_points[self.opponent.display_name] = {}
+            self.player_points[self.opponent.display_name][p_name_b] = self.player_points[self.opponent.display_name].get(p_name_b, 0) + res_b["pts"]
+
+            if res_b["success"]:
+                self.momentum_b = min(3, self.momentum_b + 1)
+            else:
+                self.momentum_b = max(0, self.momentum_b - 1)
+
+            # Round winner evaluation
             round_a_won = (res_a["pts"] > res_b["pts"]) or (res_a["pts"] == res_b["pts"] and res_a["success"])
             if round_a_won:
                 self.duels_won_a += 1
             elif res_b["pts"] > res_a["pts"]:
                 self.duels_won_b += 1
+
+            self.last_commentary = f"{res_a['read_note']}\n• **{self.author.display_name}**: {res_a['commentary']}\n• **{self.opponent.display_name}**: {res_b['commentary']}"
 
             self.round_history.append({
                 "pos": cur_pos,
@@ -2640,12 +2700,100 @@ class InteractiveTeamBattleView(discord.ui.View):
                 "a_won": round_a_won,
                 "commentary": res_a["commentary"]
             })
-            self.current_round += 1
 
-        self.is_game_over = True
-        self._build_controls()
-        embed = await self._process_game_over()
-        await interaction.response.edit_message(embed=embed, view=self)
+            self.current_round += 1
+            if self.current_round >= 5:
+                self.is_game_over = True
+                self._build_controls()
+                embed = await self._process_game_over()
+            else:
+                self._build_controls()
+                embed = self.make_battle_embed()
+
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=self)
+        except Exception as e:
+            logger.error(f"[InteractiveTeamBattleView] handle_tactical_action error: {e}", exc_info=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"⚠️ Tactical decision error: `{e}`. You can try clicking again.", ephemeral=True)
+            except Exception:
+                pass
+
+    async def handle_simulate_remainder(self, interaction: discord.Interaction):
+        try:
+            if interaction.user.id not in [self.author.id, self.opponent.id]:
+                await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
+                return
+
+            tactics_list = ["three", "drive", "pnr", "defense", "iso"]
+            while self.current_round < 5:
+                cur_pos = self.positions[self.current_round]
+                pos_title = self.pos_fullnames.get(cur_pos, cur_pos)
+                pl_a = self.picks_a.get(cur_pos, {})
+                pl_b = self.picks_b.get(cur_pos, {})
+                cur_scheme_key = self.round_schemes[self.current_round] if self.current_round < len(self.round_schemes) else "drop_coverage"
+
+                choice_a = random.choice(tactics_list)
+                choice_b = random.choice(tactics_list)
+
+                res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b, cur_scheme_key, 1, self.has_timeout_boost_a)
+                self.has_timeout_boost_a = False
+                res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False)
+
+                self.round_pts_a += res_a["pts"]
+                self.round_pts_b += res_b["pts"]
+                p_name_a = pl_a.get("name", "Player A")
+                p_name_b = pl_b.get("name", "Player B")
+                if self.author.id not in self.player_points:
+                    self.player_points[self.author.id] = {}
+                self.player_points[self.author.id][p_name_a] = self.player_points[self.author.id].get(p_name_a, 0) + res_a["pts"]
+                if self.opponent.id not in self.player_points:
+                    self.player_points[self.opponent.id] = {}
+                self.player_points[self.opponent.id][p_name_b] = self.player_points[self.opponent.id].get(p_name_b, 0) + res_b["pts"]
+
+                round_a_won = (res_a["pts"] > res_b["pts"]) or (res_a["pts"] == res_b["pts"] and res_a["success"])
+                if round_a_won:
+                    self.duels_won_a += 1
+                elif res_b["pts"] > res_a["pts"]:
+                    self.duels_won_b += 1
+
+                self.round_history.append({
+                    "pos": cur_pos,
+                    "pos_title": pos_title,
+                    "pl_a": pl_a,
+                    "pl_b": pl_b,
+                    "pts_a": res_a["pts"],
+                    "pts_b": res_b["pts"],
+                    "a_won": round_a_won,
+                    "commentary": res_a["commentary"]
+                })
+                self.current_round += 1
+
+            self.is_game_over = True
+            self._build_controls()
+            embed = await self._process_game_over()
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=self)
+        except Exception as e:
+            logger.error(f"[InteractiveTeamBattleView] handle_simulate_remainder error: {e}", exc_info=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"⚠️ Sim error: `{e}`", ephemeral=True)
+            except Exception:
+                pass
+
+    async def on_timeout(self):
+        try:
+            self.clear_items()
+            if hasattr(self, "message") and self.message:
+                await self.message.edit(view=None)
+        except Exception:
+            pass
 
 
 class TeamBattleRematchView(discord.ui.View):
@@ -2665,33 +2813,44 @@ class TeamBattleRematchView(discord.ui.View):
 
     @discord.ui.button(label="Rematch (Live Battle)", style=discord.ButtonStyle.success, emoji="🔄", custom_id="btn_battle_rematch")
     async def rematch_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id not in [self.author.id, self.opponent.id]:
-            await interaction.response.send_message("❌ Only the match participants can trigger a rematch!", ephemeral=True)
-            return
+        try:
+            if interaction.user.id not in [self.author.id, self.opponent.id]:
+                await interaction.response.send_message("❌ Only the match participants can trigger a rematch!", ephemeral=True)
+                return
 
-        row_a = await db.get_dream_team(self.author.id) or self.row_a
-        if getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id):
-            row_b = await ensure_sweety_ai_team(target_id=self.opponent.id) or self.row_b
-        else:
-            row_b = await db.get_dream_team(self.opponent.id) or self.row_b
-        picks_a = extract_picks_from_row(row_a)
-        picks_b = extract_picks_from_row(row_b)
-        eval_a = evaluate_dream_team(picks_a)
-        eval_b = evaluate_dream_team(picks_b)
+            row_a = await db.get_dream_team(self.author.id) or self.row_a
+            if getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id):
+                row_b = await ensure_sweety_ai_team(target_id=self.opponent.id) or self.row_b
+            else:
+                row_b = await db.get_dream_team(self.opponent.id) or self.row_b
+            picks_a = extract_picks_from_row(row_a)
+            picks_b = extract_picks_from_row(row_b)
+            eval_a = evaluate_dream_team(picks_a)
+            eval_b = evaluate_dream_team(picks_b)
 
-        live_view = InteractiveTeamBattleView(self.author, self.opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
-        embed = live_view.make_battle_embed()
-        await interaction.response.edit_message(
-            content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
-            embed=embed,
-            view=live_view
-        )
+            live_view = InteractiveTeamBattleView(self.author, self.opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
+            embed = live_view.make_battle_embed()
+            await interaction.response.edit_message(
+                content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
+                embed=embed,
+                view=live_view
+            )
+        except Exception as e:
+            logger.error(f"[TeamBattleRematchView] rematch_callback error: {e}", exc_info=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"⚠️ Rematch error: `{e}`", ephemeral=True)
+            except Exception:
+                pass
 
     @discord.ui.button(label="Draft Board", style=discord.ButtonStyle.primary, emoji="🏀", custom_id="btn_battle_draft")
     async def draft_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = BuildTeamView(author_id=interaction.user.id)
-        embed = view.make_draft_embed()
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        try:
+            view = BuildTeamView(author_id=interaction.user.id)
+            embed = view.make_draft_embed()
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        except Exception as e:
+            logger.error(f"[TeamBattleRematchView] draft_callback error: {e}", exc_info=True)
 
 
 class TeamBattleChallengeView(discord.ui.View):
@@ -2720,10 +2879,19 @@ class TeamBattleChallengeView(discord.ui.View):
             title="⚔️ NBA DREAM TEAM BATTLE CHALLENGE",
             description=(
                 f"🏀 {self.opponent.mention}, **{self.author.display_name}** has challenged your $15 Starting 5 to a head-to-head NBA battle!\n\n"
-                f"• 🟢 **{self.author.display_name}'s Squad**: `{self.eval_a['ovr']} OVR` • {self.eval_a['tier'].split('•')[0].strip()} (`${self.eval_a['total_cost']}/$15`)\n"
-                f"• 🔴 **{self.opponent.display_name}'s Squad**: `{self.eval_b['ovr']} OVR` • {self.eval_b['tier'].split('•')[0].strip()} (`${self.eval_b['total_cost']}/$15`)\n\n"
+                f"• 🟢 **{self.author.display_name}'s Squad**: `{self.eval_a.get('ovr', 90)} OVR` • {self.eval_a.get('tier', 'Starting 5').split('•')[0].strip()} (`${self.eval_a.get('total_cost', 15)}/$15`)\n"
+                f"• 🔴 **{self.opponent.display_name}'s Squad**: `{self.eval_b.get('ovr', 90)} OVR` • {self.eval_b.get('tier', 'Starting 5').split('•')[0].strip()} (`${self.eval_b.get('total_cost', 15)}/$15`)\n\n"
                 f"🏆 **Format**: 5-Round Positional Head-to-Head Duels (PG ➔ SG ➔ SF ➔ PF ➔ C)\n"
-                f"🎮 **Live Tactical Battle**: Click below to take real-time coaching decisions (`3PT`, `Drives`, `P&R`, `Clamps`, `Mamba Iso`)!"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📋 **Tactical Coaching Rules (Read & React Cheat-Sheet)**:\n"
+                f"• 🎯 **Step-Back 3PT** ────► Beats `🛡️ Sagging Drop Coverage`\n"
+                f"• 💥 **Power Drive** ──────► Beats `🔒 High Perimeter Press`\n"
+                f"• 🧠 **Pick & Roll** ──────► Beats `👥 Double-Teams & Zone Traps`\n"
+                f"• 🔒 **Lockdown Clamps** ──► Beats `⚡ Solo Mamba Isolation`\n"
+                f"• ⚡ **Mamba Iso** ────────► Beats `🔄 Switch Mismatches`\n"
+                f"• ⏱️ **Coach Timeout** ────► Ices Momentum & Grants `+20% ATO Precision Boost`\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎮 **Live Tactical Battle**: Click **Accept & Play Live** to coach in real-time or **Quick Sim** for instant results!"
             ),
             color=discord.Color.gold()
         )
@@ -2735,81 +2903,103 @@ class TeamBattleChallengeView(discord.ui.View):
 
     @discord.ui.button(label="Accept & Play Live", style=discord.ButtonStyle.success, emoji="⚔️", custom_id="btn_accept_live_battle")
     async def accept_live_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.opponent.id:
-            await interaction.response.send_message(
-                f"❌ Only {self.opponent.mention} can accept this battle challenge!",
-                ephemeral=True
-            )
-            return
+        try:
+            if interaction.user.id != self.opponent.id:
+                await interaction.response.send_message(
+                    f"❌ Only {self.opponent.mention} can accept this battle challenge!",
+                    ephemeral=True
+                )
+                return
 
-        self.stop()
-        picks_a = extract_picks_from_row(self.row_a)
-        picks_b = extract_picks_from_row(self.row_b)
-        live_view = InteractiveTeamBattleView(
-            self.author, self.opponent, picks_a, picks_b, self.eval_a, self.eval_b, self.row_a, self.row_b
-        )
-        embed = live_view.make_battle_embed()
-        await interaction.response.edit_message(
-            content=f"🔥 **Challenge Accepted by {self.opponent.mention}! Choose your live play call for Quarter 1 (PG Duel):**",
-            embed=embed,
-            view=live_view
-        )
+            self.stop()
+            picks_a = extract_picks_from_row(self.row_a)
+            picks_b = extract_picks_from_row(self.row_b)
+            live_view = InteractiveTeamBattleView(
+                self.author, self.opponent, picks_a, picks_b, self.eval_a, self.eval_b, self.row_a, self.row_b
+            )
+            embed = live_view.make_battle_embed()
+            await interaction.response.edit_message(
+                content=f"🔥 **Challenge Accepted by {self.opponent.mention}! Choose your live play call for Quarter 1 (PG Duel):**",
+                embed=embed,
+                view=live_view
+            )
+        except Exception as e:
+            logger.error(f"[TeamBattleChallengeView] accept_live_callback error: {e}", exc_info=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"⚠️ Error accepting battle: `{e}`", ephemeral=True)
+            except Exception:
+                pass
 
     @discord.ui.button(label="Quick Sim", style=discord.ButtonStyle.secondary, emoji="⚡", custom_id="btn_accept_quick_battle")
     async def accept_quick_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.opponent.id:
-            await interaction.response.send_message(
-                f"❌ Only {self.opponent.mention} can accept this battle challenge!",
-                ephemeral=True
-            )
-            return
+        try:
+            if interaction.user.id != self.opponent.id:
+                await interaction.response.send_message(
+                    f"❌ Only {self.opponent.mention} can accept this battle challenge!",
+                    ephemeral=True
+                )
+                return
 
-        self.stop()
-        battle_embed = await build_teambattle_embed(self.author, self.opponent, self.row_a, self.row_b)
-        rematch_view = TeamBattleRematchView(self.author, self.opponent, self.row_a, self.row_b)
-        await interaction.response.edit_message(
-            content=f"⚡ **Quick Simulation Played by {self.opponent.mention}!**",
-            embed=battle_embed,
-            view=rematch_view
-        )
+            self.stop()
+            battle_embed = await build_teambattle_embed(self.author, self.opponent, self.row_a, self.row_b)
+            rematch_view = TeamBattleRematchView(self.author, self.opponent, self.row_a, self.row_b)
+            await interaction.response.edit_message(
+                content=f"⚡ **Quick Simulation Played by {self.opponent.mention}!**",
+                embed=battle_embed,
+                view=rematch_view
+            )
+        except Exception as e:
+            logger.error(f"[TeamBattleChallengeView] accept_quick_callback error: {e}", exc_info=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"⚠️ Error simulating battle: `{e}`", ephemeral=True)
+            except Exception:
+                pass
 
     @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger, emoji="❌", custom_id="btn_decline_battle")
     async def decline_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.opponent.id:
-            await interaction.response.send_message(
-                f"❌ Only {self.opponent.mention} can decline this battle challenge!",
-                ephemeral=True
-            )
-            return
+        try:
+            if interaction.user.id != self.opponent.id:
+                await interaction.response.send_message(
+                    f"❌ Only {self.opponent.mention} can decline this battle challenge!",
+                    ephemeral=True
+                )
+                return
 
-        self.stop()
-        self.clear_items()
-        decline_embed = discord.Embed(
-            title="🚫 Challenge Declined",
-            description=f"❌ **{self.opponent.display_name}** declined the battle challenge from **{self.author.display_name}**.",
-            color=discord.Color.red()
-        )
-        decline_embed.timestamp = discord.utils.utcnow()
-        await interaction.response.edit_message(content=None, embed=decline_embed, view=self)
+            self.stop()
+            self.clear_items()
+            decline_embed = discord.Embed(
+                title="🚫 Challenge Declined",
+                description=f"❌ **{self.opponent.display_name}** declined the battle challenge from **{self.author.display_name}**.",
+                color=discord.Color.red()
+            )
+            decline_embed.timestamp = discord.utils.utcnow()
+            await interaction.response.edit_message(content=None, embed=decline_embed, view=self)
+        except Exception as e:
+            logger.error(f"[TeamBattleChallengeView] decline_callback error: {e}", exc_info=True)
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="🚫", custom_id="btn_cancel_battle")
     async def cancel_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author.id and not is_protected(interaction.user):
-            await interaction.response.send_message(
-                "❌ Only the challenger can cancel this challenge!",
-                ephemeral=True
-            )
-            return
+        try:
+            if interaction.user.id != self.author.id and not is_protected(interaction.user):
+                await interaction.response.send_message(
+                    "❌ Only the challenger can cancel this challenge!",
+                    ephemeral=True
+                )
+                return
 
-        self.stop()
-        self.clear_items()
-        cancel_embed = discord.Embed(
-            title="🚫 Challenge Cancelled",
-            description=f"🚫 **{self.author.display_name}** cancelled the battle challenge.",
-            color=discord.Color.dark_grey()
-        )
-        cancel_embed.timestamp = discord.utils.utcnow()
-        await interaction.response.edit_message(content=None, embed=cancel_embed, view=self)
+            self.stop()
+            self.clear_items()
+            cancel_embed = discord.Embed(
+                title="🚫 Challenge Cancelled",
+                description=f"🚫 **{self.author.display_name}** cancelled the battle challenge.",
+                color=discord.Color.dark_grey()
+            )
+            cancel_embed.timestamp = discord.utils.utcnow()
+            await interaction.response.edit_message(content=None, embed=cancel_embed, view=self)
+        except Exception as e:
+            logger.error(f"[TeamBattleChallengeView] cancel_callback error: {e}", exc_info=True)
 
     async def on_timeout(self):
         self.clear_items()
