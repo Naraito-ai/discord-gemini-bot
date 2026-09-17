@@ -2341,7 +2341,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="🏀 **SpaceYT Basketball Arena & Debates**", value="• `/debate [channel] [ping]` — Post a spicy NBA debate with live voting buttons\n• `/startbenchcut` — Roll a 3-player Start, Bench, Cut challenge\n• `/setdebatechannel <channel>` — Set automated daily debate channel\n• `/setdebatemention <type>` — Configure debate ping tag (@here/none)\n• `/toggledebates <status>` — Turn daily auto-debates on or off", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
-    embed.add_field(name="💖 **Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/pat [user]` — Wholesome anime headpats\n• `/kiss [user]` — Give someone a sweet kiss\n• `/punch [user]` — Deliver a super anime punch\n• `/cuddle [user]` — Snuggle and cuddle warmly\n• `/bite [user]` — Playfully bite someone\n• `/highfive [user]` — Epic high five\n• `/wink [user]` — Charming anime wink", inline=False)
+    embed.add_field(name="💖 **Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/pat [user]` — Wholesome anime headpats\n• `/punch [user]` — Deliver a super anime punch\n• `/cuddle [user]` — Snuggle and cuddle warmly\n• `/bite [user]` — Playfully bite someone\n• `/highfive [user]` — Epic high five\n• `/wink [user]` — Charming anime wink", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
@@ -3089,15 +3089,6 @@ async def slap_slash_cmd(interaction: discord.Interaction, member: Optional[disc
 async def pat_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
     embed = create_action_embed("pat", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="kiss", description="Plant a sweet, loving kiss on someone")
-@app_commands.describe(member="The member you want to kiss")
-@app_commands.guild_only()
-async def kiss_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("kiss", interaction.user, target, bot.user)
     await interaction.response.send_message(embed=embed)
 
 
@@ -4328,7 +4319,15 @@ async def pat_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member]
 @bot.command(name="kiss")
 @commands.guild_only()
 async def kiss_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """Plant a sweet kiss: !kiss [@user]"""
+    """Plant a sweet kiss (Staff/Moderators only): !kiss [@user]"""
+    if not is_protected(ctx.author):
+        embed = discord.Embed(
+            description="🚫 **Access Denied:** Only server **Administrators** and **Moderators** can use the `!kiss` command!",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+        return
+
     target = member or ctx.author
     embed = create_action_embed("kiss", ctx.author, target, bot.user)
     await ctx.send(embed=embed)
