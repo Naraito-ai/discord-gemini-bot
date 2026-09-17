@@ -1783,12 +1783,12 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
     all_player_stats = []
 
     for pos in ["PG", "SG", "SF", "PF", "C"]:
-        pl_a = picks_a[pos]
-        pl_b = picks_b[pos]
-        w = weights[pos]
+        pl_a = picks_a.get(pos, {})
+        pl_b = picks_b.get(pos, {})
+        w = weights.get(pos, {})
 
-        rating_a = sum(pl_a.get(k, 80) * w[k] for k in w)
-        rating_b = sum(pl_b.get(k, 80) * w[k] for k in w)
+        rating_a = sum(pl_a.get(k, 80) * w[k] for k in w) if isinstance(pl_a, dict) else 80
+        rating_b = sum(pl_b.get(k, 80) * w[k] for k in w) if isinstance(pl_b, dict) else 80
 
         diff = rating_a - rating_b
         prob_a = 0.50 + (diff * 0.035)
@@ -1799,6 +1799,11 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
         base_a = 20 + int((rating_a - 80) * 0.45) + random.randint(-3, 3)
         base_b = 20 + int((rating_b - 80) * 0.45) + random.randint(-3, 3)
 
+        p1_name_a = pl_a.get('name', 'Player A') if isinstance(pl_a, dict) else 'Player A'
+        p1_emoji_a = pl_a.get('emoji', '🏀') if isinstance(pl_a, dict) else '🏀'
+        p2_name_b = pl_b.get('name', 'Player B') if isinstance(pl_b, dict) else 'Player B'
+        p2_emoji_b = pl_b.get('emoji', '🏀') if isinstance(pl_b, dict) else '🏀'
+
         if a_won:
             if base_a <= base_b:
                 base_a = base_b + random.randint(2, 6)
@@ -1806,8 +1811,8 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
             winner_user = name_a
             action_template = random.choice(HIGHLIGHT_ACTIONS[pos])
             highlight = action_template.format(
-                p1=f"{pl_a['emoji']} **{pl_a['name']}**",
-                p2=f"{pl_b['emoji']} **{pl_b['name']}**"
+                p1=f"{p1_emoji_a} **{p1_name_a}**",
+                p2=f"{p2_emoji_b} **{p2_name_b}**"
             )
         else:
             if base_b <= base_a:
@@ -1816,8 +1821,8 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
             winner_user = name_b
             action_template = random.choice(HIGHLIGHT_ACTIONS[pos])
             highlight = action_template.format(
-                p1=f"{pl_b['emoji']} **{pl_b['name']}**",
-                p2=f"{pl_a['emoji']} **{pl_a['name']}**"
+                p1=f"{p2_emoji_b} **{p2_name_b}**",
+                p2=f"{p1_emoji_a} **{p1_name_a}**"
             )
 
         total_pts_a += base_a
@@ -2180,25 +2185,32 @@ class InteractiveTeamBattleView(discord.ui.View):
             return
 
         # Row 0: Primary offensive play calls
+        # NOTE: lambdas are not awaitable coroutine functions in discord.py — use named async wrappers
+        async def _cb_three(i: discord.Interaction): await self.handle_tactical_action(i, "three")
+        async def _cb_drive(i: discord.Interaction): await self.handle_tactical_action(i, "drive")
+        async def _cb_pnr(i: discord.Interaction): await self.handle_tactical_action(i, "pnr")
+        async def _cb_defense(i: discord.Interaction): await self.handle_tactical_action(i, "defense")
+        async def _cb_iso(i: discord.Interaction): await self.handle_tactical_action(i, "iso")
+
         btn_three = discord.ui.Button(label="Step-Back 3PT", style=discord.ButtonStyle.primary, emoji="🎯", custom_id="btn_three", row=0)
-        btn_three.callback = lambda i: self.handle_tactical_action(i, "three")
+        btn_three.callback = _cb_three
         self.add_item(btn_three)
 
         btn_drive = discord.ui.Button(label="Power Drive & Slam", style=discord.ButtonStyle.danger, emoji="💥", custom_id="btn_drive", row=0)
-        btn_drive.callback = lambda i: self.handle_tactical_action(i, "drive")
+        btn_drive.callback = _cb_drive
         self.add_item(btn_drive)
 
         btn_pnr = discord.ui.Button(label="Pick & Roll / Dish", style=discord.ButtonStyle.success, emoji="🧠", custom_id="btn_pnr", row=0)
-        btn_pnr.callback = lambda i: self.handle_tactical_action(i, "pnr")
+        btn_pnr.callback = _cb_pnr
         self.add_item(btn_pnr)
 
         # Row 1: Tactical counters
         btn_clamp = discord.ui.Button(label="Lockdown Clamp", style=discord.ButtonStyle.secondary, emoji="🔒", custom_id="btn_defense", row=1)
-        btn_clamp.callback = lambda i: self.handle_tactical_action(i, "defense")
+        btn_clamp.callback = _cb_defense
         self.add_item(btn_clamp)
 
         btn_iso = discord.ui.Button(label="Mamba Iso", style=discord.ButtonStyle.primary, emoji="⚡", custom_id="btn_iso", row=1)
-        btn_iso.callback = lambda i: self.handle_tactical_action(i, "iso")
+        btn_iso.callback = _cb_iso
         self.add_item(btn_iso)
 
         # Row 2: Timeout & Quick Sim
@@ -2241,7 +2253,7 @@ class InteractiveTeamBattleView(discord.ui.View):
             if not interaction.response.is_done():
                 await interaction.response.edit_message(embed=embed, view=self)
             else:
-                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=self)
+                await interaction.edit_original_response(embed=embed, view=self)
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] handle_timeout_action error: {e}", exc_info=True)
             try:
@@ -2268,16 +2280,16 @@ class InteractiveTeamBattleView(discord.ui.View):
 
             fresh_view = InteractiveTeamBattleView(self.author, self.opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
             embed = fresh_view.make_battle_embed()
+            msg_content = f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**"
             if not interaction.response.is_done():
                 await interaction.response.edit_message(
-                    content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
+                    content=msg_content,
                     embed=embed,
                     view=fresh_view
                 )
             else:
-                await interaction.followup.edit_message(
-                    message_id=interaction.message.id,
-                    content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
+                await interaction.edit_original_response(
+                    content=msg_content,
                     embed=embed,
                     view=fresh_view
                 )
@@ -2590,9 +2602,11 @@ class InteractiveTeamBattleView(discord.ui.View):
                 return
 
             if self.is_game_over:
-                if self.final_embed:
-                    if not interaction.response.is_done():
-                        await interaction.response.edit_message(embed=self.final_embed, view=self)
+                embed = self.final_embed if self.final_embed else (await self._process_game_over() if self.current_round >= 5 else self.make_battle_embed())
+                if not interaction.response.is_done():
+                    await interaction.response.edit_message(embed=embed, view=self)
+                else:
+                    await interaction.edit_original_response(embed=embed, view=self)
                 return
 
             cur_idx = self.current_round
@@ -2602,6 +2616,8 @@ class InteractiveTeamBattleView(discord.ui.View):
                 embed = await self._process_game_over()
                 if not interaction.response.is_done():
                     await interaction.response.edit_message(embed=embed, view=self)
+                else:
+                    await interaction.edit_original_response(embed=embed, view=self)
                 return
 
             cur_pos = self.positions[cur_idx]
@@ -2713,7 +2729,7 @@ class InteractiveTeamBattleView(discord.ui.View):
             if not interaction.response.is_done():
                 await interaction.response.edit_message(embed=embed, view=self)
             else:
-                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=self)
+                await interaction.edit_original_response(embed=embed, view=self)
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] handle_tactical_action error: {e}", exc_info=True)
             try:
@@ -2778,7 +2794,7 @@ class InteractiveTeamBattleView(discord.ui.View):
             if not interaction.response.is_done():
                 await interaction.response.edit_message(embed=embed, view=self)
             else:
-                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=self)
+                await interaction.edit_original_response(embed=embed, view=self)
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] handle_simulate_remainder error: {e}", exc_info=True)
             try:
