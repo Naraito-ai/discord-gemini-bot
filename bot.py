@@ -1890,6 +1890,426 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
         "mvp_blk": mvp_blk
     }
 
+
+# ── Live Interactive Tactical Battle Engine (Live Decision Buttons) ────────
+
+TACTICAL_OUTCOMES = {
+    "three": {
+        "name": "🎯 Step-Back 3PT",
+        "pts": 3,
+        "favors": "pts_3",
+        "good_against": ["paint_drop", "zone_defense"],
+        "bad_against": ["perimeter_lock", "double_team"],
+        "success_msg": "{p1} reads the defense, creates space with a lethal step-back, and splashes a clutch 3-POINTER! 🎯 (+3 PTS)",
+        "fail_msg": "{p2} stays glued on the perimeter, heavily contesting {p1}'s three-point attempt — CLANG! It rims out."
+    },
+    "drive": {
+        "name": "💥 Power Drive & Slam",
+        "pts": 2,
+        "favors": "inside",
+        "good_against": ["perimeter_lock", "tight_press"],
+        "bad_against": ["paint_drop", "rim_wall"],
+        "success_msg": "{p1} sees an opening in the lane, explodes past {p2}, and throws down a monster rim-rocker! 💥 (+2 PTS)",
+        "fail_msg": "{p2} rotates over to protect the paint, meeting {p1} at the rim for a vicious rejection! 🚫"
+    },
+    "pnr": {
+        "name": "🧠 Pick & Roll / Dish",
+        "pts": 2,
+        "favors": "playmaking",
+        "good_against": ["paint_drop", "iso_lock"],
+        "bad_against": ["switch_trap", "passing_lane_steal"],
+        "success_msg": "{p1} draws the defense on the screen-and-roll, delivering a magical pocket pass for an easy finish! 🧠 (+2 PTS)",
+        "fail_msg": "{p2} anticipates the pass, jumps into the passing lane, and deflects the ball away! ⚡"
+    },
+    "defense": {
+        "name": "🔒 Lockdown Clamp & Break",
+        "pts": 2,
+        "favors": "defense",
+        "good_against": ["mamba_iso", "loose_handles"],
+        "bad_against": ["ball_movement", "five_out"],
+        "success_msg": "{p1} puts on the full-court clamps, picks {p2}'s pocket, and coasts in for the fastbreak bucket! 🔒 (+2 PTS)",
+        "fail_msg": "{p2} protects the ball with veteran poise and draws a reaching foul on {p1}! 🛑"
+    },
+    "iso": {
+        "name": "⚡ Mamba Isolation Jumper",
+        "pts": 2,
+        "favors": "clutch",
+        "good_against": ["single_coverage", "sagging_guard"],
+        "bad_against": ["double_team", "zone_trap"],
+        "success_msg": "{p1} isolates at the top of the key, hits {p2} with a crossover, and drains a silky-smooth fadeaway! ⚡ (+2 PTS)",
+        "fail_msg": "{p2} stays disciplined on {p1}'s pump fake, forcing a tough off-balance miss as the shot clock expires! ⏱️"
+    }
+}
+
+DEFENSIVE_SCHEMES = [
+    "paint_drop", "perimeter_lock", "tight_press", "switch_trap", 
+    "zone_defense", "rim_wall", "double_team", "iso_lock"
+]
+
+def resolve_possession(action_key: str, pl_att: Dict[str, Any], pl_def: Dict[str, Any], momentum_att: int, momentum_def: int) -> Dict[str, Any]:
+    """Resolves an in-game coaching possession using tactical counters, player attributes, and momentum."""
+    action = TACTICAL_OUTCOMES.get(action_key, TACTICAL_OUTCOMES["three"])
+    favored_stat = action["favors"]
+    att_stat = pl_att.get(favored_stat, 80)
+    def_stat = pl_def.get("defense", 80)
+
+    # Pick opponent defensive scheme
+    scheme = random.choice(DEFENSIVE_SCHEMES)
+    tactical_modifier = 0.0
+
+    if scheme in action["good_against"]:
+        tactical_modifier += 0.28  # Good tactical call (+28% advantage)
+        read_note = "⭐ **Tactical Advantage!** You exploited opponent's defensive scheme."
+    elif scheme in action["bad_against"]:
+        tactical_modifier -= 0.22  # Countered by defense (-22% penalty)
+        read_note = "⚠️ **Defensive Read!** Opponent anticipated the play."
+    else:
+        read_note = "⚡ **Neutral Matchup**"
+
+    # Momentum modifier (+6% per hot badge)
+    momentum_mod = (momentum_att * 0.06) - (momentum_def * 0.04)
+
+    # Base hit probability
+    stat_diff = att_stat - def_stat
+    base_prob = 0.50 + (stat_diff * 0.008) + tactical_modifier + momentum_mod
+    base_prob = max(0.20, min(0.85, base_prob))
+
+    success = random.random() < base_prob
+    pts_scored = action["pts"] if success else 0
+
+    # Possible And-1 for drive
+    and_one = False
+    if success and action_key == "drive" and random.random() < 0.20:
+        pts_scored += 1
+        and_one = True
+
+    msg_template = action["success_msg"] if success else action["fail_msg"]
+    commentary = msg_template.format(
+        p1=f"{pl_att.get('emoji', '🏀')} **{pl_att.get('name', 'Player')}**",
+        p2=f"{pl_def.get('emoji', '🛡️')} **{pl_def.get('name', 'Defender')}**"
+    )
+    if and_one:
+        commentary += " 🔥 **AND-ONE FOUL CALLED! (+1 Extra Point)**"
+
+    return {
+        "success": success,
+        "pts": pts_scored,
+        "commentary": commentary,
+        "read_note": read_note,
+        "prob": round(base_prob * 100, 1)
+    }
+
+
+class InteractiveTeamBattleView(discord.ui.View):
+    """Live turn-based interactive tactical card battle view with clickable playcalling buttons."""
+    def __init__(
+        self,
+        author: Union[discord.Member, discord.User],
+        opponent: Union[discord.Member, discord.User],
+        picks_a: Dict[str, Dict[str, Any]],
+        picks_b: Dict[str, Dict[str, Any]],
+        eval_a: Dict[str, Any],
+        eval_b: Dict[str, Any]
+    ):
+        super().__init__(timeout=240)
+        self.author = author
+        self.opponent = opponent
+        self.picks_a = picks_a
+        self.picks_b = picks_b
+        self.eval_a = eval_a
+        self.eval_b = eval_b
+        
+        self.positions = ["PG", "SG", "SF", "PF", "C"]
+        self.pos_fullnames = {
+            "PG": "Point Guard",
+            "SG": "Shooting Guard",
+            "SF": "Small Forward",
+            "PF": "Power Forward",
+            "C": "Center"
+        }
+        
+        self.current_round = 0  # 0 to 4
+        self.score_a = int(eval_a.get("ovr", 90) * 0.7) + random.randint(15, 25)
+        self.score_b = int(eval_b.get("ovr", 90) * 0.7) + random.randint(15, 25)
+        self.duels_won_a = 0
+        self.duels_won_b = 0
+        self.momentum_a = 0
+        self.momentum_b = 0
+        self.round_history = []
+        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a['ovr']} OVR) vs {opponent.display_name} ({eval_b['ovr']} OVR).\n*Real-time tactical decisions, counters & momentum determine the winner, NOT just raw OVR!*"
+        self.player_points = {self.author.display_name: {}, self.opponent.display_name: {}}
+        self.is_game_over = False
+        self._build_controls()
+
+    def _build_controls(self):
+        self.clear_items()
+        if self.is_game_over:
+            return
+
+        # Row 0: Primary offensive plays
+        btn_three = discord.ui.Button(label="Step-Back 3PT", style=discord.ButtonStyle.primary, emoji="🎯", custom_id="btn_three", row=0)
+        btn_three.callback = lambda i: self.handle_tactical_action(i, "three")
+        self.add_item(btn_three)
+
+        btn_drive = discord.ui.Button(label="Power Drive & Slam", style=discord.ButtonStyle.danger, emoji="💥", custom_id="btn_drive", row=0)
+        btn_drive.callback = lambda i: self.handle_tactical_action(i, "drive")
+        self.add_item(btn_drive)
+
+        btn_pnr = discord.ui.Button(label="Pick & Roll / Dish", style=discord.ButtonStyle.success, emoji="🧠", custom_id="btn_pnr", row=0)
+        btn_pnr.callback = lambda i: self.handle_tactical_action(i, "pnr")
+        self.add_item(btn_pnr)
+
+        # Row 1: Tactical counters & fast finish
+        btn_clamp = discord.ui.Button(label="Lockdown Clamp", style=discord.ButtonStyle.secondary, emoji="🔒", custom_id="btn_defense", row=1)
+        btn_clamp.callback = lambda i: self.handle_tactical_action(i, "defense")
+        self.add_item(btn_clamp)
+
+        btn_iso = discord.ui.Button(label="Mamba Iso", style=discord.ButtonStyle.primary, emoji="⚡", custom_id="btn_iso", row=1)
+        btn_iso.callback = lambda i: self.handle_tactical_action(i, "iso")
+        self.add_item(btn_iso)
+
+        btn_sim = discord.ui.Button(label="Quick Sim Remainder", style=discord.ButtonStyle.secondary, emoji="⏩", custom_id="btn_sim", row=1)
+        btn_sim.callback = self.handle_simulate_remainder
+        self.add_item(btn_sim)
+
+    def make_battle_embed(self) -> discord.Embed:
+        if self.is_game_over:
+            return self._make_game_over_embed()
+
+        cur_pos = self.positions[self.current_round]
+        pos_title = self.pos_fullnames[cur_pos]
+        pl_a = self.picks_a[cur_pos]
+        pl_b = self.picks_b[cur_pos]
+
+        lead_diff = self.score_a - self.score_b
+        if lead_diff > 0:
+            status_text = f"👑 **{self.author.display_name} leads by +{lead_diff} PTS**"
+            status_color = discord.Color.gold()
+        elif lead_diff < 0:
+            status_text = f"⚡ **{self.opponent.display_name} leads by +{abs(lead_diff)} PTS**"
+            status_color = discord.Color.purple()
+        else:
+            status_text = "🔥 **TIED GAME! High Drama on Court!**"
+            status_color = discord.Color.orange()
+
+        mom_bar_a = "🔥" * max(0, self.momentum_a) or "⚪"
+        mom_bar_b = "🔥" * max(0, self.momentum_b) or "⚪"
+
+        embed = discord.Embed(
+            title=f"⚔️ LIVE NBA TACTICAL BATTLE: {self.author.display_name} vs {self.opponent.display_name}",
+            description=(
+                f"### 🏀 Scoreboard: `{self.score_a}` — `{self.score_b}`\n"
+                f"{status_text}\n"
+                f"**Matchup Quarter**: `Round {self.current_round + 1}/5` • **{pos_title} ({cur_pos}) Duel**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            ),
+            color=status_color
+        )
+        if hasattr(self.author, "display_avatar") and self.author.display_avatar:
+            embed.set_thumbnail(url=self.author.display_avatar.url)
+
+        # Active Matchup Box
+        matchup_value = (
+            f"🟢 **{self.author.display_name}**: {pl_a['emoji']} **{pl_a['name']}** (`${pl_a['cost']}`) — *{pl_a['tag']}*\n"
+            f"🔴 **{self.opponent.display_name}**: {pl_b['emoji']} **{pl_b['name']}** (`${pl_b['cost']}`) — *{pl_b['tag']}*\n"
+            f"📊 **Momentum**: {self.author.display_name} `[{mom_bar_a}]`  VS  {self.opponent.display_name} `[{mom_bar_b}]`"
+        )
+        embed.add_field(name=f"⭐ Current Duel • {pos_title}", value=matchup_value, inline=False)
+
+        # Play commentary
+        embed.add_field(name="📜 Latest Play / Action", value=f">>> {self.last_commentary}", inline=False)
+
+        # Tactical guide
+        guide_text = (
+            "🎯 `3PT Step-Back` (3 pts, beats paint drop) • 💥 `Power Drive` (2+1 pts, beats tight press)\n"
+            "🧠 `Pick & Roll` (2 pts, high IQ) • 🔒 `Clamp & Break` (Steal) • ⚡ `Mamba Iso` (Clutch)"
+        )
+        embed.add_field(name="🎮 Choose Your Live Coach Decision Below", value=guide_text, inline=False)
+
+        embed.set_footer(text=f"Duels Won: {self.author.display_name} ({self.duels_won_a}) vs {self.opponent.display_name} ({self.duels_won_b}) • Tactics & reads beat high OVR!")
+        embed.timestamp = discord.utils.utcnow()
+        return embed
+
+    def _make_game_over_embed(self) -> discord.Embed:
+        # Determine overall winner
+        if self.score_a > self.score_b:
+            winner_name = self.author.display_name
+            winner_member = self.author
+            winner_is_a = True
+        elif self.score_b > self.score_a:
+            winner_name = self.opponent.display_name
+            winner_member = self.opponent
+            winner_is_a = False
+        else:
+            if self.duels_won_a >= self.duels_won_b:
+                self.score_a += 2
+                winner_name = self.author.display_name
+                winner_member = self.author
+                winner_is_a = True
+            else:
+                self.score_b += 2
+                winner_name = self.opponent.display_name
+                winner_member = self.opponent
+                winner_is_a = False
+
+        embed = discord.Embed(
+            title=f"🏆 FINAL WHISTLE: {self.author.display_name} vs {self.opponent.display_name}",
+            description=(
+                f"# 👑 `{winner_name}` WINS THE GAME!\n\n"
+                f"### 🏀 Final Score: **`{self.score_a} — {self.score_b}`**\n"
+                f"• **Positional Duels Won**: `{self.author.display_name} ({self.duels_won_a})` — `{self.opponent.display_name} ({self.duels_won_b})`\n"
+                f"• **{self.author.display_name} ({self.eval_a['ovr']} OVR)**: {self.eval_a['tier'].split('•')[0].strip()}\n"
+                f"• **{self.opponent.display_name} ({self.eval_b['ovr']} OVR)**: {self.eval_b['tier'].split('•')[0].strip()}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            ),
+            color=discord.Color.gold() if winner_is_a else discord.Color.purple()
+        )
+        if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
+            embed.set_thumbnail(url=winner_member.display_avatar.url)
+
+        for log_entry in self.round_history:
+            embed.add_field(name=log_entry["title"], value=log_entry["value"], inline=False)
+
+        # Select Game MVP
+        winning_picks = self.picks_a if winner_is_a else self.picks_b
+        winning_user = self.author.display_name if winner_is_a else self.opponent.display_name
+        scores_map = self.player_points.get(winning_user, {})
+        best_p_name = max(scores_map, key=scores_map.get) if scores_map else list(winning_picks.keys())[0]
+        
+        mvp_player = None
+        for p in winning_picks.values():
+            if p["name"] == best_p_name:
+                mvp_player = p
+                break
+        if not mvp_player:
+            mvp_player = list(winning_picks.values())[0]
+
+        mvp_pts = scores_map.get(mvp_player["name"], random.randint(24, 34))
+        mvp_reb = random.randint(5, 14)
+        mvp_ast = random.randint(4, 12)
+        mvp_blk = random.randint(1, 4)
+
+        mvp_value = (
+            f"{mvp_player['emoji']} **{mvp_player['name']}** ({mvp_player['team']}) — *{mvp_player['tag']}*\n"
+            f"📊 **Final Statline**: **`{mvp_pts} PTS`** • **`{mvp_reb} REB`** • **`{mvp_ast} AST`** • **`{mvp_blk} BLK`**"
+        )
+        embed.add_field(name="🎖️ Player of the Match (MVP) Trophy", value=mvp_value, inline=False)
+
+        embed.set_footer(text="Sweety Live Tactical NBA Engine • Real coaching decisions beat pure OVR!")
+        embed.timestamp = discord.utils.utcnow()
+        return embed
+
+    async def handle_tactical_action(self, interaction: discord.Interaction, action_key: str):
+        if interaction.user.id not in [self.author.id, self.opponent.id]:
+            await interaction.response.send_message("❌ This is not your game! Start your own with `/teambattle @user`.", ephemeral=True)
+            return
+
+        cur_pos = self.positions[self.current_round]
+        pos_title = self.pos_fullnames[cur_pos]
+        pl_a = self.picks_a[cur_pos]
+        pl_b = self.picks_b[cur_pos]
+
+        # 1. Resolve Challenger Attack Possession
+        res_a = resolve_possession(action_key, pl_a, pl_b, self.momentum_a, self.momentum_b)
+        self.score_a += res_a["pts"]
+        self.player_points[self.author.display_name][pl_a["name"]] = self.player_points[self.author.display_name].get(pl_a["name"], 0) + res_a["pts"]
+
+        if res_a["success"]:
+            self.momentum_a = min(3, self.momentum_a + 1)
+        else:
+            self.momentum_a = max(0, self.momentum_a - 1)
+
+        # 2. Opponent AI counter possession
+        opp_tactics = ["three", "drive", "pnr", "defense", "iso"]
+        if pl_b.get("pts_3", 0) >= 92:
+            opp_choice = random.choice(["three", "three", "pnr", "iso"])
+        elif pl_b.get("inside", 0) >= 95:
+            opp_choice = random.choice(["drive", "drive", "pnr", "defense"])
+        else:
+            opp_choice = random.choice(opp_tactics)
+
+        res_b = resolve_possession(opp_choice, pl_b, pl_a, self.momentum_b, self.momentum_a)
+        self.score_b += res_b["pts"]
+        self.player_points[self.opponent.display_name][pl_b["name"]] = self.player_points[self.opponent.display_name].get(pl_b["name"], 0) + res_b["pts"]
+
+        if res_b["success"]:
+            self.momentum_b = min(3, self.momentum_b + 1)
+        else:
+            self.momentum_b = max(0, self.momentum_b - 1)
+
+        # Round winner evaluation
+        round_a_won = (res_a["pts"] > res_b["pts"]) or (res_a["pts"] == res_b["pts"] and res_a["success"])
+        if round_a_won:
+            self.duels_won_a += 1
+            round_icon = "🟢"
+        else:
+            self.duels_won_b += 1
+            round_icon = "🔴"
+
+        self.last_commentary = f"{res_a['read_note']}\n• **{self.author.display_name}**: {res_a['commentary']}\n• **{self.opponent.display_name}**: {res_b['commentary']}"
+
+        self.round_history.append({
+            "title": f"🏀 Round {self.current_round + 1} • {pos_title} ({cur_pos}) Duel",
+            "value": (
+                f"{round_icon} **{self.author.display_name}** ({pl_a['name']}): `+{res_a['pts']} PTS`  VS  "
+                f"**{self.opponent.display_name}** ({pl_b['name']}): `+{res_b['pts']} PTS`\n"
+                f"💬 *{res_a['commentary']}*"
+            )
+        })
+
+        self.current_round += 1
+        if self.current_round >= 5:
+            self.is_game_over = True
+            self.clear_items()
+
+        await interaction.response.edit_message(embed=self.make_battle_embed(), view=self)
+
+    async def handle_simulate_remainder(self, interaction: discord.Interaction):
+        if interaction.user.id not in [self.author.id, self.opponent.id]:
+            await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
+            return
+
+        tactics_list = ["three", "drive", "pnr", "defense", "iso"]
+        while self.current_round < 5:
+            cur_pos = self.positions[self.current_round]
+            pos_title = self.pos_fullnames[cur_pos]
+            pl_a = self.picks_a[cur_pos]
+            pl_b = self.picks_b[cur_pos]
+
+            choice_a = random.choice(tactics_list)
+            choice_b = random.choice(tactics_list)
+
+            res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b)
+            res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a)
+
+            self.score_a += res_a["pts"]
+            self.score_b += res_b["pts"]
+            self.player_points[self.author.display_name][pl_a["name"]] = self.player_points[self.author.display_name].get(pl_a["name"], 0) + res_a["pts"]
+            self.player_points[self.opponent.display_name][pl_b["name"]] = self.player_points[self.opponent.display_name].get(pl_b["name"], 0) + res_b["pts"]
+
+            round_a_won = (res_a["pts"] > res_b["pts"])
+            if round_a_won:
+                self.duels_won_a += 1
+                round_icon = "🟢"
+            else:
+                self.duels_won_b += 1
+                round_icon = "🔴"
+
+            self.round_history.append({
+                "title": f"🏀 Round {self.current_round + 1} • {pos_title} ({cur_pos}) Duel (Simulated)",
+                "value": (
+                    f"{round_icon} **{self.author.display_name}** ({pl_a['name']}): `+{res_a['pts']} PTS`  VS  "
+                    f"**{self.opponent.display_name}** ({pl_b['name']}): `+{res_b['pts']} PTS`\n"
+                    f"💬 *{res_a['commentary']}*"
+                )
+            })
+            self.current_round += 1
+
+        self.is_game_over = True
+        self.clear_items()
+        await interaction.response.edit_message(embed=self.make_battle_embed(), view=self)
+
+
 class BuildTeamView(discord.ui.View):
     def __init__(self, author_id: int):
         super().__init__(timeout=300)
@@ -3852,7 +4272,7 @@ async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[disc
     await interaction.response.send_message(embed=card_embed)
 
 
-@bot.tree.command(name="teambattle", description="⚔️ Challenge another member's $15 Dream Team to a Footdex-style positional NBA card battle!")
+@bot.tree.command(name="teambattle", description="⚔️ Challenge another member's $15 Dream Team to a tactical live NBA card battle!")
 @app_commands.describe(opponent="The member whose dream team you want to challenge")
 @app_commands.guild_only()
 async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: discord.Member):
@@ -3870,8 +4290,14 @@ async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: disco
         await interaction.response.send_message(f"❌ **{opponent.display_name}** hasn't built a $15 Dream Team yet! Ask them to draft one with `/buildteam`.", ephemeral=True)
         return
 
-    battle_embed = build_teambattle_embed(interaction.user, opponent, row_a, row_b)
-    await interaction.response.send_message(embed=battle_embed)
+    picks_a = extract_picks_from_row(row_a)
+    picks_b = extract_picks_from_row(row_b)
+    eval_a = evaluate_dream_team(picks_a)
+    eval_b = evaluate_dream_team(picks_b)
+
+    view = InteractiveTeamBattleView(interaction.user, opponent, picks_a, picks_b, eval_a, eval_b)
+    embed = view.make_battle_embed()
+    await interaction.response.send_message(embed=embed, view=view)
 
 
 @bot.tree.command(name="teamleaderboard", description="🏀 View the server leaderboard of highest-rated $15 Dream Teams")
@@ -5327,7 +5753,7 @@ async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Memb
 @bot.command(name="teambattle", aliases=["finals", "nbabattle", "squadbattle"])
 @commands.guild_only()
 async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member):
-    """Challenge another member's $15 Dream Team to a Footdex-style positional NBA card battle: !teambattle @user"""
+    """Challenge another member's $15 Dream Team to a tactical live NBA card battle: !teambattle @user"""
     if opponent.id == ctx.author.id:
         await ctx.send(f"❌ {ctx.author.mention} You cannot battle your own team! Challenge another server member: `!teambattle @user`")
         return
@@ -5342,8 +5768,14 @@ async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member)
         await ctx.send(f"❌ **{opponent.display_name}** hasn't built a $15 Dream Team yet! Ask them to draft one with `!buildteam`.")
         return
 
-    battle_embed = build_teambattle_embed(ctx.author, opponent, row_a, row_b)
-    await ctx.send(embed=battle_embed)
+    picks_a = extract_picks_from_row(row_a)
+    picks_b = extract_picks_from_row(row_b)
+    eval_a = evaluate_dream_team(picks_a)
+    eval_b = evaluate_dream_team(picks_b)
+
+    view = InteractiveTeamBattleView(ctx.author, opponent, picks_a, picks_b, eval_a, eval_b)
+    embed = view.make_battle_embed()
+    await ctx.send(embed=embed, view=view)
 
 
 @bot.command(name="teamleaderboard", aliases=["teamlb", "nbaleaderboard", "nbalb"])
