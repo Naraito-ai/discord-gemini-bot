@@ -2310,6 +2310,118 @@ class InteractiveTeamBattleView(discord.ui.View):
         await interaction.response.edit_message(embed=self.make_battle_embed(), view=self)
 
 
+class TeamBattleChallengeView(discord.ui.View):
+    """View handling challenge invitation, opponent acceptance/decline, and timeout for live NBA battles."""
+    def __init__(
+        self,
+        author: Union[discord.Member, discord.User],
+        opponent: Union[discord.Member, discord.User],
+        picks_a: Dict[str, Dict[str, Any]],
+        picks_b: Dict[str, Dict[str, Any]],
+        eval_a: Dict[str, Any],
+        eval_b: Dict[str, Any],
+        message: Optional[discord.Message] = None
+    ):
+        super().__init__(timeout=90)
+        self.author = author
+        self.opponent = opponent
+        self.picks_a = picks_a
+        self.picks_b = picks_b
+        self.eval_a = eval_a
+        self.eval_b = eval_b
+        self.message = message
+
+    def make_challenge_embed(self) -> discord.Embed:
+        embed = discord.Embed(
+            title="⚔️ NBA DREAM TEAM BATTLE CHALLENGE",
+            description=(
+                f"🏀 {self.opponent.mention}, **{self.author.display_name}** has challenged your $15 Starting 5 to a live tactical battle!\n\n"
+                f"• 🟢 **{self.author.display_name}'s Squad**: `{self.eval_a['ovr']} OVR` • {self.eval_a['tier'].split('•')[0].strip()} (`${self.eval_a['total_cost']}/$15`)\n"
+                f"• 🔴 **{self.opponent.display_name}'s Squad**: `{self.eval_b['ovr']} OVR` • {self.eval_b['tier'].split('•')[0].strip()} (`${self.eval_b['total_cost']}/$15`)\n\n"
+                f"🎮 **Game Mode**: Live turn-based coaching decisions, tactical counters & momentum duels!\n"
+                f"⏳ *{self.opponent.display_name}, click **Accept Challenge** below to start the game!*"
+            ),
+            color=discord.Color.gold()
+        )
+        if hasattr(self.author, "display_avatar") and self.author.display_avatar:
+            embed.set_thumbnail(url=self.author.display_avatar.url)
+        embed.set_footer(text="Challenge expires in 90 seconds • Tactical coaching reads beat high OVR!")
+        embed.timestamp = discord.utils.utcnow()
+        return embed
+
+    @discord.ui.button(label="Accept Challenge", style=discord.ButtonStyle.success, emoji="⚔️", custom_id="btn_accept_battle")
+    async def accept_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.opponent.id:
+            await interaction.response.send_message(
+                f"❌ Only {self.opponent.mention} can accept this battle challenge!",
+                ephemeral=True
+            )
+            return
+
+        self.stop()
+        battle_view = InteractiveTeamBattleView(
+            self.author, self.opponent, self.picks_a, self.picks_b, self.eval_a, self.eval_b
+        )
+        battle_embed = battle_view.make_battle_embed()
+        await interaction.response.edit_message(
+            content=f"🔥 **Challenge Accepted by {self.opponent.mention}! The Battle Begins!**",
+            embed=battle_embed,
+            view=battle_view
+        )
+
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger, emoji="❌", custom_id="btn_decline_battle")
+    async def decline_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.opponent.id:
+            await interaction.response.send_message(
+                f"❌ Only {self.opponent.mention} can decline this battle challenge!",
+                ephemeral=True
+            )
+            return
+
+        self.stop()
+        self.clear_items()
+        decline_embed = discord.Embed(
+            title="🚫 Challenge Declined",
+            description=f"❌ **{self.opponent.display_name}** declined the battle challenge from **{self.author.display_name}**.",
+            color=discord.Color.red()
+        )
+        decline_embed.timestamp = discord.utils.utcnow()
+        await interaction.response.edit_message(content=None, embed=decline_embed, view=self)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="🚫", custom_id="btn_cancel_battle")
+    async def cancel_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author.id and not is_protected(interaction.user):
+            await interaction.response.send_message(
+                "❌ Only the challenger can cancel this challenge!",
+                ephemeral=True
+            )
+            return
+
+        self.stop()
+        self.clear_items()
+        cancel_embed = discord.Embed(
+            title="🚫 Challenge Cancelled",
+            description=f"🚫 **{self.author.display_name}** cancelled the battle challenge.",
+            color=discord.Color.dark_grey()
+        )
+        cancel_embed.timestamp = discord.utils.utcnow()
+        await interaction.response.edit_message(content=None, embed=cancel_embed, view=self)
+
+    async def on_timeout(self):
+        self.clear_items()
+        if self.message:
+            try:
+                timeout_embed = discord.Embed(
+                    title="⏱️ Challenge Expired",
+                    description=f"⏱️ The battle challenge between **{self.author.display_name}** and **{self.opponent.display_name}** timed out.",
+                    color=discord.Color.dark_grey()
+                )
+                timeout_embed.timestamp = discord.utils.utcnow()
+                await self.message.edit(content=None, embed=timeout_embed, view=self)
+            except Exception:
+                pass
+
+
 class BuildTeamView(discord.ui.View):
     def __init__(self, author_id: int):
         super().__init__(timeout=300)
@@ -4295,9 +4407,17 @@ async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: disco
     eval_a = evaluate_dream_team(picks_a)
     eval_b = evaluate_dream_team(picks_b)
 
-    view = InteractiveTeamBattleView(interaction.user, opponent, picks_a, picks_b, eval_a, eval_b)
-    embed = view.make_battle_embed()
-    await interaction.response.send_message(embed=embed, view=view)
+    challenge_view = TeamBattleChallengeView(interaction.user, opponent, picks_a, picks_b, eval_a, eval_b)
+    challenge_embed = challenge_view.make_challenge_embed()
+    await interaction.response.send_message(
+        content=f"⚔️ {opponent.mention}, you have received an NBA Dream Team battle challenge from {interaction.user.mention}!",
+        embed=challenge_embed,
+        view=challenge_view
+    )
+    try:
+        challenge_view.message = await interaction.original_response()
+    except Exception:
+        pass
 
 
 @bot.tree.command(name="teamleaderboard", description="🏀 View the server leaderboard of highest-rated $15 Dream Teams")
@@ -5773,9 +5893,14 @@ async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member)
     eval_a = evaluate_dream_team(picks_a)
     eval_b = evaluate_dream_team(picks_b)
 
-    view = InteractiveTeamBattleView(ctx.author, opponent, picks_a, picks_b, eval_a, eval_b)
-    embed = view.make_battle_embed()
-    await ctx.send(embed=embed, view=view)
+    challenge_view = TeamBattleChallengeView(ctx.author, opponent, picks_a, picks_b, eval_a, eval_b)
+    challenge_embed = challenge_view.make_challenge_embed()
+    msg = await ctx.send(
+        content=f"⚔️ {opponent.mention}, you have received an NBA Dream Team battle challenge from {ctx.author.mention}!",
+        embed=challenge_embed,
+        view=challenge_view
+    )
+    challenge_view.message = msg
 
 
 @bot.command(name="teamleaderboard", aliases=["teamlb", "nbaleaderboard", "nbalb"])
