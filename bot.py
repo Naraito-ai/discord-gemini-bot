@@ -1579,29 +1579,11 @@ ACTION_METADATA = {
         "self_text": "{author} hugs themselves! (つ´∀｀)つ",
         "bot_text": "{author} hugs Sweety! (* >ω<) ❤️",
         "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/hug/04524ef0040ff2ad.gif",
-            "https://cdn.otakugifs.xyz/gifs/hug/c787d02e22435395.gif",
-            "https://cdn.otakugifs.xyz/gifs/hug/df0840a507aa481a.gif",
-            "https://cdn.otakugifs.xyz/gifs/hug/408915119268a454.gif",
-            "https://cdn.otakugifs.xyz/gifs/hug/60927361c059c503.gif",
-            "https://cdn.otakugifs.xyz/gifs/hug/52144ce42c01a39c.gif"
-        ]
-    },
-    "slap": {
-        "color": discord.Color.from_rgb(255, 75, 75),
-        "verb": "slaps",
-        "emoji": "( `Д´)ノ=3 *SMACK!*",
-        "self_text": "{author} slaps themselves! ( >_< )",
-        "bot_text": "{author} slaps Sweety! (ノ_<。) 💔",
-        "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/slap/7882244dc2ba254c.gif",
-            "https://cdn.otakugifs.xyz/gifs/slap/56d8426acc62f8fb.gif",
-            "https://cdn.otakugifs.xyz/gifs/slap/a51d5c14f73d4c4f.gif",
-            "https://cdn.otakugifs.xyz/gifs/slap/83850d2e7434d541.gif",
-            "https://cdn.otakugifs.xyz/gifs/slap/2215a625136a1cda.gif",
-            "https://cdn.otakugifs.xyz/gifs/slap/iycRe43Ygg.gif",
-            "https://cdn.otakugifs.xyz/gifs/slap/0d82850a623b04f6.gif",
-            "https://cdn.otakugifs.xyz/gifs/slap/YZVDKmmik2.gif"
+            "https://cdn.otakugifs.xyz/gifs/hug/Fd7apEdG1m.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/522c5565e52dc3c6.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/b726e6b16c163d04.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/608e7397da18e9c7.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/60927361c059c503.gif"
         ]
     },
     "pat": {
@@ -1611,96 +1593,12 @@ ACTION_METADATA = {
         "self_text": "{author} pats their own head! (*´▽`*)",
         "bot_text": "{author} pats Sweety! (´꒳`) ✨",
         "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/pat/84f7a138d35d4081.gif",
-            "https://cdn.otakugifs.xyz/gifs/pat/13ec930fd42770f6.gif",
-            "https://cdn.otakugifs.xyz/gifs/pat/4de26d931b9eb6a3.gif",
-            "https://cdn.otakugifs.xyz/gifs/pat/7pUEkSbx3r.gif",
-            "https://cdn.otakugifs.xyz/gifs/pat/a606PuT9XA.gif",
-            "https://cdn.otakugifs.xyz/gifs/pat/sXhIDsqPO6.gif",
-            "https://cdn.otakugifs.xyz/gifs/pat/7bce755fd304f03e.gif"
-        ]
-    },
-    "kiss": {
-        "color": discord.Color.from_rgb(255, 105, 180),
-        "verb": "kisses",
-        "emoji": "(//ω//) 💋",
-        "self_text": "{author} kisses their reflection! 🪞✨",
-        "bot_text": [
-            "E-EHH?! {author}, you cannot kiss Sweety! (* >д<) 🚫 *Sweety dodges away!*",
-            "Hands off, {author}! Sweety is an AI bot, not your waifu! (//> <//) 🛡️",
-            "Access Denied! Sweety deployed the Anti-Kiss Energy Shield on {author}! ✋⚡",
-            "{author}, no kissing the bot! (* >ω<) 🚫 *Sweety slaps you with a warning ticket!*"
-        ],
-        "bot_gifs": [
-            "https://cdn.otakugifs.xyz/gifs/stop/6FNjbL81TV.gif",
-            "https://cdn.otakugifs.xyz/gifs/stop/6506ce576e412fc7.gif",
-            "https://cdn.otakugifs.xyz/gifs/stop/4CVjzJCwjO.gif",
-            "https://cdn.otakugifs.xyz/gifs/stop/nwMQPCngp1.gif",
-            "https://cdn.otakugifs.xyz/gifs/stop/fc41bb1bd17069b7.gif",
-            "https://cdn.otakugifs.xyz/gifs/no/rCXCfPJI51.gif",
-            "https://cdn.otakugifs.xyz/gifs/no/kgMBB4ELct.gif",
-            "https://cdn.otakugifs.xyz/gifs/no/da8139a0f0761722.gif"
-        ],
-        "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/kiss/cc21567435858305.gif",
-            "https://cdn.otakugifs.xyz/gifs/kiss/e8620e4b5d4907df.gif",
-            "https://cdn.otakugifs.xyz/gifs/kiss/5e1a1159b2d14a2c.gif",
-            "https://cdn.otakugifs.xyz/gifs/kiss/0e41d66ee4966bea.gif",
-            "https://cdn.otakugifs.xyz/gifs/kiss/e34493aac9970d50.gif",
-            "https://cdn.otakugifs.xyz/gifs/kiss/06c217107318c1d6.gif",
-            "https://cdn.otakugifs.xyz/gifs/kiss/736a111d8ed929b2.gif",
-            "https://cdn.otakugifs.xyz/gifs/kiss/15a312f23dec92ab.gif"
-        ]
-    },
-    "punch": {
-        "color": discord.Color.from_rgb(230, 50, 50),
-        "verb": "punches",
-        "emoji": "( ҂`з´) ᕤ *POW!*",
-        "self_text": "{author} shadowboxes and punches themselves! 😵",
-        "bot_text": "{author} punches Sweety! 🛡️ Energy shield deflected!",
-        "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/punch/2fd18184c78ec80d.gif",
-            "https://cdn.otakugifs.xyz/gifs/punch/3a6417e6568b2e96.gif",
-            "https://cdn.otakugifs.xyz/gifs/punch/f55xAxN6kKHY.gif",
-            "https://cdn.otakugifs.xyz/gifs/punch/a68e34a1994c91f7.gif",
-            "https://cdn.otakugifs.xyz/gifs/punch/120ad1827ee066b2.gif",
-            "https://cdn.otakugifs.xyz/gifs/punch/05bc002e281ddd92.gif",
-            "https://cdn.otakugifs.xyz/gifs/punch/6Nl4IdAcfX.gif",
-            "https://cdn.otakugifs.xyz/gifs/punch/f179131bd406f951.gif"
-        ]
-    },
-    "cuddle": {
-        "color": discord.Color.from_rgb(255, 175, 200),
-        "verb": "cuddles with",
-        "emoji": "(つ´꒳` )つ",
-        "self_text": "{author} cuddles a giant plushie! 🧸",
-        "bot_text": "{author} cuddles Sweety! (´｡• ω •｡`)",
-        "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/cuddle/aa8882919ed9833a.gif",
-            "https://cdn.otakugifs.xyz/gifs/cuddle/57ed752519bfce5d.gif",
-            "https://cdn.otakugifs.xyz/gifs/cuddle/88561f7a088650b8.gif",
-            "https://cdn.otakugifs.xyz/gifs/cuddle/ebc3e23450a4dcba.gif",
-            "https://cdn.otakugifs.xyz/gifs/cuddle/a95eec42fb7ead11.gif",
-            "https://cdn.otakugifs.xyz/gifs/cuddle/f1cc78dc6802a2bc.gif",
-            "https://cdn.otakugifs.xyz/gifs/cuddle/23961beb4ef3c5c9.gif",
-            "https://cdn.otakugifs.xyz/gifs/cuddle/7dca23f6128a1897.gif"
-        ]
-    },
-    "bite": {
-        "color": discord.Color.from_rgb(175, 100, 235),
-        "verb": "bites",
-        "emoji": "( `꒳´ ) *nom!*",
-        "self_text": "{author} bit their own tongue! 👅😖",
-        "bot_text": "{author} bites Sweety! (* >ω<) 🍪",
-        "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/bite/188ae836d6565df7.gif",
-            "https://cdn.otakugifs.xyz/gifs/bite/f317e3d3ff3a7986.gif",
-            "https://cdn.otakugifs.xyz/gifs/bite/655d4c17003f602b.gif",
-            "https://cdn.otakugifs.xyz/gifs/bite/45f4413ad8709d8f.gif",
-            "https://cdn.otakugifs.xyz/gifs/bite/7b9343dc2123353e.gif",
-            "https://cdn.otakugifs.xyz/gifs/bite/2b869d0d6cd05a40.gif",
-            "https://cdn.otakugifs.xyz/gifs/bite/39880e1cae9bd963.gif",
-            "https://cdn.otakugifs.xyz/gifs/bite/qSQsCXHTRi.gif"
+            "https://cdn.otakugifs.xyz/gifs/pat/XCNHCmIs1w.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/b827c8687dcd59e0.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/0d868f84caad8696.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/7bce755fd304f03e.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/a9fdc8c531b4e66e.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/ea4737750a0447bb.gif"
         ]
     },
     "highfive": {
@@ -1710,30 +1608,60 @@ ACTION_METADATA = {
         "self_text": "{author} high-fives themselves! 👏",
         "bot_text": "{author} high-fives Sweety! ✋🔥",
         "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/thumbsup/86c02b24f136e08f.gif",
-            "https://cdn.otakugifs.xyz/gifs/thumbsup/e1ecfd7c7569c53b.gif",
-            "https://cdn.otakugifs.xyz/gifs/thumbsup/SLPQSVVKVQQm.gif",
-            "https://cdn.otakugifs.xyz/gifs/yay/aXUiu8K4FPFi.gif",
             "https://cdn.otakugifs.xyz/gifs/yay/81d496fb29f6792b.gif",
+            "https://cdn.otakugifs.xyz/gifs/yay/03c4ecf43db62486.gif",
+            "https://cdn.otakugifs.xyz/gifs/yay/5ee9bcd7353c17ba.gif",
+            "https://cdn.otakugifs.xyz/gifs/yay/0j96SZyvZY.gif",
             "https://cdn.otakugifs.xyz/gifs/yay/kJl8Mm8hKW.gif",
-            "https://cdn.otakugifs.xyz/gifs/yay/fc1459311d24273a.gif",
-            "https://cdn.otakugifs.xyz/gifs/yay/SeWA76dt7ZYN.gif"
+            "https://cdn.otakugifs.xyz/gifs/thumbsup/SLPQSVVKVQQm.gif",
+            "https://cdn.otakugifs.xyz/gifs/thumbsup/86c02b24f136e08f.gif",
+            "https://cdn.otakugifs.xyz/gifs/thumbsup/6d802665ed2a176b.gif",
+            "https://cdn.otakugifs.xyz/gifs/thumbsup/96a5a4d278e37832.gif"
         ]
     },
-    "wink": {
+    "wave": {
         "color": discord.Color.from_rgb(100, 200, 255),
-        "verb": "winks at",
-        "emoji": "(^_<)〜☆",
-        "self_text": "{author} winks in the mirror! 😎",
-        "bot_text": "{author} winks at Sweety! (^_<)〜☆",
+        "verb": "waves at",
+        "emoji": "( ´ ▽ ` )/ 🌸",
+        "self_text": "{author} waves at their reflection! 👋✨",
+        "bot_text": "{author} waves at Sweety! ( ´ ▽ ` )/ 💖",
         "gifs": [
-            "https://cdn.otakugifs.xyz/gifs/wink/c36ae6e435e81a8e.gif",
-            "https://cdn.otakugifs.xyz/gifs/wink/f362fbd86c4a6229.gif",
-            "https://cdn.otakugifs.xyz/gifs/wink/15a2298d4003e27e.gif",
-            "https://cdn.otakugifs.xyz/gifs/wink/268082c8b1cea0ff.gif",
-            "https://cdn.otakugifs.xyz/gifs/wink/36f2630acbe06e06.gif",
-            "https://cdn.otakugifs.xyz/gifs/wink/05c05275353e2cc3.gif",
-            "https://cdn.otakugifs.xyz/gifs/wink/05aec45acd8452f4.gif"
+            "https://cdn.otakugifs.xyz/gifs/wave/110af4a9b5c9107f.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/8b38064027efc84d.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/3f6db91547ebde66.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/2d7e6d6ab4f8c55e.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/2e565abe8764327d.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/d8a72db89663ed79.gif"
+        ]
+    },
+    "slap": {
+        "color": discord.Color.from_rgb(255, 75, 75),
+        "verb": "slaps",
+        "emoji": "( `Д´)ノ=3 *SMACK!*",
+        "self_text": "{author} slaps themselves! ( >_< )",
+        "bot_text": "{author} slaps Sweety! (ノ_<。) 💔",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/slap/IGraVDzh5b.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/7882244dc2ba254c.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/bec6d0d98bd68398.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/MEHoADoE1X.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/99d7a3247ec4bd51.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/728770007827600b.gif"
+        ]
+    },
+    "punch": {
+        "color": discord.Color.from_rgb(230, 50, 50),
+        "verb": "punches",
+        "emoji": "( ҂`з´) ᕤ *POW!*",
+        "self_text": "{author} shadowboxes and punches themselves! 😵",
+        "bot_text": "{author} punches Sweety! 🛡️ Energy shield deflected!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/punch/6Nl4IdAcfX.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/6a071f4273b6c06d.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/UAru8Vy4rnU5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f55xAxN6kKHY.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/05bc002e281ddd92.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/SAn5cOlzM5.gif"
         ]
     }
 }
@@ -3063,9 +2991,9 @@ async def afk_slash_cmd(interaction: discord.Interaction, reason: Optional[str] 
     await interaction.response.send_message(embed=embed)
 
 
-# ── Social & Anime Action Slash Commands ───────────────────────────────────
+# ── Social & Wholesome Anime Action Slash Commands ──────────────────────────
 
-@bot.tree.command(name="hug", description="Give a warm, cozy hug to someone or yourself")
+@bot.tree.command(name="hug", description="Give a warm, wholesome hug to someone or yourself")
 @app_commands.describe(member="The member you want to hug (leave blank to hug yourself)")
 @app_commands.guild_only()
 async def hug_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
@@ -3074,16 +3002,7 @@ async def hug_slash_cmd(interaction: discord.Interaction, member: Optional[disco
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="slap", description="Deliver a dramatic anime slap to someone or yourself")
-@app_commands.describe(member="The member you want to slap")
-@app_commands.guild_only()
-async def slap_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("slap", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="pat", description="Give wholesome, gentle headpats to someone")
+@bot.tree.command(name="pat", description="Give gentle, wholesome headpats to someone")
 @app_commands.describe(member="The member you want to pat")
 @app_commands.guild_only()
 async def pat_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
@@ -3092,34 +3011,7 @@ async def pat_slash_cmd(interaction: discord.Interaction, member: Optional[disco
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="punch", description="Hit someone with a super anime punch")
-@app_commands.describe(member="The member you want to punch")
-@app_commands.guild_only()
-async def punch_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("punch", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="cuddle", description="Snuggle up and cuddle with someone warmly")
-@app_commands.describe(member="The member you want to cuddle")
-@app_commands.guild_only()
-async def cuddle_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("cuddle", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="bite", description="Take a playful nibble or bite out of someone")
-@app_commands.describe(member="The member you want to bite")
-@app_commands.guild_only()
-async def bite_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("bite", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="highfive", description="Share an epic, high-energy high-five with someone")
+@bot.tree.command(name="highfive", description="Share an epic, high-energy celebration high-five with someone")
 @app_commands.describe(member="The member you want to high-five")
 @app_commands.guild_only()
 async def highfive_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
@@ -3128,12 +3020,30 @@ async def highfive_slash_cmd(interaction: discord.Interaction, member: Optional[
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="wink", description="Shoot a charming, playful anime wink at someone")
-@app_commands.describe(member="The member you want to wink at")
+@bot.tree.command(name="wave", description="Wave hello or goodbye with a cheerful anime wave")
+@app_commands.describe(member="The member you want to wave at")
 @app_commands.guild_only()
-async def wink_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+async def wave_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
-    embed = create_action_embed("wink", interaction.user, target, bot.user)
+    embed = create_action_embed("wave", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="slap", description="Deliver a comedic cartoon/anime comedy slapstick")
+@app_commands.describe(member="The member you want to slap")
+@app_commands.guild_only()
+async def slap_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("slap", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="punch", description="Deliver a comedic superhero punch")
+@app_commands.describe(member="The member you want to punch")
+@app_commands.guild_only()
+async def punch_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("punch", interaction.user, target, bot.user)
     await interaction.response.send_message(embed=embed)
 
 
@@ -4287,7 +4197,7 @@ async def afk_prefix_cmd(ctx: commands.Context, *, reason: str = "AFK (Away From
     await ctx.send(embed=embed)
 
 
-# ── Social & Anime Action Prefix Commands ──────────────────────────────────
+# ── Social & Wholesome Anime Action Prefix Commands ────────────────────────
 
 @bot.command(name="hug")
 @commands.guild_only()
@@ -4295,15 +4205,6 @@ async def hug_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member]
     """Give a warm hug to someone: !hug [@user]"""
     target = member or ctx.author
     embed = create_action_embed("hug", ctx.author, target, bot.user)
-    await ctx.send(embed=embed)
-
-
-@bot.command(name="slap")
-@commands.guild_only()
-async def slap_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """Slap someone with an anime slap: !slap [@user]"""
-    target = member or ctx.author
-    embed = create_action_embed("slap", ctx.author, target, bot.user)
     await ctx.send(embed=embed)
 
 
@@ -4316,50 +4217,6 @@ async def pat_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member]
     await ctx.send(embed=embed)
 
 
-@bot.command(name="kiss")
-@commands.guild_only()
-async def kiss_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """Plant a sweet kiss (Staff/Moderators only): !kiss [@user]"""
-    if not is_protected(ctx.author):
-        embed = discord.Embed(
-            description="🚫 **Access Denied:** Only server **Administrators** and **Moderators** can use the `!kiss` command!",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed)
-        return
-
-    target = member or ctx.author
-    embed = create_action_embed("kiss", ctx.author, target, bot.user)
-    await ctx.send(embed=embed)
-
-
-@bot.command(name="punch")
-@commands.guild_only()
-async def punch_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """Deliver a super anime punch: !punch [@user]"""
-    target = member or ctx.author
-    embed = create_action_embed("punch", ctx.author, target, bot.user)
-    await ctx.send(embed=embed)
-
-
-@bot.command(name="cuddle", aliases=["snuggle"])
-@commands.guild_only()
-async def cuddle_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """Snuggle up and cuddle: !cuddle [@user]"""
-    target = member or ctx.author
-    embed = create_action_embed("cuddle", ctx.author, target, bot.user)
-    await ctx.send(embed=embed)
-
-
-@bot.command(name="bite", aliases=["nom"])
-@commands.guild_only()
-async def bite_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """Playfully bite someone: !bite [@user]"""
-    target = member or ctx.author
-    embed = create_action_embed("bite", ctx.author, target, bot.user)
-    await ctx.send(embed=embed)
-
-
 @bot.command(name="highfive", aliases=["h5", "high-five"])
 @commands.guild_only()
 async def highfive_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
@@ -4369,12 +4226,30 @@ async def highfive_prefix_cmd(ctx: commands.Context, member: Optional[discord.Me
     await ctx.send(embed=embed)
 
 
-@bot.command(name="wink")
+@bot.command(name="wave", aliases=["hi", "hello", "bye"])
 @commands.guild_only()
-async def wink_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """Shoot a charming wink: !wink [@user]"""
+async def wave_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Wave hello or goodbye: !wave [@user]"""
     target = member or ctx.author
-    embed = create_action_embed("wink", ctx.author, target, bot.user)
+    embed = create_action_embed("wave", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="slap")
+@commands.guild_only()
+async def slap_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Slap someone with comedic anime slapstick: !slap [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("slap", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="punch")
+@commands.guild_only()
+async def punch_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Deliver a superhero punch: !punch [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("punch", ctx.author, target, bot.user)
     await ctx.send(embed=embed)
 
 
