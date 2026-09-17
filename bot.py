@@ -1714,60 +1714,180 @@ def evaluate_dream_team(picks: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         "picks": picks
     }
 
-def simulate_7_game_series(team_a_data: Dict[str, Any], team_b_data: Dict[str, Any], name_a: str, name_b: str) -> Dict[str, Any]:
-    ovr_a = team_a_data["ovr"]
-    ovr_b = team_b_data["ovr"]
+HIGHLIGHT_ACTIONS = {
+    "PG": [
+        "{p1} crosses up {p2} with lightning handles and splashes a stepback 30-foot dagger!",
+        "{p1} threads an impossible no-look bounce pass through traffic, then cuts for an easy layup over {p2}!",
+        "{p1} hits {p2} with a wicked behind-the-back hesitation move and finishes with high off-glass touch!",
+        "{p1} orchestrates a brilliant fastbreak and pulls up on a dime for a clutch mid-range jumper over {p2}!",
+        "{p1} picks {p2}'s pocket at the top of the key and glides in for the breakaway score!"
+    ],
+    "SG": [
+        "{p1} elevates into the stratosphere for an iconic, gravity-defying hangtime fadeaway over {p2}!",
+        "{p1} channels the Mamba Mentality, sinking a heavily contested buzzer-beating baseline fadeaway over {p2}!",
+        "{p1} slashes through three defenders and throws down a ferocious one-handed tomahawk jam over {p2}!",
+        "{p1} curls off a pin-down screen and buries a picture-perfect catch-and-shoot triple over {p2}!",
+        "{p1} locks up {p2} on the perimeter, forces a turnover, and drains a fastbreak pull-up three!"
+    ],
+    "SF": [
+        "{p1} powers down the lane like a freight train, absorbing contact from {p2} for an explosive and-one slam!",
+        "{p1} rises up from 7 feet with an unblockable, silky-smooth pull-up jumper right over {p2}!",
+        "{p1} completely blankets {p2} on defense and buries a cold-blooded turnaround jumper on the other end!",
+        "{p1} out-hustles {p2} on the glass, grabs the offensive board, and converts a gritty putback bucket!",
+        "{p1} intercepts {p2}'s pass and finishes an emphatic fastbreak windmill dunk!"
+    ],
+    "PF": [
+        "{p1} executes a masterclass bank shot off the glass with ice-cold fundamental precision over {p2}!",
+        "{p1} steps out behind the arc and buries a rainbow three-pointer right in {p2}'s face!",
+        "{p1} isolates on the wing and swishes an unguardable one-legged fadeaway jumper over {p2}!",
+        "{p1} swats {p2}'s layup attempt into the third row, then runs the floor for an alley-oop finish!",
+        "{p1} flares out to the trail spot and sinks a smooth 26-foot three-pointer over {p2}!"
+    ],
+    "C": [
+        "{p1} drop-steps in the low post and delivers a rim-shattering two-handed monster power dunk over {p2}!",
+        "{p1} bamboozles {p2} with a breathtaking Dream Shake fake before sliding in a graceful reverse layup!",
+        "{p1} drops a pinpoint overhead touch pass across the court, then tips in the putback over {p2}!",
+        "{p1} takes two giant eurostep strides from the arc and detonates a poster dunk over {p2}!",
+        "{p1} blocks {p2}'s hook shot without leaving the floor, then sprints ahead for a transition slam!"
+    ]
+}
 
-    wins_a = 0
-    wins_b = 0
-    games = []
+def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], name_a: str, name_b: str) -> Dict[str, Any]:
+    """Simulates a round-by-round positional head-to-head card battle (Footdex style) between two $15 NBA lineups."""
+    picks_a = eval_a["picks"]
+    picks_b = eval_b["picks"]
 
-    diff = ovr_a - ovr_b
-    prob_a = 0.50 + (diff * 0.04)
-    prob_a = max(0.15, min(0.85, prob_a))
+    weights = {
+        "PG": {"pts_3": 0.35, "playmaking": 0.35, "clutch": 0.20, "defense": 0.10},
+        "SG": {"inside": 0.30, "pts_3": 0.30, "defense": 0.25, "clutch": 0.15},
+        "SF": {"inside": 0.25, "defense": 0.30, "playmaking": 0.25, "pts_3": 0.20},
+        "PF": {"inside": 0.35, "defense": 0.35, "pts_3": 0.15, "clutch": 0.15},
+        "C":  {"inside": 0.45, "defense": 0.40, "clutch": 0.15, "playmaking": 0.00}
+    }
 
-    for game_num in range(1, 8):
-        base_score_a = int(random.gauss(104 + (ovr_a - 90) * 1.5, 9))
-        base_score_b = int(random.gauss(104 + (ovr_b - 90) * 1.5, 9))
-        
-        if base_score_a == base_score_b:
-            base_score_a += random.choice([1, 2, 3])
+    pos_names = {
+        "PG": "Point Guard",
+        "SG": "Shooting Guard",
+        "SF": "Small Forward",
+        "PF": "Power Forward",
+        "C": "Center"
+    }
 
-        if random.random() < prob_a:
-            if base_score_a <= base_score_b:
-                base_score_a = base_score_b + random.randint(2, 9)
-            wins_a += 1
-            winner_game = name_a
+    duels = []
+    total_pts_a = 0
+    total_pts_b = 0
+    duels_won_a = 0
+    duels_won_b = 0
+
+    all_player_stats = []
+
+    for pos in ["PG", "SG", "SF", "PF", "C"]:
+        pl_a = picks_a[pos]
+        pl_b = picks_b[pos]
+        w = weights[pos]
+
+        rating_a = sum(pl_a.get(k, 80) * w[k] for k in w)
+        rating_b = sum(pl_b.get(k, 80) * w[k] for k in w)
+
+        diff = rating_a - rating_b
+        prob_a = 0.50 + (diff * 0.035)
+        prob_a = max(0.20, min(0.80, prob_a))
+
+        a_won = random.random() < prob_a
+
+        base_a = 20 + int((rating_a - 80) * 0.45) + random.randint(-3, 3)
+        base_b = 20 + int((rating_b - 80) * 0.45) + random.randint(-3, 3)
+
+        if a_won:
+            if base_a <= base_b:
+                base_a = base_b + random.randint(2, 6)
+            duels_won_a += 1
+            winner_user = name_a
+            action_template = random.choice(HIGHLIGHT_ACTIONS[pos])
+            highlight = action_template.format(
+                p1=f"{pl_a['emoji']} **{pl_a['name']}**",
+                p2=f"{pl_b['emoji']} **{pl_b['name']}**"
+            )
         else:
-            if base_score_b <= base_score_a:
-                base_score_b = base_score_a + random.randint(2, 9)
-            wins_b += 1
-            winner_game = name_b
+            if base_b <= base_a:
+                base_b = base_a + random.randint(2, 6)
+            duels_won_b += 1
+            winner_user = name_b
+            action_template = random.choice(HIGHLIGHT_ACTIONS[pos])
+            highlight = action_template.format(
+                p1=f"{pl_b['emoji']} **{pl_b['name']}**",
+                p2=f"{pl_a['emoji']} **{pl_a['name']}**"
+            )
 
-        games.append({
-            "game": game_num,
-            "score_a": base_score_a,
-            "score_b": base_score_b,
-            "winner": winner_game
+        total_pts_a += base_a
+        total_pts_b += base_b
+
+        all_player_stats.append({
+            "player": pl_a,
+            "pts": base_a,
+            "team": name_a,
+            "won": a_won
+        })
+        all_player_stats.append({
+            "player": pl_b,
+            "pts": base_b,
+            "team": name_b,
+            "won": not a_won
         })
 
-        if wins_a == 4 or wins_b == 4:
-            break
+        duels.append({
+            "pos": pos,
+            "pos_full": pos_names[pos],
+            "player_a": pl_a,
+            "player_b": pl_b,
+            "pts_a": base_a,
+            "pts_b": base_b,
+            "a_won": a_won,
+            "winner_user": winner_user,
+            "highlight": highlight
+        })
 
-    series_winner = name_a if wins_a == 4 else name_b
-    series_score = f"{wins_a}-{wins_b}" if wins_a == 4 else f"{wins_b}-{wins_a}"
-    
-    winning_team = team_a_data if wins_a == 4 else team_b_data
-    players_list = list(winning_team.get("picks", {}).values())
-    mvp_player = max(players_list, key=lambda p: p.get("cost", 1) * 20 + random.randint(1, 30)) if players_list else {"name": "Michael Jordan", "emoji": "🐐"}
+    # Synergy point additions
+    synergy_pts_a = int(len(eval_a.get("strengths", [])) * 2)
+    synergy_pts_b = int(len(eval_b.get("strengths", [])) * 2)
+    total_pts_a += synergy_pts_a
+    total_pts_b += synergy_pts_b
+
+    # Ensure no ties
+    if total_pts_a == total_pts_b:
+        if duels_won_a > duels_won_b:
+            total_pts_a += 2
+        elif duels_won_b > duels_won_a:
+            total_pts_b += 2
+        else:
+            total_pts_a += random.choice([2, 3])
+
+    overall_winner = name_a if total_pts_a > total_pts_b else name_b
+    winner_is_a = (overall_winner == name_a)
+
+    # Pick MVP (top scorer on winning team)
+    winning_team_stats = [s for s in all_player_stats if s["team"] == overall_winner]
+    winning_team_stats.sort(key=lambda s: s["pts"] + s["player"].get("clutch", 90) * 0.1, reverse=True)
+    mvp_entry = winning_team_stats[0] if winning_team_stats else {"player": picks_a["PG"], "pts": 28}
+    mvp_reb = random.randint(4, 14)
+    mvp_ast = random.randint(4, 12)
+    mvp_blk = random.randint(1, 4)
 
     return {
-        "winner": series_winner,
-        "score": series_score,
-        "wins_a": wins_a,
-        "wins_b": wins_b,
-        "games": games,
-        "mvp": mvp_player
+        "winner": overall_winner,
+        "winner_is_a": winner_is_a,
+        "score_a": total_pts_a,
+        "score_b": total_pts_b,
+        "duels_won_a": duels_won_a,
+        "duels_won_b": duels_won_b,
+        "duels": duels,
+        "synergy_a": synergy_pts_a,
+        "synergy_b": synergy_pts_b,
+        "mvp": mvp_entry["player"],
+        "mvp_pts": mvp_entry["pts"],
+        "mvp_reb": mvp_reb,
+        "mvp_ast": mvp_ast,
+        "mvp_blk": mvp_blk
     }
 
 class BuildTeamView(discord.ui.View):
@@ -2063,49 +2183,58 @@ def build_myteam_embed(target: Union[discord.Member, discord.User], row: Any) ->
 
 
 def build_teambattle_embed(author: Union[discord.Member, discord.User], opponent: Union[discord.Member, discord.User], row_a: Any, row_b: Any) -> discord.Embed:
-    """Simulates a 7-Game NBA Finals Series between two squads and generates a series summary embed."""
+    """Simulates a Footdex-style positional head-to-head card battle between two $15 NBA lineups."""
     picks_a = extract_picks_from_row(row_a)
     picks_b = extract_picks_from_row(row_b)
 
     eval_a = evaluate_dream_team(picks_a)
     eval_b = evaluate_dream_team(picks_b)
 
-    series_result = simulate_7_game_series(eval_a, eval_b, author.display_name, opponent.display_name)
+    battle = simulate_footdex_nba_battle(eval_a, eval_b, author.display_name, opponent.display_name)
 
-    winner_name = series_result["winner"]
-    winner_is_a = (winner_name == author.display_name)
+    winner_name = battle["winner"]
+    winner_is_a = battle["winner_is_a"]
     winner_member = author if winner_is_a else opponent
 
     embed = discord.Embed(
-        title=f"🏆 NBA FINALS: {author.display_name} vs {opponent.display_name}",
+        title=f"⚔️ NBA CARD BATTLE: {author.display_name} vs {opponent.display_name}",
         description=(
-            f"**Series Outcome**: 👑 **`{series_result['winner']}`** wins the Finals **`{series_result['score']}`**!\n\n"
+            f"**Match Result**: 👑 **`{battle['winner']}`** wins **`{battle['score_a']} - {battle['score_b']}`**! *(Duels Won: `{battle['duels_won_a']} - {battle['duels_won_b']}`)*\n\n"
             f"• **{author.display_name} ({eval_a['ovr']} OVR)**: {eval_a['tier'].split('•')[0].strip()}\n"
-            f"• **{opponent.display_name} ({eval_b['ovr']} OVR)**: {eval_b['tier'].split('•')[0].strip()}"
+            f"• **{opponent.display_name} ({eval_b['ovr']} OVR)**: {eval_b['tier'].split('•')[0].strip()}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         ),
         color=discord.Color.gold() if winner_is_a else discord.Color.purple()
     )
     if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
         embed.set_thumbnail(url=winner_member.display_avatar.url)
 
-    game_lines = []
-    for g in series_result["games"]:
-        g_num = g["game"]
-        s_a = g["score_a"]
-        s_b = g["score_b"]
-        w = g["winner"]
-        w_icon = "🔥" if w == author.display_name else "⚡"
-        game_lines.append(f"**Game {g_num}**: {author.display_name} `{s_a}` - `{s_b}` {opponent.display_name} ({w_icon} **{w}**)")
+    for idx, d in enumerate(battle["duels"], 1):
+        pos_code = d["pos"]
+        pos_title = d["pos_full"]
+        p_a = d["player_a"]
+        p_b = d["player_b"]
+        pts_a = d["pts_a"]
+        pts_b = d["pts_b"]
+        icon_a = "🟢" if d["a_won"] else "🔴"
+        icon_b = "🟢" if not d["a_won"] else "🔴"
 
-    embed.add_field(name="📜 Series Game Log (Best of 7)", value="\n".join(game_lines), inline=False)
-    
-    mvp = series_result["mvp"]
-    embed.add_field(
-        name="🎖️ Finals MVP Trophy",
-        value=f"{mvp.get('emoji', '🐐')} **{mvp.get('name', 'Michael Jordan')}** ({mvp.get('tag', 'Dominant Series')})",
-        inline=False
+        field_name = f"🏀 Round {idx} • {pos_title} ({pos_code}) Matchup"
+        field_value = (
+            f"{icon_a} **{author.display_name}**: {p_a['emoji']} **{p_a['name']}** (`${p_a['cost']}`) — **`{pts_a} PTS`**\n"
+            f"{icon_b} **{opponent.display_name}**: {p_b['emoji']} **{p_b['name']}** (`${p_b['cost']}`) — **`{pts_b} PTS`**\n"
+            f"⚡ *{d['highlight']}*"
+        )
+        embed.add_field(name=field_name, value=field_value, inline=False)
+
+    mvp = battle["mvp"]
+    mvp_text = (
+        f"🎖️ {mvp.get('emoji', '🐐')} **{mvp.get('name', 'Michael Jordan')}** ({mvp.get('team', 'NBA')})\n"
+        f"📊 **Statline**: `{battle['mvp_pts']} PTS` • `{battle['mvp_reb']} REB` • `{battle['mvp_ast']} AST` • `{battle['mvp_blk']} BLK`"
     )
-    embed.set_footer(text="Sweety NBA Simulation Engine • Build your squad with /buildteam or !buildteam")
+    embed.add_field(name="🏆 Player of the Match (MVP)", value=mvp_text, inline=False)
+
+    embed.set_footer(text="Sweety NBA Positional Duel Engine • Challenge members with /teambattle @user")
     embed.timestamp = discord.utils.utcnow()
     return embed
 
@@ -2956,7 +3085,7 @@ def make_help_embed() -> discord.Embed:
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect & Channels**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/createchannel <name> [category]` — Create custom text/voice channel\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View your (or someone's) squad, OVR rating & synergy\n• `/teambattle <opponent>` / `!teambattle` — Simulated 7-game NBA Finals Series showdown\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server\n• `/setupnbachannel [cat]` — Create dedicated arena channel in 2K Mobile Hub category", inline=False)
+    embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View your (or someone's) squad, OVR rating & synergy\n• `/teambattle <opponent>` / `!teambattle` — Footdex-style positional NBA card battle\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server\n• `/setupnbachannel [cat]` — Create dedicated arena channel in 2K Mobile Hub category", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
@@ -3723,7 +3852,7 @@ async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[disc
     await interaction.response.send_message(embed=card_embed)
 
 
-@bot.tree.command(name="teambattle", description="🏀 Challenge another member's $15 Dream Team to a simulated 7-Game NBA Finals Series!")
+@bot.tree.command(name="teambattle", description="⚔️ Challenge another member's $15 Dream Team to a Footdex-style positional NBA card battle!")
 @app_commands.describe(opponent="The member whose dream team you want to challenge")
 @app_commands.guild_only()
 async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: discord.Member):
@@ -5198,7 +5327,7 @@ async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Memb
 @bot.command(name="teambattle", aliases=["finals", "nbabattle", "squadbattle"])
 @commands.guild_only()
 async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member):
-    """Challenge another member's $15 Dream Team to a simulated 7-Game NBA Finals Series: !teambattle @user"""
+    """Challenge another member's $15 Dream Team to a Footdex-style positional NBA card battle: !teambattle @user"""
     if opponent.id == ctx.author.id:
         await ctx.send(f"❌ {ctx.author.mention} You cannot battle your own team! Challenge another server member: `!teambattle @user`")
         return
