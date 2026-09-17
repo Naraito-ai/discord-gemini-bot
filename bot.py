@@ -1625,7 +1625,22 @@ ACTION_METADATA = {
         "verb": "kisses",
         "emoji": "(//ω//) 💋",
         "self_text": "{author} kisses their reflection! 🪞✨",
-        "bot_text": "{author} kisses Sweety! (//ω//) 💖",
+        "bot_text": [
+            "E-EHH?! {author}, you cannot kiss Sweety! (* >д<) 🚫 *Sweety dodges away!*",
+            "Hands off, {author}! Sweety is an AI bot, not your waifu! (//> <//) 🛡️",
+            "Access Denied! Sweety deployed the Anti-Kiss Energy Shield on {author}! ✋⚡",
+            "{author}, no kissing the bot! (* >ω<) 🚫 *Sweety slaps you with a warning ticket!*"
+        ],
+        "bot_gifs": [
+            "https://cdn.otakugifs.xyz/gifs/stop/6FNjbL81TV.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/6506ce576e412fc7.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/4CVjzJCwjO.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/nwMQPCngp1.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/fc41bb1bd17069b7.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/rCXCfPJI51.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/kgMBB4ELct.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/da8139a0f0761722.gif"
+        ],
         "gifs": [
             "https://cdn.otakugifs.xyz/gifs/kiss/cc21567435858305.gif",
             "https://cdn.otakugifs.xyz/gifs/kiss/e8620e4b5d4907df.gif",
@@ -1732,16 +1747,29 @@ def create_action_embed(action_type: str, author: Union[discord.Member, discord.
     
     if author.id == target.id:
         desc = data["self_text"].format(author=author_tag)
+        gif_url = random.choice(data["gifs"])
+        color = data["color"]
     elif bot_user and target.id == bot_user.id:
-        desc = data["bot_text"].format(author=author_tag)
+        bot_texts = data.get("bot_text")
+        if isinstance(bot_texts, list):
+            desc = random.choice(bot_texts).format(author=author_tag)
+        else:
+            desc = bot_texts.format(author=author_tag)
+            
+        if "bot_gifs" in data:
+            gif_url = random.choice(data["bot_gifs"])
+            color = discord.Color.from_rgb(255, 60, 90)
+        else:
+            gif_url = random.choice(data["gifs"])
+            color = data["color"]
     else:
         desc = f"{author_tag} {data['verb']} {target_tag}! {data['emoji']}"
-
-    gif_url = random.choice(data["gifs"])
+        gif_url = random.choice(data["gifs"])
+        color = data["color"]
 
     embed = discord.Embed(
         description=desc,
-        color=data["color"]
+        color=color
     )
     embed.set_image(url=gif_url)
     return embed
