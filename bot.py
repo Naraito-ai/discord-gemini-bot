@@ -2019,7 +2019,9 @@ class InteractiveTeamBattleView(discord.ui.View):
         picks_a: Dict[str, Dict[str, Any]],
         picks_b: Dict[str, Dict[str, Any]],
         eval_a: Dict[str, Any],
-        eval_b: Dict[str, Any]
+        eval_b: Dict[str, Any],
+        row_a: Any = None,
+        row_b: Any = None
     ):
         super().__init__(timeout=240)
         self.author = author
@@ -2028,6 +2030,8 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.picks_b = picks_b
         self.eval_a = eval_a
         self.eval_b = eval_b
+        self.row_a = row_a
+        self.row_b = row_b
         
         self.positions = ["PG", "SG", "SF", "PF", "C"]
         self.pos_fullnames = {
@@ -2046,14 +2050,22 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.momentum_a = 0
         self.momentum_b = 0
         self.round_history = []
-        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a['ovr']} OVR) vs {opponent.display_name} ({eval_b['ovr']} OVR).\n*Real-time tactical decisions, counters & momentum determine who wins the Best-of-5!*"
+        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a['ovr']} OVR) vs {opponent.display_name} ({eval_b['ovr']} OVR).\n*Choose your live play calls, build momentum & counter defenses to win!*"
         self.player_points = {self.author.display_name: {}, self.opponent.display_name: {}}
         self.is_game_over = False
+        self.final_embed: Optional[discord.Embed] = None
         self._build_controls()
 
     def _build_controls(self):
         self.clear_items()
         if self.is_game_over:
+            btn_rematch = discord.ui.Button(label="Rematch (Live Battle)", style=discord.ButtonStyle.success, emoji="🔄", custom_id="btn_live_rematch")
+            btn_rematch.callback = self.rematch_callback
+            self.add_item(btn_rematch)
+
+            btn_draft = discord.ui.Button(label="Draft Board", style=discord.ButtonStyle.primary, emoji="🏀", custom_id="btn_live_draft")
+            btn_draft.callback = self.draft_callback
+            self.add_item(btn_draft)
             return
 
         # Row 0: Primary offensive plays
@@ -2082,9 +2094,34 @@ class InteractiveTeamBattleView(discord.ui.View):
         btn_sim.callback = self.handle_simulate_remainder
         self.add_item(btn_sim)
 
+    async def rematch_callback(self, interaction: discord.Interaction):
+        if interaction.user.id not in [self.author.id, self.opponent.id]:
+            await interaction.response.send_message("❌ Only the match participants can trigger a rematch!", ephemeral=True)
+            return
+
+        row_a = await db.get_dream_team(self.author.id) or self.row_a
+        row_b = await db.get_dream_team(self.opponent.id) or self.row_b
+        picks_a = extract_picks_from_row(row_a)
+        picks_b = extract_picks_from_row(row_b)
+        eval_a = evaluate_dream_team(picks_a)
+        eval_b = evaluate_dream_team(picks_b)
+
+        fresh_view = InteractiveTeamBattleView(self.author, self.opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
+        embed = fresh_view.make_battle_embed()
+        await interaction.response.edit_message(
+            content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
+            embed=embed,
+            view=fresh_view
+        )
+
+    async def draft_callback(self, interaction: discord.Interaction):
+        view = BuildTeamView(author_id=interaction.user.id)
+        embed = view.make_draft_embed()
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
     def make_battle_embed(self) -> discord.Embed:
-        if self.is_game_over:
-            return self._make_game_over_embed()
+        if self.is_game_over and self.final_embed:
+            return self.final_embed
 
         cur_pos = self.positions[self.current_round]
         pos_title = self.pos_fullnames[cur_pos]
@@ -2116,49 +2153,46 @@ class InteractiveTeamBattleView(discord.ui.View):
         if hasattr(self.author, "display_avatar") and self.author.display_avatar:
             embed.set_thumbnail(url=self.author.display_avatar.url)
 
-        # Active Matchup Box
         matchup_value = (
             f"🟢 **{self.author.display_name}**: {pl_a['emoji']} **{pl_a['name']}** (`${pl_a['cost']}`) `[MOM: {mom_bar_a}]`\n"
             f"🔴 **{self.opponent.display_name}**: {pl_b['emoji']} **{pl_b['name']}** (`${pl_b['cost']}`) `[MOM: {mom_bar_b}]`\n"
             f"⚡ *Archetypes: {pl_a['tag']} vs {pl_b['tag']}*"
         )
         embed.add_field(name=f"⭐ Current Duel • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
-
-        # Play commentary
         embed.add_field(name="📜 Latest Play Action", value=f">>> {self.last_commentary}", inline=False)
 
-        # Tactical guide
         guide_text = (
             "🎯 `3PT Step-Back` (+3) • 💥 `Power Drive` (+2+And-1) • 🧠 `Pick & Roll` (+2)\n"
             "🔒 `Lockdown Clamp` (Steal) • ⚡ `Mamba Iso` (Clutch) • ⏩ `Quick Sim`"
         )
         embed.add_field(name="🎮 Choose Your Live Coach Decision Below", value=guide_text, inline=False)
-
-        embed.set_footer(text=f"Duels: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • Tactical reads beat high OVR!")
+        embed.set_footer(text=f"Duels: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • Coaching decisions beat high OVR!")
         embed.timestamp = discord.utils.utcnow()
         return embed
 
-    def _make_game_over_embed(self) -> discord.Embed:
-        # Best of 5 Duels determines winner
+    async def _process_game_over(self) -> discord.Embed:
         if self.duels_won_a > self.duels_won_b:
             winner_name = self.author.display_name
             winner_member = self.author
+            loser_member = self.opponent
             winner_is_a = True
         elif self.duels_won_b > self.duels_won_a:
             winner_name = self.opponent.display_name
             winner_member = self.opponent
+            loser_member = self.author
             winner_is_a = False
         else:
             if self.round_pts_a >= self.round_pts_b:
                 winner_name = self.author.display_name
                 winner_member = self.author
+                loser_member = self.opponent
                 winner_is_a = True
             else:
                 winner_name = self.opponent.display_name
                 winner_member = self.opponent
+                loser_member = self.author
                 winner_is_a = False
 
-        # Calculate realistic, perfectly aligned NBA scores
         final_score_a = 96 + (self.duels_won_a * 6) + (self.round_pts_a * 2)
         final_score_b = 96 + (self.duels_won_b * 6) + (self.round_pts_b * 2)
         if winner_is_a and final_score_a <= final_score_b:
@@ -2166,13 +2200,72 @@ class InteractiveTeamBattleView(discord.ui.View):
         elif not winner_is_a and final_score_b <= final_score_a:
             final_score_b = final_score_a + 2
 
+        winner_pts = final_score_a if winner_is_a else final_score_b
+        loser_pts = final_score_b if winner_is_a else final_score_a
+        winner_duels = self.duels_won_a if winner_is_a else self.duels_won_b
+        loser_duels = self.duels_won_b if winner_is_a else self.duels_won_a
+        winner_eval = self.eval_a if winner_is_a else self.eval_b
+        loser_eval = self.eval_b if winner_is_a else self.eval_a
+
+        # Achievements
+        new_achievements_winner = ["first_champ"]
+        if winner_eval["ovr"] < loser_eval["ovr"]:
+            new_achievements_winner.append("budget_maestro")
+        if winner_duels == 5:
+            new_achievements_winner.append("the_clamps")
+
+        # Backcourt check (PG and SG)
+        pg_won = any(r["pos"] == "PG" and ((winner_is_a and r["a_won"]) or (not winner_is_a and not r["a_won"])) for r in self.round_history)
+        sg_won = any(r["pos"] == "SG" and ((winner_is_a and r["a_won"]) or (not winner_is_a and not r["a_won"])) for r in self.round_history)
+        if pg_won and sg_won:
+            new_achievements_winner.append("splash_dynasty")
+
+        stats_w = await db.get_team_battle_stats(winner_member.id)
+        stats_l = await db.get_team_battle_stats(loser_member.id)
+
+        if (stats_w["wins"] + 1) >= 10:
+            new_achievements_winner.append("hof_gm")
+        if (stats_w["total_points"] + winner_pts) >= 100:
+            new_achievements_winner.append("showtime_century")
+        cur_w_streak = stats_w["streak"] if stats_w["streak"] > 0 else 0
+        if (cur_w_streak + 1) >= 3:
+            new_achievements_winner.append("streak_master")
+
+        new_achievements_loser = []
+        if (stats_l["total_points"] + loser_pts) >= 100:
+            new_achievements_loser.append("showtime_century")
+
+        newly_unlocked = [ach for ach in new_achievements_winner if ach not in stats_w.get("achievements", [])]
+
+        await db.update_team_battle_record(
+            user_id=winner_member.id,
+            won=True,
+            is_tie=False,
+            duels_won=winner_duels,
+            points_scored=winner_pts,
+            new_achievements=new_achievements_winner
+        )
+        await db.update_team_battle_record(
+            user_id=loser_member.id,
+            won=False,
+            is_tie=False,
+            duels_won=loser_duels,
+            points_scored=loser_pts,
+            new_achievements=new_achievements_loser
+        )
+
+        updated_stats_a = await db.get_team_battle_stats(self.author.id)
+        updated_stats_b = await db.get_team_battle_stats(self.opponent.id)
+        streak_a_fmt = f"🔥 {updated_stats_a['streak']}W" if updated_stats_a['streak'] > 0 else (f"❄️ {abs(updated_stats_a['streak'])}L" if updated_stats_a['streak'] < 0 else "⚪ 0")
+        streak_b_fmt = f"🔥 {updated_stats_b['streak']}W" if updated_stats_b['streak'] > 0 else (f"❄️ {abs(updated_stats_b['streak'])}L" if updated_stats_b['streak'] < 0 else "⚪ 0")
+
         embed = discord.Embed(
             title=f"🏆 FINAL WHISTLE: {self.author.display_name} vs {self.opponent.display_name}",
             description=(
                 f"# 👑 `{winner_name}` WINS THE SERIES!\n\n"
-                f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Duels: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
-                f"• 🟢 **{self.author.display_name} ({self.eval_a['ovr']} OVR)**: {self.eval_a['tier'].split('•')[0].strip()}\n"
-                f"• 🔴 **{self.opponent.display_name} ({self.eval_b['ovr']} OVR)**: {self.eval_b['tier'].split('•')[0].strip()}\n"
+                f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Duels Won: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
+                f"• 🟢 **{self.author.display_name} ({self.eval_a['ovr']} OVR)**: {self.eval_a['tier'].split('•')[0].strip()} • `Record: {updated_stats_a['wins']}W-{updated_stats_a['losses']}L ({streak_a_fmt})`\n"
+                f"• 🔴 **{self.opponent.display_name} ({self.eval_b['ovr']} OVR)**: {self.eval_b['tier'].split('•')[0].strip()} • `Record: {updated_stats_b['wins']}W-{updated_stats_b['losses']}L ({streak_b_fmt})`\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             ),
             color=discord.Color.gold() if winner_is_a else discord.Color.purple()
@@ -2180,7 +2273,6 @@ class InteractiveTeamBattleView(discord.ui.View):
         if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
             embed.set_thumbnail(url=winner_member.display_avatar.url)
 
-        # Build clean visual Box Score for the 5 matchups
         box_lines = []
         for r in self.round_history:
             pos = r["pos"]
@@ -2204,12 +2296,11 @@ class InteractiveTeamBattleView(discord.ui.View):
 
         embed.add_field(name="🏀 Positional Duels Breakdown (Best of 5)", value="\n".join(box_lines), inline=False)
 
-        # Select Game MVP with realistic statline
         winning_picks = self.picks_a if winner_is_a else self.picks_b
         winning_user = self.author.display_name if winner_is_a else self.opponent.display_name
         scores_map = self.player_points.get(winning_user, {})
         best_p_name = max(scores_map, key=scores_map.get) if scores_map else list(winning_picks.keys())[0]
-        
+
         mvp_player = None
         for p in winning_picks.values():
             if p["name"] == best_p_name:
@@ -2229,8 +2320,17 @@ class InteractiveTeamBattleView(discord.ui.View):
         )
         embed.add_field(name="🎖️ Player of the Match (MVP) Trophy", value=mvp_value, inline=False)
 
+        if newly_unlocked:
+            ach_texts = [f"{NBA_ACHIEVEMENTS[a]['emoji']} **{NBA_ACHIEVEMENTS[a]['title']}**" for a in newly_unlocked if a in NBA_ACHIEVEMENTS]
+            embed.add_field(
+                name="🏅 GM Accolades Unlocked!",
+                value=f"👑 **{winner_member.display_name}** unlocked: {', '.join(ach_texts)}!",
+                inline=False
+            )
+
         embed.set_footer(text="Sweety Live Tactical NBA Engine • Real coaching decisions beat pure OVR!")
         embed.timestamp = discord.utils.utcnow()
+        self.final_embed = embed
         return embed
 
     async def handle_tactical_action(self, interaction: discord.Interaction, action_key: str):
@@ -2298,9 +2398,12 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.current_round += 1
         if self.current_round >= 5:
             self.is_game_over = True
-            self.clear_items()
+            self._build_controls()
+            embed = await self._process_game_over()
+        else:
+            embed = self.make_battle_embed()
 
-        await interaction.response.edit_message(embed=self.make_battle_embed(), view=self)
+        await interaction.response.edit_message(embed=embed, view=self)
 
     async def handle_simulate_remainder(self, interaction: discord.Interaction):
         if interaction.user.id not in [self.author.id, self.opponent.id]:
@@ -2344,8 +2447,9 @@ class InteractiveTeamBattleView(discord.ui.View):
             self.current_round += 1
 
         self.is_game_over = True
-        self.clear_items()
-        await interaction.response.edit_message(embed=self.make_battle_embed(), view=self)
+        self._build_controls()
+        embed = await self._process_game_over()
+        await interaction.response.edit_message(embed=embed, view=self)
 
 
 class TeamBattleRematchView(discord.ui.View):
@@ -2363,23 +2467,25 @@ class TeamBattleRematchView(discord.ui.View):
         self.row_a = row_a
         self.row_b = row_b
 
-    @discord.ui.button(label="Rematch", style=discord.ButtonStyle.success, emoji="🔄", custom_id="btn_battle_rematch")
+    @discord.ui.button(label="Rematch (Live Battle)", style=discord.ButtonStyle.success, emoji="🔄", custom_id="btn_battle_rematch")
     async def rematch_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in [self.author.id, self.opponent.id]:
             await interaction.response.send_message("❌ Only the match participants can trigger a rematch!", ephemeral=True)
             return
 
-        # Fetch latest teams in case lineups were updated
         row_a = await db.get_dream_team(self.author.id) or self.row_a
         row_b = await db.get_dream_team(self.opponent.id) or self.row_b
-        self.row_a = row_a
-        self.row_b = row_b
+        picks_a = extract_picks_from_row(row_a)
+        picks_b = extract_picks_from_row(row_b)
+        eval_a = evaluate_dream_team(picks_a)
+        eval_b = evaluate_dream_team(picks_b)
 
-        battle_embed = await build_teambattle_embed(self.author, self.opponent, self.row_a, self.row_b)
+        live_view = InteractiveTeamBattleView(self.author, self.opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
+        embed = live_view.make_battle_embed()
         await interaction.response.edit_message(
-            content=f"🔄 **Rematch Played by {interaction.user.mention}!**",
-            embed=battle_embed,
-            view=self
+            content=f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**",
+            embed=embed,
+            view=live_view
         )
 
     @discord.ui.button(label="Draft Board", style=discord.ButtonStyle.primary, emoji="🏀", custom_id="btn_battle_draft")
@@ -2414,11 +2520,11 @@ class TeamBattleChallengeView(discord.ui.View):
         embed = discord.Embed(
             title="⚔️ NBA DREAM TEAM BATTLE CHALLENGE",
             description=(
-                f"🏀 {self.opponent.mention}, **{self.author.display_name}** has challenged your $15 Starting 5 to a Footdex-style NBA card battle!\n\n"
+                f"🏀 {self.opponent.mention}, **{self.author.display_name}** has challenged your $15 Starting 5 to a head-to-head NBA battle!\n\n"
                 f"• 🟢 **{self.author.display_name}'s Squad**: `{self.eval_a['ovr']} OVR` • {self.eval_a['tier'].split('•')[0].strip()} (`${self.eval_a['total_cost']}/$15`)\n"
                 f"• 🔴 **{self.opponent.display_name}'s Squad**: `{self.eval_b['ovr']} OVR` • {self.eval_b['tier'].split('•')[0].strip()} (`${self.eval_b['total_cost']}/$15`)\n\n"
                 f"🏆 **Format**: 5-Round Positional Head-to-Head Duels (PG ➔ SG ➔ SF ➔ PF ➔ C)\n"
-                f"⏳ *{self.opponent.display_name}, click **Accept Battle** below to simulate the match!*"
+                f"🎮 **Live Tactical Battle**: Click below to take real-time coaching decisions (`3PT`, `Drives`, `P&R`, `Clamps`, `Mamba Iso`)!"
             ),
             color=discord.Color.gold()
         )
@@ -2428,8 +2534,30 @@ class TeamBattleChallengeView(discord.ui.View):
         embed.timestamp = discord.utils.utcnow()
         return embed
 
-    @discord.ui.button(label="Accept Battle", style=discord.ButtonStyle.success, emoji="⚔️", custom_id="btn_accept_battle")
-    async def accept_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Accept & Play Live", style=discord.ButtonStyle.success, emoji="⚔️", custom_id="btn_accept_live_battle")
+    async def accept_live_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.opponent.id:
+            await interaction.response.send_message(
+                f"❌ Only {self.opponent.mention} can accept this battle challenge!",
+                ephemeral=True
+            )
+            return
+
+        self.stop()
+        picks_a = extract_picks_from_row(self.row_a)
+        picks_b = extract_picks_from_row(self.row_b)
+        live_view = InteractiveTeamBattleView(
+            self.author, self.opponent, picks_a, picks_b, self.eval_a, self.eval_b, self.row_a, self.row_b
+        )
+        embed = live_view.make_battle_embed()
+        await interaction.response.edit_message(
+            content=f"🔥 **Challenge Accepted by {self.opponent.mention}! Choose your live play call for Quarter 1 (PG Duel):**",
+            embed=embed,
+            view=live_view
+        )
+
+    @discord.ui.button(label="Quick Sim", style=discord.ButtonStyle.secondary, emoji="⚡", custom_id="btn_accept_quick_battle")
+    async def accept_quick_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.opponent.id:
             await interaction.response.send_message(
                 f"❌ Only {self.opponent.mention} can accept this battle challenge!",
@@ -2441,7 +2569,7 @@ class TeamBattleChallengeView(discord.ui.View):
         battle_embed = await build_teambattle_embed(self.author, self.opponent, self.row_a, self.row_b)
         rematch_view = TeamBattleRematchView(self.author, self.opponent, self.row_a, self.row_b)
         await interaction.response.edit_message(
-            content=f"🔥 **Challenge Accepted by {self.opponent.mention}! Let the Finals Begin!**",
+            content=f"⚡ **Quick Simulation Played by {self.opponent.mention}!**",
             embed=battle_embed,
             view=rematch_view
         )
@@ -3197,23 +3325,29 @@ async def handle_team_queue(interaction: Optional[discord.Interaction] = None, c
         matched_user = matched_item["user"]
         row_matched = matched_item["row"]
 
-        # Run match simulation immediately
-        battle_embed = await build_teambattle_embed(matched_user, user, row_matched, row_user)
-        rematch_view = TeamBattleRematchView(matched_user, user, row_matched, row_user)
+        picks_matched = extract_picks_from_row(row_matched)
+        picks_user = extract_picks_from_row(row_user)
+        eval_matched = evaluate_dream_team(picks_matched)
+        eval_user = evaluate_dream_team(picks_user)
+
+        live_view = InteractiveTeamBattleView(
+            matched_user, user, picks_matched, picks_user, eval_matched, eval_user, row_matched, row_user
+        )
+        battle_embed = live_view.make_battle_embed()
 
         announcement = (
             f"⚔️ **MATCH FOUND!**\n"
             f"🏀 {matched_user.mention} vs {user.mention}\n"
-            f"The 5-round positional card battle begins now!"
+            f"Choose your live tactical coaching play for Quarter 1 (PG Duel)!"
         )
 
         if interaction:
             if interaction.response.is_done():
-                await interaction.followup.send(content=announcement, embed=battle_embed, view=rematch_view)
+                await interaction.followup.send(content=announcement, embed=battle_embed, view=live_view)
             else:
-                await interaction.response.send_message(content=announcement, embed=battle_embed, view=rematch_view)
+                await interaction.response.send_message(content=announcement, embed=battle_embed, view=live_view)
         else:
-            await ctx.send(content=announcement, embed=battle_embed, view=rematch_view)
+            await ctx.send(content=announcement, embed=battle_embed, view=live_view)
 
         # Notify the waiting player message if present
         waiting_msg = matched_item.get("message")
@@ -3221,7 +3355,7 @@ async def handle_team_queue(interaction: Optional[discord.Interaction] = None, c
             try:
                 found_embed = discord.Embed(
                     title="⚔️ Match Found!",
-                    description=f"Matched against **{user.display_name}**! Check the arena for battle results.",
+                    description=f"Matched against **{user.display_name}**! Check the arena for the live match.",
                     color=discord.Color.green()
                 )
                 await waiting_msg.edit(embed=found_embed, view=None)
