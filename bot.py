@@ -1548,16 +1548,7 @@ async def reminder_delivery_loop():
             embed.set_footer(text="Sweety Productivity Suite • Set more reminders with /remindme")
             embed.timestamp = discord.utils.utcnow()
 
-            if method == "channel":
-                target_chan = bot.get_channel(channel_id)
-                if target_chan and hasattr(target_chan, "send"):
-                    try:
-                        await target_chan.send(content=f"🔔 <@{user_id}>, your reminder is up!", embed=embed)
-                        delivered = True
-                    except Exception as ch_err:
-                        logger.warning(f"Could not send reminder in channel {channel_id}: {ch_err}")
-
-            if not delivered or method == "dm":
+            if method == "dm":
                 try:
                     user_obj = bot.get_user(user_id) or await bot.fetch_user(user_id)
                     if user_obj:
@@ -1565,6 +1556,16 @@ async def reminder_delivery_loop():
                         delivered = True
                 except Exception as dm_err:
                     logger.warning(f"Could not DM reminder to user {user_id}: {dm_err}")
+
+            if not delivered:
+                target_chan = bot.get_channel(channel_id)
+                if target_chan and hasattr(target_chan, "send"):
+                    try:
+                        alert_msg = f"🔔 <@{user_id}>, your reminder is up!" if method == "channel" else f"🔔 <@{user_id}>, your reminder is up! (Sent here because DM delivery failed)"
+                        await target_chan.send(content=alert_msg, embed=embed)
+                        delivered = True
+                    except Exception as ch_err:
+                        logger.warning(f"Could not send reminder in channel {channel_id}: {ch_err}")
 
             await db.delete_reminder(rem_id)
     except Exception as loop_err:
@@ -2268,8 +2269,8 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="🏀 **SpaceYT Basketball Arena & Debates**", value="• `/debate [channel] [ping]` — Post a spicy NBA debate with live voting buttons\n• `/startbenchcut` — Roll a 3-player Start, Bench, Cut challenge\n• `/setdebatechannel <channel>` — Set automated daily debate channel\n• `/setdebatemention <type>` — Configure debate ping tag (@here/none)\n• `/toggledebates <status>` — Turn daily auto-debates on or off", inline=False)
-    embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
-    embed.add_field(name="💖 **Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/pat [user]` — Wholesome anime headpats\n• `/punch [user]` — Deliver a super anime punch\n• `/cuddle [user]` — Snuggle and cuddle warmly\n• `/bite [user]` — Playfully bite someone\n• `/highfive [user]` — Epic high five\n• `/wink [user]` — Charming anime wink", inline=False)
+    embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
+    embed.add_field(name="💖 **Wholesome Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/pat [user]` — Wholesome anime headpats\n• `/highfive [user]` — Epic high five\n• `/wave [user]` — Friendly anime wave\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/punch [user]` — Deliver a super anime punch", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
@@ -2872,15 +2873,16 @@ async def antighostping_command(interaction: discord.Interaction, status: str):
         await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="remindme", description="Set a custom timer and reminder for tasks, study, pizza, or games")
+@bot.tree.command(name="remindme", description="Set a private custom timer and reminder for tasks, study, pizza, or games")
 @app_commands.describe(
-    time="When to remind you (e.g. '10m', '2h', '1d', '30m', '1h30m', 'tomorrow')",
+    time_arg="When to remind you (e.g. '10m', '2h', '1d', '30m', '1h30m', 'tomorrow')",
     note="What you want to be reminded about",
-    dm="Whether to deliver the reminder via Direct Message (default: false / in channel)"
+    dm="Whether to deliver the reminder via Direct Message (default: true / private DM)"
 )
+@app_commands.rename(time_arg="time")
 @app_commands.guild_only()
-async def remindme_slash_cmd(interaction: discord.Interaction, time: str, note: str, dm: Optional[bool] = False):
-    seconds = parse_duration_string(time)
+async def remindme_slash_cmd(interaction: discord.Interaction, time_arg: str, note: str, dm: Optional[bool] = True):
+    seconds = parse_duration_string(time_arg)
     if not seconds:
         await interaction.response.send_message(
             "❌ **Invalid time format!**\nExamples of valid formats: `10m`, `2h`, `1d`, `30s`, `1h30m`, `3 days`, `tomorrow`.",
@@ -2891,7 +2893,7 @@ async def remindme_slash_cmd(interaction: discord.Interaction, time: str, note: 
     now = time.time()
     remind_at = now + seconds
     rem_id = f"rem_{interaction.user.id}_{int(remind_at)}_{int(now)}"
-    dest = "dm" if dm else "channel"
+    dest = "dm" if (dm is None or dm is True) else "channel"
 
     await db.add_reminder(
         reminder_id=rem_id,
@@ -2905,22 +2907,22 @@ async def remindme_slash_cmd(interaction: discord.Interaction, time: str, note: 
     )
 
     embed = discord.Embed(
-        title="⏰ Reminder Scheduled!",
+        title="🔒 Reminder Scheduled (Private)!",
         description=f"I will remind you <t:{int(remind_at)}:R> (<t:{int(remind_at)}:f>).",
         color=discord.Color.blue()
     )
     embed.add_field(name="📝 Note", value=f">>> {note[:1000]}", inline=False)
     embed.add_field(
         name="📍 Delivery Location",
-        value="📬 **Direct Message (DM)**" if dm else f"💬 **{interaction.channel.mention}**",
+        value="📬 **Direct Message (DM)** (Private)" if dest == "dm" else f"💬 **{interaction.channel.mention}**",
         inline=True
     )
-    embed.set_footer(text=f"ID: {rem_id[:16]} • Sweety Productivity Suite")
+    embed.set_footer(text=f"ID: {rem_id[:16]} • Sweety Productivity Suite (Private)")
     embed.timestamp = discord.utils.utcnow()
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@bot.tree.command(name="reminders", description="View or cancel all your active pending reminders")
+@bot.tree.command(name="reminders", description="View or cancel all your active pending reminders (private)")
 @app_commands.describe(action="Choose to list active reminders or cancel all of them")
 @app_commands.choices(
     action=[
@@ -2944,23 +2946,23 @@ async def reminders_slash_cmd(interaction: discord.Interaction, action: Optional
     rows = await db.get_user_reminders(interaction.user.id)
     if not rows:
         embed = discord.Embed(
-            title="⏰ Your Active Reminders",
-            description="You have **0** pending reminders. Schedule one with `/remindme`!",
+            title="🔒 Your Active Reminders",
+            description="You have **0** pending reminders. Schedule one privately with `/remindme`!",
             color=discord.Color.blue()
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     embed = discord.Embed(
-        title="⏰ Your Active Reminders",
+        title="🔒 Your Active Reminders (Private)",
         description=f"You have **`{len(rows)}`** active scheduled reminder(s):\n",
         color=discord.Color.blue()
     )
     for idx, r in enumerate(rows[:10], 1):
         note = r["reminder_text"] if isinstance(r, dict) and "reminder_text" in r else r[3]
         rem_at = float(r["remind_at"] if isinstance(r, dict) and "remind_at" in r else r[4])
-        dest = r.get("delivery_method", "channel") if isinstance(r, dict) else (r[6] if len(r) > 6 else "channel")
-        loc_str = "DM" if dest == "dm" else f"<#{r['channel_id'] if isinstance(r, dict) else r[2]}>"
+        dest = r.get("delivery_method", "dm") if isinstance(r, dict) else (r[6] if len(r) > 6 else "dm")
+        loc_str = "DM (Private)" if dest == "dm" else f"<#{r['channel_id'] if isinstance(r, dict) else r[2]}>"
         embed.add_field(
             name=f"#{idx} • Due <t:{int(rem_at)}:R>",
             value=f"• **Note:** {note[:150]}\n• **Location:** {loc_str}",
@@ -4102,10 +4104,18 @@ async def antighostping_prefix_cmd(ctx: commands.Context, status: Optional[str] 
 @bot.command(name="remindme", aliases=["remind", "timer"])
 @commands.guild_only()
 async def remindme_prefix_cmd(ctx: commands.Context, time_arg: str, *, note: str = "Reminder"):
-    """Set a reminder: !remindme <time> <note> (e.g. !remindme 30m check oven)"""
+    """Set a private reminder: !remindme <time> <note> (e.g. !remindme 30m check oven)"""
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+
     seconds = parse_duration_string(time_arg)
     if not seconds:
-        await ctx.send("❌ **Invalid time format!**\nExamples: `!remindme 10m check email`, `!remindme 2h study`, `!remindme 1d call mom`")
+        try:
+            await ctx.author.send("❌ **Invalid time format!**\nExamples: `!remindme 10m check email`, `!remindme 2h study`, `!remindme 1d call mom`")
+        except Exception:
+            await ctx.send(f"❌ {ctx.author.mention} **Invalid time format!** Examples: `!remindme 10m check email`", delete_after=6)
         return
 
     now = time.time()
@@ -4120,60 +4130,107 @@ async def remindme_prefix_cmd(ctx: commands.Context, time_arg: str, *, note: str
         reminder_text=note,
         remind_at=remind_at,
         created_at=now,
-        delivery_method="channel"
+        delivery_method="dm"
     )
 
     embed = discord.Embed(
-        title="⏰ Reminder Scheduled!",
-        description=f"I will remind you <t:{int(remind_at)}:R> (<t:{int(remind_at)}:f>) in {ctx.channel.mention}.",
+        title="🔒 Reminder Scheduled (Private)!",
+        description=f"I will remind you <t:{int(remind_at)}:R> (<t:{int(remind_at)}:f>) via **Direct Message**.",
         color=discord.Color.blue()
     )
     embed.add_field(name="📝 Note", value=f">>> {note[:1000]}", inline=False)
-    embed.set_footer(text=f"ID: {rem_id[:16]} • Sweety Productivity Suite")
+    embed.set_footer(text=f"ID: {rem_id[:16]} • Sweety Productivity Suite (Private)")
     embed.timestamp = discord.utils.utcnow()
-    await ctx.send(embed=embed)
+
+    dm_sent = False
+    try:
+        await ctx.author.send(embed=embed)
+        dm_sent = True
+    except Exception:
+        pass
+
+    if dm_sent:
+        try:
+            await ctx.send(f"🔒 {ctx.author.mention} Your reminder has been set privately! I will DM you when it's time.", delete_after=6)
+        except Exception:
+            pass
+    else:
+        try:
+            await ctx.send(f"⚠️ {ctx.author.mention} Your DMs are closed! I scheduled your reminder, but will alert you in this channel.", delete_after=8)
+            await db.execute("UPDATE reminders SET delivery_method = 'channel' WHERE id = ?", rem_id)
+        except Exception:
+            pass
 
 
 @bot.command(name="reminders", aliases=["timers"])
 @commands.guild_only()
 async def reminders_prefix_cmd(ctx: commands.Context, action: Optional[str] = "list"):
-    """View active reminders: !reminders [list/clear]"""
+    """View active reminders privately: !reminders [list/clear]"""
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+
     if action and action.lower() == "clear":
         rows = await db.get_user_reminders(ctx.author.id)
         if not rows:
-            await ctx.send("ℹ️ You have no active reminders to clear.")
+            try:
+                await ctx.author.send("ℹ️ You have no active reminders to clear.")
+            except Exception:
+                pass
+            try:
+                await ctx.send(f"ℹ️ {ctx.author.mention} You have no active reminders to clear.", delete_after=6)
+            except Exception:
+                pass
             return
         for r in rows:
             rid = r["id"] if isinstance(r, dict) and "id" in r else r[0]
             await db.delete_reminder(rid)
-        await ctx.send(f"🧹 Cleared all **`{len(rows)}`** active reminder(s)!")
+        try:
+            await ctx.author.send(f"🧹 Cleared all **`{len(rows)}`** active reminder(s)!")
+        except Exception:
+            pass
+        try:
+            await ctx.send(f"🧹 {ctx.author.mention} Cleared all **`{len(rows)}`** active reminder(s)!", delete_after=6)
+        except Exception:
+            pass
         return
 
     rows = await db.get_user_reminders(ctx.author.id)
     if not rows:
         embed = discord.Embed(
-            title="⏰ Your Active Reminders",
-            description="You have **0** pending reminders. Set one using `!remindme 30m note`!",
+            title="🔒 Your Active Reminders",
+            description="You have **0** pending reminders. Set one using `!remindme 30m note` or `/remindme`!",
             color=discord.Color.blue()
         )
-        await ctx.send(embed=embed)
+        try:
+            await ctx.author.send(embed=embed)
+            await ctx.send(f"🔒 {ctx.author.mention} Sent your reminders status to your DMs!", delete_after=6)
+        except Exception:
+            await ctx.send(embed=embed, delete_after=12)
         return
 
     embed = discord.Embed(
-        title="⏰ Your Active Reminders",
+        title="🔒 Your Active Reminders (Private)",
         description=f"You have **`{len(rows)}`** active scheduled reminder(s):\n",
         color=discord.Color.blue()
     )
     for idx, r in enumerate(rows[:10], 1):
         note = r["reminder_text"] if isinstance(r, dict) and "reminder_text" in r else r[3]
         rem_at = float(r["remind_at"] if isinstance(r, dict) and "remind_at" in r else r[4])
+        dest = r.get("delivery_method", "dm") if isinstance(r, dict) else (r[6] if len(r) > 6 else "dm")
+        loc_str = "DM (Private)" if dest == "dm" else f"<#{r['channel_id'] if isinstance(r, dict) else r[2]}>"
         embed.add_field(
             name=f"#{idx} • Due <t:{int(rem_at)}:R>",
-            value=f"• **Note:** {note[:150]}",
+            value=f"• **Note:** {note[:150]}\n• **Location:** {loc_str}",
             inline=False
         )
     embed.set_footer(text="Use !reminders clear to cancel all reminders")
-    await ctx.send(embed=embed)
+    try:
+        await ctx.author.send(embed=embed)
+        await ctx.send(f"🔒 {ctx.author.mention} I've sent your active reminders to your DMs!", delete_after=6)
+    except Exception:
+        await ctx.send(embed=embed, delete_after=15)
 
 
 @bot.command(name="afk")

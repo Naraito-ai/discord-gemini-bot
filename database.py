@@ -243,7 +243,7 @@ class DatabaseManager:
                 reminder_text TEXT NOT NULL,
                 remind_at REAL NOT NULL,
                 created_at REAL NOT NULL,
-                delivery_method TEXT DEFAULT 'channel'
+                delivery_method TEXT DEFAULT 'dm'
             );
             """,
             # AFK Users Table
@@ -533,12 +533,13 @@ class DatabaseManager:
         return tallies
 
     # ── Reminders Methods ───────────────────────────────────────────────────
-    async def add_reminder(self, reminder_id: str, user_id: Any, guild_id: Any, channel_id: Any, reminder_text: str, remind_at: float, created_at: float, delivery_method: str = "channel") -> bool:
+    async def add_reminder(self, reminder_id: str, user_id: Any, guild_id: Any, channel_id: Any, reminder_text: str, remind_at: float, created_at: float, delivery_method: str = "dm") -> bool:
         """Stores a scheduled reminder."""
-        return await self.execute(
+        await self.execute(
             "INSERT INTO reminders (id, user_id, guild_id, channel_id, reminder_text, remind_at, created_at, delivery_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             str(reminder_id), str(user_id), str(guild_id) if guild_id else None, str(channel_id), reminder_text, float(remind_at), float(created_at), delivery_method
         )
+        return True
 
     async def get_due_reminders(self, current_time: float) -> List[Dict[str, Any]]:
         """Fetches all reminders that are due to be delivered."""
@@ -549,10 +550,11 @@ class DatabaseManager:
 
     async def delete_reminder(self, reminder_id: str) -> bool:
         """Deletes a reminder after delivery or upon user cancellation."""
-        return await self.execute(
+        await self.execute(
             "DELETE FROM reminders WHERE id = ?",
             str(reminder_id)
         )
+        return True
 
     async def get_user_reminders(self, user_id: Any) -> List[Dict[str, Any]]:
         """Fetches all active pending reminders for a user."""
