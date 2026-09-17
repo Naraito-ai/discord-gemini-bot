@@ -6,6 +6,7 @@ import re
 import io
 import time
 import datetime
+import random
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -1569,6 +1570,190 @@ async def reminder_delivery_loop():
     except Exception as loop_err:
         logger.error(f"Error in reminder delivery loop: {loop_err}", exc_info=True)
 
+# ── Social & Anime Action GIFs Suite ───────────────────────────────────────
+ACTION_METADATA = {
+    "hug": {
+        "title": "🤗 Warm Hug",
+        "color": discord.Color.from_rgb(255, 160, 180),
+        "captions": [
+            "{author} wrapped their arms around {target} in a warm, cozy hug! 🤗",
+            "{author} gave {target} the biggest, tightest hug ever! ❤️",
+            "{author} gently hugged {target}! Everything is going to be okay. ✨",
+            "{author} tackled {target} with a giant, loving bear hug! 🐻"
+        ],
+        "self_caption": "{author} needed some love, so Sweety gives you a big, warm hug! 🤗❤️",
+        "bot_caption": "Sweety blushes happily and gives {author} a giant hug back! (* >ω<) ❤️",
+        "gifs": [
+            "https://media.giphy.com/media/u9BxQbM5bxvwA/giphy.gif",
+            "https://media.giphy.com/media/lrr9rHuoJOE0w/giphy.gif",
+            "https://media.giphy.com/media/od5H3PmEG5EVq/giphy.gif",
+            "https://media.giphy.com/media/wnsgren9NtITS/giphy.gif",
+            "https://media.giphy.com/media/3bqtLDeiDtwhq/giphy.gif"
+        ]
+    },
+    "slap": {
+        "title": "🖐️ Anime Slap!",
+        "color": discord.Color.from_rgb(255, 75, 75),
+        "captions": [
+            "{author} slapped {target} into next week! 💥",
+            "{author} delivered a devastating anime slap to {target}! 🖐️",
+            "*SMACK!* {author} slapped some sense into {target}! ⚡",
+            "{author} backhanded {target}! That’s gotta leave a mark! 😵"
+        ],
+        "self_caption": "{author}, why are you slapping yourself?! Sweety grabs your hand to stop you! 😭",
+        "bot_caption": "Ouch! What did Sweety do to deserve that, {author}?! (ノ_<。) 💔",
+        "gifs": [
+            "https://media.giphy.com/media/jLeyZWgtwWP2U/giphy.gif",
+            "https://media.giphy.com/media/Gf3AUz3eBNbTW/giphy.gif",
+            "https://media.giphy.com/media/Zau0yrl15oqdK480Av/giphy.gif",
+            "https://media.giphy.com/media/mEtSQlxqBtWWA/giphy.gif",
+            "https://media.giphy.com/media/k1uEYPE77QuEA/giphy.gif"
+        ]
+    },
+    "pat": {
+        "title": "🌸 Gentle Headpat",
+        "color": discord.Color.from_rgb(255, 200, 50),
+        "captions": [
+            "{author} gently patted {target} on the head. *There, there!* 🌸",
+            "{author} gave {target} wholesome headpats! Good job! 💖",
+            "{author} patted {target}'s head with affection! (´｡• ᵕ •｡`) ♡"
+        ],
+        "self_caption": "{author} pats their own head! *You did great today!* 🌟",
+        "bot_caption": "Sweety purrs happily from {author}'s headpats! (´꒳`) ✨",
+        "gifs": [
+            "https://media.giphy.com/media/L2z7dnOduqEow/giphy.gif",
+            "https://media.giphy.com/media/ye7OTQgwmVuNTYSS23/giphy.gif",
+            "https://media.giphy.com/media/5tmRHwHYsuBhDHU0FJ/giphy.gif",
+            "https://media.giphy.com/media/109ltuoSQT212w/giphy.gif",
+            "https://media.giphy.com/media/M3a51DMeWvYUo/giphy.gif"
+        ]
+    },
+    "kiss": {
+        "title": "💋 Sweet Kiss",
+        "color": discord.Color.from_rgb(255, 105, 180),
+        "captions": [
+            "{author} gave {target} a sweet and gentle kiss! 💋",
+            "{author} planted a loving kiss on {target}'s cheek! 💖",
+            "{author} pulled {target} close and kissed them! (//ω//)"
+        ],
+        "self_caption": "{author} kisses their reflection in the mirror! Stay confident! 🪞✨",
+        "bot_caption": "Sweety turns bright red and smiles shyly at {author}! (//ω//) 💖",
+        "gifs": [
+            "https://media.giphy.com/media/FqBTvSNjNzeZG/giphy.gif",
+            "https://media.giphy.com/media/nyGFcsP0kAobm/giphy.gif",
+            "https://media.giphy.com/media/G3va31oEEnIkM/giphy.gif",
+            "https://media.giphy.com/media/bm2O3nXTcKJeU/giphy.gif",
+            "https://media.giphy.com/media/flmwZUuPN062Y/giphy.gif"
+        ]
+    },
+    "punch": {
+        "title": "🥊 Super Punch!",
+        "color": discord.Color.from_rgb(230, 50, 50),
+        "captions": [
+            "{author} hit {target} with a 100% Detroit Smash! 🥊",
+            "{author} threw a lightning-fast right hook at {target}! 💥",
+            "{author} punched {target} straight into the stratosphere! 🚀"
+        ],
+        "self_caption": "{author} tried to shadowbox themselves and took a hit! 😵",
+        "bot_caption": "Sweety deployed the Auto-Mod Energy Shield and deflected {author}'s punch! 🛡️⚡",
+        "gifs": [
+            "https://media.giphy.com/media/arbHBoiUWUgmc/giphy.gif",
+            "https://media.giphy.com/media/DGsDLr9nyz2LkVgKFs/giphy.gif",
+            "https://media.giphy.com/media/xUO4t2gkWBxDi/giphy.gif",
+            "https://media.giphy.com/media/11HeubLHnHgaVG/giphy.gif",
+            "https://media.giphy.com/media/3ohc1292yKn6Z1saGs/giphy.gif"
+        ]
+    },
+    "cuddle": {
+        "title": "🧸 Cozy Cuddle",
+        "color": discord.Color.from_rgb(255, 175, 200),
+        "captions": [
+            "{author} snuggled up and cuddled with {target}! 🧸",
+            "{author} is happily cuddling {target}! So warm and cozy~ 💤"
+        ],
+        "self_caption": "{author} grabs a giant plushie and cuddles up! 🧸",
+        "bot_caption": "Sweety happily cuddles up with {author}! So soft! (´｡• ω •｡`)",
+        "gifs": [
+            "https://media.giphy.com/media/k95625LKWXPP2/giphy.gif",
+            "https://media.giphy.com/media/vVA8U5NnXpMXLFvtn8/giphy.gif",
+            "https://media.giphy.com/media/3bqtLDeiDtwhq/giphy.gif",
+            "https://media.giphy.com/media/l2QDM9Jnim1YVWL6w/giphy.gif"
+        ]
+    },
+    "bite": {
+        "title": "🦷 Playful Bite",
+        "color": discord.Color.from_rgb(175, 100, 235),
+        "captions": [
+            "{author} took a playful nom out of {target}! 🦷",
+            "*Chomp!* {author} bit {target}! 🧛"
+        ],
+        "self_caption": "{author} bit their own tongue! Ouch! 👅😖",
+        "bot_caption": "Hey {author}! Sweety is not food! (* >ω<) 🍪",
+        "gifs": [
+            "https://media.giphy.com/media/5OqXNoq0vUddC/giphy.gif",
+            "https://media.giphy.com/media/105OwsN7a4UQ2Q/giphy.gif",
+            "https://media.giphy.com/media/qF1pWpYp4ahna/giphy.gif"
+        ]
+    },
+    "highfive": {
+        "title": "✋ Epic High-Five!",
+        "color": discord.Color.from_rgb(255, 190, 60),
+        "captions": [
+            "{author} and {target} shared an epic high five! ✋⚡",
+            "*CLAP!* Teamwork makes the dream work! {author} high-fives {target}! 🏆"
+        ],
+        "self_caption": "{author} clapped their hands together! *Self high-five!* 👏",
+        "bot_caption": "Sweety high-fives {author} with high energy! ✋🔥",
+        "gifs": [
+            "https://media.giphy.com/media/vUUAcl0Sb94qY/giphy.gif",
+            "https://media.giphy.com/media/pHb82xtBPfqEg/giphy.gif",
+            "https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif"
+        ]
+    },
+    "wink": {
+        "title": "😉 Charming Wink",
+        "color": discord.Color.from_rgb(100, 200, 255),
+        "captions": [
+            "{author} shot a charming wink at {target}! 😉✨",
+            "{author} gave {target} a knowing wink! (^_<)〜☆"
+        ],
+        "self_caption": "{author} winks at their reflection in the mirror! Looking sharp! 😎",
+        "bot_caption": "Sweety winks back at {author}! (^_<)〜☆",
+        "gifs": [
+            "https://media.giphy.com/media/11rIergnpiYpvW/giphy.gif",
+            "https://media.giphy.com/media/6tEKS5WnTRAtW/giphy.gif",
+            "https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif"
+        ]
+    }
+}
+
+def create_action_embed(action_type: str, author: Union[discord.Member, discord.User], target: Union[discord.Member, discord.User], bot_user: Optional[Union[discord.Member, discord.User]] = None) -> discord.Embed:
+    """Creates a beautifully formatted action embed with dynamic captions and animated GIFs."""
+    data = ACTION_METADATA.get(action_type.lower(), ACTION_METADATA["hug"])
+    
+    author_mention = author.mention
+    target_mention = target.mention
+    
+    if author.id == target.id:
+        desc = data["self_caption"].format(author=author_mention)
+    elif bot_user and target.id == bot_user.id:
+        desc = data["bot_caption"].format(author=author_mention)
+    else:
+        template = random.choice(data["captions"])
+        desc = template.format(author=author_mention, target=target_mention)
+
+    gif_url = random.choice(data["gifs"])
+
+    embed = discord.Embed(
+        title=data["title"],
+        description=desc,
+        color=data["color"]
+    )
+    embed.set_image(url=gif_url)
+    embed.set_footer(text=f"Requested by {getattr(author, 'display_name', str(author))}")
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
 # ── Teardown & Nuke Handlers ───────────────────────────────────────────────
 
 async def teardown_guild(guild):
@@ -2136,6 +2321,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="🏀 **SpaceYT Basketball Arena & Debates**", value="• `/debate [channel] [ping]` — Post a spicy NBA debate with live voting buttons\n• `/startbenchcut` — Roll a 3-player Start, Bench, Cut challenge\n• `/setdebatechannel <channel>` — Set automated daily debate channel\n• `/setdebatemention <type>` — Configure debate ping tag (@here/none)\n• `/toggledebates <status>` — Turn daily auto-debates on or off", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
+    embed.add_field(name="💖 **Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/pat [user]` — Wholesome anime headpats\n• `/kiss [user]` — Give someone a sweet kiss\n• `/punch [user]` — Deliver a super anime punch\n• `/cuddle [user]` — Snuggle and cuddle warmly\n• `/bite [user]` — Playfully bite someone\n• `/highfive [user]` — Epic high five\n• `/wink [user]` — Charming anime wink", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     await interaction.response.send_message(embed=embed)
@@ -2754,7 +2940,7 @@ async def remindme_slash_cmd(interaction: discord.Interaction, time: str, note: 
         )
         return
 
-    now = time_module.time()
+    now = time.time()
     remind_at = now + seconds
     rem_id = f"rem_{interaction.user.id}_{int(remind_at)}_{int(now)}"
     dest = "dm" if dm else "channel"
@@ -2841,7 +3027,7 @@ async def reminders_slash_cmd(interaction: discord.Interaction, action: Optional
 @app_commands.guild_only()
 async def afk_slash_cmd(interaction: discord.Interaction, reason: Optional[str] = "AFK (Away From Keyboard)"):
     reason = (reason or "AFK (Away From Keyboard)").strip()[:200]
-    now = time_module.time()
+    now = time.time()
     _afk_cache[(interaction.guild.id, interaction.user.id)] = {
         "reason": reason,
         "since": now
@@ -2854,6 +3040,89 @@ async def afk_slash_cmd(interaction: discord.Interaction, reason: Optional[str] 
         color=discord.Color.from_rgb(120, 140, 180)
     )
     embed.timestamp = discord.utils.utcnow()
+    await interaction.response.send_message(embed=embed)
+
+
+# ── Social & Anime Action Slash Commands ───────────────────────────────────
+
+@bot.tree.command(name="hug", description="Give a warm, cozy hug to someone or yourself")
+@app_commands.describe(member="The member you want to hug (leave blank to hug yourself)")
+@app_commands.guild_only()
+async def hug_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("hug", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="slap", description="Deliver a dramatic anime slap to someone or yourself")
+@app_commands.describe(member="The member you want to slap")
+@app_commands.guild_only()
+async def slap_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("slap", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="pat", description="Give wholesome, gentle headpats to someone")
+@app_commands.describe(member="The member you want to pat")
+@app_commands.guild_only()
+async def pat_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("pat", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="kiss", description="Plant a sweet, loving kiss on someone")
+@app_commands.describe(member="The member you want to kiss")
+@app_commands.guild_only()
+async def kiss_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("kiss", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="punch", description="Hit someone with a super anime punch")
+@app_commands.describe(member="The member you want to punch")
+@app_commands.guild_only()
+async def punch_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("punch", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="cuddle", description="Snuggle up and cuddle with someone warmly")
+@app_commands.describe(member="The member you want to cuddle")
+@app_commands.guild_only()
+async def cuddle_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("cuddle", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="bite", description="Take a playful nibble or bite out of someone")
+@app_commands.describe(member="The member you want to bite")
+@app_commands.guild_only()
+async def bite_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("bite", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="highfive", description="Share an epic, high-energy high-five with someone")
+@app_commands.describe(member="The member you want to high-five")
+@app_commands.guild_only()
+async def highfive_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("highfive", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="wink", description="Shoot a charming, playful anime wink at someone")
+@app_commands.describe(member="The member you want to wink at")
+@app_commands.guild_only()
+async def wink_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("wink", interaction.user, target, bot.user)
     await interaction.response.send_message(embed=embed)
 
 
@@ -4004,6 +4273,89 @@ async def afk_prefix_cmd(ctx: commands.Context, *, reason: str = "AFK (Away From
         color=discord.Color.from_rgb(120, 140, 180)
     )
     embed.timestamp = discord.utils.utcnow()
+    await ctx.send(embed=embed)
+
+
+# ── Social & Anime Action Prefix Commands ──────────────────────────────────
+
+@bot.command(name="hug")
+@commands.guild_only()
+async def hug_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Give a warm hug to someone: !hug [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("hug", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="slap")
+@commands.guild_only()
+async def slap_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Slap someone with an anime slap: !slap [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("slap", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="pat", aliases=["headpat", "pats"])
+@commands.guild_only()
+async def pat_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Give gentle headpats: !pat [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("pat", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="kiss")
+@commands.guild_only()
+async def kiss_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Plant a sweet kiss: !kiss [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("kiss", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="punch")
+@commands.guild_only()
+async def punch_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Deliver a super anime punch: !punch [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("punch", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="cuddle", aliases=["snuggle"])
+@commands.guild_only()
+async def cuddle_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Snuggle up and cuddle: !cuddle [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("cuddle", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="bite", aliases=["nom"])
+@commands.guild_only()
+async def bite_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Playfully bite someone: !bite [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("bite", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="highfive", aliases=["h5", "high-five"])
+@commands.guild_only()
+async def highfive_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Share an epic high five: !highfive [@user] or !h5 [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("highfive", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="wink")
+@commands.guild_only()
+async def wink_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Shoot a charming wink: !wink [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("wink", ctx.author, target, bot.user)
     await ctx.send(embed=embed)
 
 
