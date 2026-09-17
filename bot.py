@@ -164,10 +164,17 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
     headers = {
         "Authorization": f"Bearer {groq_key}",
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SweetyBot/2.0"
     }
     
-    models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
+    models = [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b",
+        "groq/compound",
+        "groq/compound-mini",
+        "allam-2-7b"
+    ]
     last_err = None
     
     for model_name in models:
