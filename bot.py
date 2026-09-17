@@ -1571,6 +1571,585 @@ async def reminder_delivery_loop():
     except Exception as loop_err:
         logger.error(f"Error in reminder delivery loop: {loop_err}", exc_info=True)
 
+# ── $15 All-Time NBA Dream Team Builder & Battle Engine ──────────────────────
+
+NBA_DREAM_PLAYERS = {
+    "PG": [
+        {"name": "Stephen Curry", "cost": 5, "team": "GSW", "tag": "Unanimous MVP • Greatest Shooter Ever", "emoji": "🎯", "pts_3": 99, "defense": 78, "playmaking": 92, "inside": 84, "clutch": 98},
+        {"name": "Magic Johnson", "cost": 4, "team": "LAL", "tag": "5x Champ • Showtime Maestro", "emoji": "🪄", "pts_3": 78, "defense": 86, "playmaking": 99, "inside": 92, "clutch": 96},
+        {"name": "Chris Paul", "cost": 3, "team": "LAC", "tag": "Point God • Floor General", "emoji": "🧠", "pts_3": 86, "defense": 94, "playmaking": 96, "inside": 80, "clutch": 94},
+        {"name": "Kyrie Irving", "cost": 2, "team": "CLE", "tag": "Ankle Breaker • Finals Dagger", "emoji": "⚡", "pts_3": 92, "defense": 76, "playmaking": 88, "inside": 96, "clutch": 98},
+        {"name": "Jrue Holiday", "cost": 1, "team": "BOS", "tag": "2x Champ • Perimeter Clamp", "emoji": "🔒", "pts_3": 85, "defense": 97, "playmaking": 86, "inside": 82, "clutch": 90},
+    ],
+    "SG": [
+        {"name": "Michael Jordan", "cost": 5, "team": "CHI", "tag": "6x Finals MVP • Undisputed GOAT", "emoji": "🐐", "pts_3": 82, "defense": 99, "playmaking": 88, "inside": 99, "clutch": 99},
+        {"name": "Kobe Bryant", "cost": 4, "team": "LAL", "tag": "5x Champ • Mamba Mentality", "emoji": "🐍", "pts_3": 86, "defense": 96, "playmaking": 86, "inside": 96, "clutch": 99},
+        {"name": "Dwyane Wade", "cost": 3, "team": "MIA", "tag": "3x Champ • Finals MVP Slashing Monster", "emoji": "⚡", "pts_3": 76, "defense": 93, "playmaking": 90, "inside": 97, "clutch": 96},
+        {"name": "Klay Thompson", "cost": 2, "team": "GSW", "tag": "4x Champ • Game 6 Splash Brother", "emoji": "🔥", "pts_3": 98, "defense": 92, "playmaking": 74, "inside": 78, "clutch": 95},
+        {"name": "Derrick White", "cost": 1, "team": "BOS", "tag": "All-Defensive • Ultimate Glue Guy", "emoji": "🦬", "pts_3": 87, "defense": 93, "playmaking": 82, "inside": 80, "clutch": 88},
+    ],
+    "SF": [
+        {"name": "LeBron James", "cost": 5, "team": "MIA", "tag": "4x MVP • All-Around King", "emoji": "👑", "pts_3": 85, "defense": 95, "playmaking": 99, "inside": 99, "clutch": 97},
+        {"name": "Kevin Durant", "cost": 4, "team": "GSW", "tag": "2x Finals MVP • 7ft Walking Bucket", "emoji": "🎯", "pts_3": 95, "defense": 89, "playmaking": 85, "inside": 94, "clutch": 97},
+        {"name": "Kawhi Leonard", "cost": 3, "team": "TOR", "tag": "2x DPOY • The Klaw Lock", "emoji": "🤖", "pts_3": 89, "defense": 99, "playmaking": 82, "inside": 91, "clutch": 97},
+        {"name": "Jimmy Butler", "cost": 2, "team": "MIA", "tag": "Playoff Jimmy • Clutch Beast", "emoji": "☕", "pts_3": 80, "defense": 94, "playmaking": 86, "inside": 92, "clutch": 98},
+        {"name": "Alex Caruso", "cost": 1, "team": "OKC", "tag": "All-Defensive • Steal & Hustle Master", "emoji": "🦅", "pts_3": 82, "defense": 95, "playmaking": 80, "inside": 78, "clutch": 87},
+    ],
+    "PF": [
+        {"name": "Tim Duncan", "cost": 5, "team": "SAS", "tag": "5x Champ • The Big Fundamental", "emoji": "🏛️", "pts_3": 60, "defense": 99, "playmaking": 84, "inside": 98, "clutch": 97},
+        {"name": "Larry Bird", "cost": 4, "team": "BOS", "tag": "3x MVP • Legendary Trash Talker", "emoji": "🍀", "pts_3": 94, "defense": 87, "playmaking": 95, "inside": 89, "clutch": 99},
+        {"name": "Dirk Nowitzki", "cost": 3, "team": "DAL", "tag": "Finals MVP • Unblockable Fadeaway", "emoji": "🇩🇪", "pts_3": 95, "defense": 79, "playmaking": 79, "inside": 93, "clutch": 98},
+        {"name": "Anthony Davis", "cost": 2, "team": "LAL", "tag": "NBA Champ • The Brow Two-Way Anchor", "emoji": "〰️", "pts_3": 76, "defense": 97, "playmaking": 78, "inside": 97, "clutch": 92},
+        {"name": "Naz Reid", "cost": 1, "team": "MIN", "tag": "6th Man of the Year • Fan Favorite Sniper", "emoji": "🐺", "pts_3": 88, "defense": 84, "playmaking": 74, "inside": 90, "clutch": 88},
+    ],
+    "C": [
+        {"name": "Shaquille O'Neal", "cost": 5, "team": "LAL", "tag": "3x Finals MVP • Most Dominant Force", "emoji": "💥", "pts_3": 50, "defense": 93, "playmaking": 72, "inside": 99, "clutch": 95},
+        {"name": "Hakeem Olajuwon", "cost": 4, "team": "HOU", "tag": "2x DPOY • The Dream Shake", "emoji": "🌪️", "pts_3": 62, "defense": 99, "playmaking": 82, "inside": 98, "clutch": 97},
+        {"name": "Nikola Jokić", "cost": 3, "team": "DEN", "tag": "3x MVP • Triple-Double Magician", "emoji": "🃏", "pts_3": 87, "defense": 79, "playmaking": 99, "inside": 97, "clutch": 97},
+        {"name": "Giannis Antetokounmpo", "cost": 2, "team": "MIL", "tag": "2x MVP • Greek Freak Freight Train", "emoji": "🦌", "pts_3": 68, "defense": 97, "playmaking": 86, "inside": 99, "clutch": 94},
+        {"name": "Victor Wembanyama", "cost": 1, "team": "SAS", "tag": "7ft 4in • Alien Shot-Blocker", "emoji": "👽", "pts_3": 84, "defense": 98, "playmaking": 78, "inside": 91, "clutch": 90},
+    ]
+}
+
+def find_nba_player(pos: str, name: str) -> Optional[Dict[str, Any]]:
+    for p in NBA_DREAM_PLAYERS.get(pos, []):
+        if p["name"].lower() == name.lower():
+            return p
+    return None
+
+def generate_random_valid_lineup() -> Dict[str, Dict[str, Any]]:
+    positions = ["PG", "SG", "SF", "PF", "C"]
+    for _ in range(500):
+        picks = {}
+        for pos in positions:
+            picks[pos] = random.choice(NBA_DREAM_PLAYERS[pos])
+        if sum(p["cost"] for p in picks.values()) == 15:
+            return picks
+    return {
+        "PG": NBA_DREAM_PLAYERS["PG"][0],
+        "SG": NBA_DREAM_PLAYERS["SG"][1],
+        "SF": NBA_DREAM_PLAYERS["SF"][2],
+        "PF": NBA_DREAM_PLAYERS["PF"][3],
+        "C": NBA_DREAM_PLAYERS["C"][4],
+    }
+
+def evaluate_dream_team(picks: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    players = list(picks.values())
+    total_cost = sum(p["cost"] for p in players)
+    
+    avg_3pt = sum(p["pts_3"] for p in players) / 5.0
+    avg_def = sum(p["defense"] for p in players) / 5.0
+    avg_ply = sum(p["playmaking"] for p in players) / 5.0
+    avg_ins = sum(p["inside"] for p in players) / 5.0
+    avg_clu = sum(p["clutch"] for p in players) / 5.0
+
+    synergy_bonuses = 0.0
+    strengths = []
+    weaknesses = []
+
+    shooters = [p for p in players if p["pts_3"] >= 88]
+    if len(shooters) >= 3:
+        synergy_bonuses += 2.5
+        strengths.append("🎯 **Elite 5-Out Floor Spacing** (+2.5 OVR)")
+    elif avg_3pt < 80:
+        weaknesses.append("⚠️ **Clogged Paint**: Low outside shooting limits penetration.")
+
+    defenders = [p for p in players if p["defense"] >= 94]
+    if len(defenders) >= 3:
+        synergy_bonuses += 2.5
+        strengths.append("🔒 **Lockdown Defensive Anchor** (+2.5 OVR)")
+    elif avg_def < 84:
+        weaknesses.append("⚠️ **Defensive Holes**: Perimeter guards can get targeted.")
+
+    elite_passers = [p for p in players if p["playmaking"] >= 95]
+    if elite_passers:
+        synergy_bonuses += 2.0
+        strengths.append("🧠 **Showtime Floor Vision** (+2.0 OVR)")
+    elif avg_ply < 82:
+        weaknesses.append("⚠️ **Iso-Heavy**: Lacks a pure pass-first floor general.")
+
+    if picks.get("C", {}).get("inside", 0) >= 98 or picks.get("PF", {}).get("inside", 0) >= 98:
+        synergy_bonuses += 1.5
+        strengths.append("💥 **Unstoppable Rim Pressure** (+1.5 OVR)")
+
+    if total_cost == 15:
+        synergy_bonuses += 1.5
+        strengths.append("💎 **Max Budget Efficiency** ($15/15 spent)")
+    elif total_cost < 13:
+        weaknesses.append(f"⚠️ **Underutilized Budget**: Spent only ${total_cost}/$15.")
+
+    if not strengths:
+        strengths.append("⚡ **Solid Fundamental All-Around Play**")
+    if not weaknesses:
+        weaknesses.append("✨ **Flawless Roster Construction (No Obvious Weaknesses!)**")
+
+    base_ovr = (avg_3pt * 0.22) + (avg_def * 0.25) + (avg_ply * 0.20) + (avg_ins * 0.20) + (avg_clu * 0.13)
+    final_ovr = min(99.9, round(base_ovr + synergy_bonuses, 1))
+
+    if final_ovr >= 97.0:
+        tier_label = "🏆 S+ Tier • Dynasty Champion"
+        tier_color = discord.Color.gold()
+    elif final_ovr >= 94.0:
+        tier_label = "🌟 S Tier • Finals Favorite"
+        tier_color = discord.Color.from_rgb(255, 215, 0)
+    elif final_ovr >= 90.0:
+        tier_label = "💎 A Tier • Deep Contender"
+        tier_color = discord.Color.blue()
+    else:
+        tier_label = "⚡ B Tier • Playoff Squad"
+        tier_color = discord.Color.teal()
+
+    return {
+        "total_cost": total_cost,
+        "ovr": final_ovr,
+        "tier": tier_label,
+        "color": tier_color,
+        "avg_3pt": round(avg_3pt, 1),
+        "avg_def": round(avg_def, 1),
+        "avg_ply": round(avg_ply, 1),
+        "avg_ins": round(avg_ins, 1),
+        "avg_clu": round(avg_clu, 1),
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "picks": picks
+    }
+
+def simulate_7_game_series(team_a_data: Dict[str, Any], team_b_data: Dict[str, Any], name_a: str, name_b: str) -> Dict[str, Any]:
+    ovr_a = team_a_data["ovr"]
+    ovr_b = team_b_data["ovr"]
+
+    wins_a = 0
+    wins_b = 0
+    games = []
+
+    diff = ovr_a - ovr_b
+    prob_a = 0.50 + (diff * 0.04)
+    prob_a = max(0.15, min(0.85, prob_a))
+
+    for game_num in range(1, 8):
+        base_score_a = int(random.gauss(104 + (ovr_a - 90) * 1.5, 9))
+        base_score_b = int(random.gauss(104 + (ovr_b - 90) * 1.5, 9))
+        
+        if base_score_a == base_score_b:
+            base_score_a += random.choice([1, 2, 3])
+
+        if random.random() < prob_a:
+            if base_score_a <= base_score_b:
+                base_score_a = base_score_b + random.randint(2, 9)
+            wins_a += 1
+            winner_game = name_a
+        else:
+            if base_score_b <= base_score_a:
+                base_score_b = base_score_a + random.randint(2, 9)
+            wins_b += 1
+            winner_game = name_b
+
+        games.append({
+            "game": game_num,
+            "score_a": base_score_a,
+            "score_b": base_score_b,
+            "winner": winner_game
+        })
+
+        if wins_a == 4 or wins_b == 4:
+            break
+
+    series_winner = name_a if wins_a == 4 else name_b
+    series_score = f"{wins_a}-{wins_b}" if wins_a == 4 else f"{wins_b}-{wins_a}"
+    
+    winning_team = team_a_data if wins_a == 4 else team_b_data
+    players_list = list(winning_team.get("picks", {}).values())
+    mvp_player = max(players_list, key=lambda p: p.get("cost", 1) * 20 + random.randint(1, 30)) if players_list else {"name": "Michael Jordan", "emoji": "🐐"}
+
+    return {
+        "winner": series_winner,
+        "score": series_score,
+        "wins_a": wins_a,
+        "wins_b": wins_b,
+        "games": games,
+        "mvp": mvp_player
+    }
+
+class BuildTeamView(discord.ui.View):
+    def __init__(self, author_id: int):
+        super().__init__(timeout=300)
+        self.author_id = author_id
+        self.current_pos = "PG"
+        self.picks: Dict[str, Dict[str, Any]] = {}
+        self._build_components()
+
+    def _build_components(self):
+        self.clear_items()
+        
+        pos_options = []
+        pos_fullnames = {"PG": "Point Guard", "SG": "Shooting Guard", "SF": "Small Forward", "PF": "Power Forward", "C": "Center"}
+        for p in ["PG", "SG", "SF", "PF", "C"]:
+            picked = self.picks.get(p)
+            desc = f"Picked: {picked['name']} (${picked['cost']})" if picked else "Slot Empty"
+            pos_options.append(discord.SelectOption(
+                label=f"{p} • {pos_fullnames[p]}",
+                value=p,
+                description=desc,
+                default=(p == self.current_pos),
+                emoji="🏀" if not picked else picked.get("emoji", "✅")
+            ))
+            
+        pos_select = discord.ui.Select(
+            placeholder="Choose position to draft/edit...",
+            options=pos_options,
+            min_values=1,
+            max_values=1,
+            row=0
+        )
+        pos_select.callback = self.on_pos_select
+        self.add_item(pos_select)
+
+        player_options = []
+        for pl in NBA_DREAM_PLAYERS[self.current_pos]:
+            is_cur = self.picks.get(self.current_pos, {}).get("name") == pl["name"]
+            player_options.append(discord.SelectOption(
+                label=f"${pl['cost']} • {pl['name']}",
+                value=pl["name"],
+                description=f"{pl['tag'][:40]} ({pl['team']})",
+                default=is_cur,
+                emoji=pl["emoji"]
+            ))
+
+        player_select = discord.ui.Select(
+            placeholder=f"Draft a {self.current_pos} ({pos_fullnames[self.current_pos]})...",
+            options=player_options,
+            min_values=1,
+            max_values=1,
+            row=1
+        )
+        player_select.callback = self.on_player_select
+        self.add_item(player_select)
+
+        submit_btn = discord.ui.Button(label="Lock In & Save Squad", style=discord.ButtonStyle.success, emoji="✅", row=2)
+        submit_btn.callback = self.on_submit
+        self.add_item(submit_btn)
+
+        random_btn = discord.ui.Button(label="Random $15 Squad", style=discord.ButtonStyle.primary, emoji="🎲", row=2)
+        random_btn.callback = self.on_random
+        self.add_item(random_btn)
+
+        reset_btn = discord.ui.Button(label="Reset", style=discord.ButtonStyle.secondary, emoji="🧹", row=2)
+        reset_btn.callback = self.on_reset
+        self.add_item(reset_btn)
+
+    def make_draft_embed(self) -> discord.Embed:
+        spent = sum(p["cost"] for p in self.picks.values())
+        rem = 15 - spent
+        status_color = discord.Color.green() if spent <= 15 else discord.Color.red()
+
+        embed = discord.Embed(
+            title="🏀 Space GM Draft Room: $15 All-Time Dream Team",
+            description=(
+                "Construct your ultimate 5-man starting lineup under the strict **$15 salary cap**!\n"
+                "Pick a player for each position using the dropdowns below.\n"
+            ),
+            color=status_color
+        )
+
+        pos_lines = []
+        for pos in ["PG", "SG", "SF", "PF", "C"]:
+            p = self.picks.get(pos)
+            active_marker = " 👈 *(Drafting)*" if pos == self.current_pos else ""
+            if p:
+                pos_lines.append(f"• **{pos}**: {p['emoji']} **{p['name']}** (`${p['cost']}`) — *{p['tag']}*{active_marker}")
+            else:
+                pos_lines.append(f"• **{pos}**: *[Empty Slot]*{active_marker}")
+
+        embed.add_field(name="📋 Current Lineup", value="\n".join(pos_lines), inline=False)
+        
+        budget_str = f"**${spent}** / **$15**"
+        if spent > 15:
+            budget_str += f" ⚠️ **(OVER BUDGET BY ${spent - 15}!)**"
+        elif spent == 15:
+            budget_str += " 💎 **(Maxed Out $15/15 — Perfect!)**"
+        else:
+            budget_str += f" *(Remaining: ${rem})*"
+
+        embed.add_field(name="💰 Salary Cap Status", value=budget_str, inline=False)
+        
+        price_guide = (
+            "• **$5**: Curry (PG), Jordan (SG), LeBron (SF), Duncan (PF), Shaq (C)\n"
+            "• **$4**: Magic (PG), Kobe (SG), Durant (SF), Bird (PF), Hakeem (C)\n"
+            "• **$3**: CP3 (PG), Wade (SG), Kawhi (SF), Dirk (PF), Jokić (C)\n"
+            "• **$2**: Kyrie (PG), Klay (SG), Butler (SF), AD (PF), Giannis (C)\n"
+            "• **$1**: Jrue (PG), White (SG), Caruso (SF), Naz Reid (PF), Wemby (C)"
+        )
+        embed.add_field(name="💵 Player Salary Board", value=price_guide, inline=False)
+        embed.set_footer(text="Sweety NBA Engine • Pick all 5 positions and click 'Lock In & Save Squad'")
+        return embed
+
+    async def on_pos_select(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ This is not your draft board! Run `/buildteam` to start your own.", ephemeral=True)
+            return
+        selected_pos = interaction.data["values"][0]
+        self.current_pos = selected_pos
+        self._build_components()
+        await interaction.response.edit_message(embed=self.make_draft_embed(), view=self)
+
+    async def on_player_select(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ This is not your draft board! Run `/buildteam` to start your own.", ephemeral=True)
+            return
+        chosen_name = interaction.data["values"][0]
+        chosen_player = find_nba_player(self.current_pos, chosen_name)
+        if chosen_player:
+            self.picks[self.current_pos] = chosen_player
+            
+        positions = ["PG", "SG", "SF", "PF", "C"]
+        for p in positions:
+            if p not in self.picks:
+                self.current_pos = p
+                break
+
+        self._build_components()
+        await interaction.response.edit_message(embed=self.make_draft_embed(), view=self)
+
+    async def on_random(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ This is not your draft board!", ephemeral=True)
+            return
+        self.picks = generate_random_valid_lineup()
+        self._build_components()
+        await interaction.response.edit_message(embed=self.make_draft_embed(), view=self)
+
+    async def on_reset(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ This is not your draft board!", ephemeral=True)
+            return
+        self.picks.clear()
+        self.current_pos = "PG"
+        self._build_components()
+        await interaction.response.edit_message(embed=self.make_draft_embed(), view=self)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ This is not your draft board!", ephemeral=True)
+            return
+
+        if len(self.picks) < 5:
+            missing = [pos for pos in ["PG", "SG", "SF", "PF", "C"] if pos not in self.picks]
+            await interaction.response.send_message(f"⚠️ **Incomplete Lineup!** You still need to pick: `{', '.join(missing)}`.", ephemeral=True)
+            return
+
+        total_cost = sum(p["cost"] for p in self.picks.values())
+        if total_cost > 15:
+            await interaction.response.send_message(f"❌ **Salary Cap Violation!** You spent **${total_cost}**, which exceeds the $15 limit by **${total_cost - 15}**. Downgrade a player to qualify.", ephemeral=True)
+            return
+
+        evaluation = evaluate_dream_team(self.picks)
+        now = time.time()
+        
+        await db.save_dream_team(
+            user_id=interaction.user.id,
+            guild_id=interaction.guild.id if interaction.guild else None,
+            pg=self.picks["PG"]["name"],
+            sg=self.picks["SG"]["name"],
+            sf=self.picks["SF"]["name"],
+            pf=self.picks["PF"]["name"],
+            c=self.picks["C"]["name"],
+            total_cost=total_cost,
+            ovr_rating=evaluation["ovr"],
+            team_data=json.dumps(self.picks),
+            updated_at=now
+        )
+
+        card_embed = discord.Embed(
+            title=f"🏆 {interaction.user.display_name}'s $15 Dream Team",
+            description=f"**Rating**: `{evaluation['ovr']} OVR` • **{evaluation['tier']}**\n**Salary Spent**: `${total_cost} / $15`",
+            color=evaluation["color"]
+        )
+        card_embed.set_thumbnail(url=interaction.user.display_avatar.url)
+
+        lineup_text = (
+            f"🏀 **PG**: {self.picks['PG']['emoji']} **{self.picks['PG']['name']}** (`${self.picks['PG']['cost']}`)\n"
+            f"🏀 **SG**: {self.picks['SG']['emoji']} **{self.picks['SG']['name']}** (`${self.picks['SG']['cost']}`)\n"
+            f"🏀 **SF**: {self.picks['SF']['emoji']} **{self.picks['SF']['name']}** (`${self.picks['SF']['cost']}`)\n"
+            f"🏀 **PF**: {self.picks['PF']['emoji']} **{self.picks['PF']['name']}** (`${self.picks['PF']['cost']}`)\n"
+            f"🏀 **C**: {self.picks['C']['emoji']} **{self.picks['C']['name']}** (`${self.picks['C']['cost']}`)"
+        )
+        card_embed.add_field(name="⭐ Starting 5 Lineup", value=lineup_text, inline=False)
+
+        stats_text = (
+            f"• 🎯 **3PT Spacing**: `{evaluation['avg_3pt']}/99`\n"
+            f"• 🔒 **Defense & Clamp**: `{evaluation['avg_def']}/99`\n"
+            f"• 🧠 **Playmaking / IQ**: `{evaluation['avg_ply']}/99`\n"
+            f"• 💥 **Inside Finishing**: `{evaluation['avg_ins']}/99`\n"
+            f"• 👑 **Clutch Rating**: `{evaluation['avg_clu']}/99`"
+        )
+        card_embed.add_field(name="📊 Team Attribute Breakdown", value=stats_text, inline=True)
+
+        card_embed.add_field(name="🔥 Squad Strengths", value="\n".join(evaluation["strengths"]), inline=False)
+        if evaluation["weaknesses"]:
+            card_embed.add_field(name="⚠️ Potential Weaknesses", value="\n".join(evaluation["weaknesses"]), inline=False)
+
+        card_embed.set_footer(text="Challenge friends to a 7-Game Finals series using /teambattle @user!")
+        card_embed.timestamp = discord.utils.utcnow()
+
+        for child in self.children:
+            child.disabled = True
+
+        await interaction.response.edit_message(embed=card_embed, view=self)
+
+
+def extract_picks_from_row(row: Any) -> Dict[str, Dict[str, Any]]:
+    """Extracts 5-man roster dictionary from a database row with robust fallbacks."""
+    team_data_raw = row.get("team_data") if isinstance(row, dict) else row[9]
+    picks = {}
+    if team_data_raw:
+        try:
+            picks = json.loads(team_data_raw)
+        except Exception:
+            pass
+    if not picks or len(picks) < 5:
+        pg_name = row.get("pg") if isinstance(row, dict) else row[2]
+        sg_name = row.get("sg") if isinstance(row, dict) else row[3]
+        sf_name = row.get("sf") if isinstance(row, dict) else row[4]
+        pf_name = row.get("pf") if isinstance(row, dict) else row[5]
+        c_name = row.get("c") if isinstance(row, dict) else row[6]
+        picks = {
+            "PG": find_nba_player("PG", str(pg_name)) or NBA_DREAM_PLAYERS["PG"][0],
+            "SG": find_nba_player("SG", str(sg_name)) or NBA_DREAM_PLAYERS["SG"][0],
+            "SF": find_nba_player("SF", str(sf_name)) or NBA_DREAM_PLAYERS["SF"][0],
+            "PF": find_nba_player("PF", str(pf_name)) or NBA_DREAM_PLAYERS["PF"][0],
+            "C": find_nba_player("C", str(c_name)) or NBA_DREAM_PLAYERS["C"][0],
+        }
+    return picks
+
+
+def build_myteam_embed(target: Union[discord.Member, discord.User], row: Any) -> discord.Embed:
+    """Builds a comprehensive, rich card embed showcasing a member's $15 Dream Team squad & ratings."""
+    picks = extract_picks_from_row(row)
+    evaluation = evaluate_dream_team(picks)
+    total_cost = evaluation["total_cost"]
+
+    card_embed = discord.Embed(
+        title=f"🏆 {target.display_name}'s $15 All-Time Dream Team",
+        description=f"**Rating**: `{evaluation['ovr']} OVR` • **{evaluation['tier']}**\n**Salary Cap**: `${total_cost} / $15`",
+        color=evaluation["color"]
+    )
+    if hasattr(target, "display_avatar") and target.display_avatar:
+        card_embed.set_thumbnail(url=target.display_avatar.url)
+
+    lineup_text = (
+        f"🏀 **PG**: {picks['PG']['emoji']} **{picks['PG']['name']}** (`${picks['PG']['cost']}`)\n"
+        f"🏀 **SG**: {picks['SG']['emoji']} **{picks['SG']['name']}** (`${picks['SG']['cost']}`)\n"
+        f"🏀 **SF**: {picks['SF']['emoji']} **{picks['SF']['name']}** (`${picks['SF']['cost']}`)\n"
+        f"🏀 **PF**: {picks['PF']['emoji']} **{picks['PF']['name']}** (`${picks['PF']['cost']}`)\n"
+        f"🏀 **C**: {picks['C']['emoji']} **{picks['C']['name']}** (`${picks['C']['cost']}`)"
+    )
+    card_embed.add_field(name="⭐ Starting 5 Lineup", value=lineup_text, inline=False)
+
+    stats_text = (
+        f"• 🎯 **3PT Spacing**: `{evaluation['avg_3pt']}/99`\n"
+        f"• 🔒 **Defense & Clamp**: `{evaluation['avg_def']}/99`\n"
+        f"• 🧠 **Playmaking / IQ**: `{evaluation['avg_ply']}/99`\n"
+        f"• 💥 **Inside Finishing**: `{evaluation['avg_ins']}/99`\n"
+        f"• 👑 **Clutch Rating**: `{evaluation['avg_clu']}/99`"
+    )
+    card_embed.add_field(name="📊 Team Attribute Breakdown", value=stats_text, inline=True)
+    card_embed.add_field(name="🔥 Squad Strengths", value="\n".join(evaluation["strengths"]), inline=False)
+    if evaluation["weaknesses"]:
+        card_embed.add_field(name="⚠️ Potential Weaknesses", value="\n".join(evaluation["weaknesses"]), inline=False)
+
+    card_embed.set_footer(text="Challenge friends to a Best-of-7 Finals series using /teambattle @user or !teambattle @user!")
+    card_embed.timestamp = discord.utils.utcnow()
+    return card_embed
+
+
+def build_teambattle_embed(author: Union[discord.Member, discord.User], opponent: Union[discord.Member, discord.User], row_a: Any, row_b: Any) -> discord.Embed:
+    """Simulates a 7-Game NBA Finals Series between two squads and generates a series summary embed."""
+    picks_a = extract_picks_from_row(row_a)
+    picks_b = extract_picks_from_row(row_b)
+
+    eval_a = evaluate_dream_team(picks_a)
+    eval_b = evaluate_dream_team(picks_b)
+
+    series_result = simulate_7_game_series(eval_a, eval_b, author.display_name, opponent.display_name)
+
+    winner_name = series_result["winner"]
+    winner_is_a = (winner_name == author.display_name)
+    winner_member = author if winner_is_a else opponent
+
+    embed = discord.Embed(
+        title=f"🏆 NBA FINALS: {author.display_name} vs {opponent.display_name}",
+        description=(
+            f"**Series Outcome**: 👑 **`{series_result['winner']}`** wins the Finals **`{series_result['score']}`**!\n\n"
+            f"• **{author.display_name} ({eval_a['ovr']} OVR)**: {eval_a['tier'].split('•')[0].strip()}\n"
+            f"• **{opponent.display_name} ({eval_b['ovr']} OVR)**: {eval_b['tier'].split('•')[0].strip()}"
+        ),
+        color=discord.Color.gold() if winner_is_a else discord.Color.purple()
+    )
+    if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
+        embed.set_thumbnail(url=winner_member.display_avatar.url)
+
+    game_lines = []
+    for g in series_result["games"]:
+        g_num = g["game"]
+        s_a = g["score_a"]
+        s_b = g["score_b"]
+        w = g["winner"]
+        w_icon = "🔥" if w == author.display_name else "⚡"
+        game_lines.append(f"**Game {g_num}**: {author.display_name} `{s_a}` - `{s_b}` {opponent.display_name} ({w_icon} **{w}**)")
+
+    embed.add_field(name="📜 Series Game Log (Best of 7)", value="\n".join(game_lines), inline=False)
+    
+    mvp = series_result["mvp"]
+    embed.add_field(
+        name="🎖️ Finals MVP Trophy",
+        value=f"{mvp.get('emoji', '🐐')} **{mvp.get('name', 'Michael Jordan')}** ({mvp.get('tag', 'Dominant Series')})",
+        inline=False
+    )
+    embed.set_footer(text="Sweety NBA Simulation Engine • Build your squad with /buildteam or !buildteam")
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def build_teamleaderboard_embed(rows: List[Any]) -> discord.Embed:
+    """Builds the server leaderboard embed for highest-rated dream teams."""
+    if not rows:
+        embed = discord.Embed(
+            title="🏀 $15 Dream Team Server Leaderboard",
+            description="No dream teams have been built yet! Be the first to build a squad with `/buildteam` or `!buildteam`.",
+            color=discord.Color.blue()
+        )
+        embed.timestamp = discord.utils.utcnow()
+        return embed
+
+    embed = discord.Embed(
+        title="🏀 $15 Dream Team Server Leaderboard",
+        description="Top 10 highest-rated General Manager rosters in the server:\n",
+        color=discord.Color.gold()
+    )
+
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    for idx, r in enumerate(rows):
+        uid = r["user_id"] if isinstance(r, dict) else r[0]
+        ovr = float(r["ovr_rating"] if isinstance(r, dict) else r[8])
+        cost = r["total_cost"] if isinstance(r, dict) else r[7]
+        pg = r["pg"] if isinstance(r, dict) else r[2]
+        sg = r["sg"] if isinstance(r, dict) else r[3]
+        sf = r["sf"] if isinstance(r, dict) else r[4]
+        pf = r["pf"] if isinstance(r, dict) else r[5]
+        c = r["c"] if isinstance(r, dict) else r[6]
+
+        medal = medals[idx] if idx < len(medals) else f"#{idx+1}"
+        embed.add_field(
+            name=f"{medal} <@{uid}> — `{ovr} OVR` (${cost}/$15)",
+            value=f"• **5**: `{pg}` • `{sg}` • `{sf}` • `{pf}` • `{c}`",
+            inline=False
+        )
+
+    embed.set_footer(text="Build or update your $15 squad with /buildteam or !buildteam!")
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
 # ── Social & Anime Action GIFs Suite ───────────────────────────────────────
 ACTION_METADATA = {
     "hug": {
@@ -2028,6 +2607,7 @@ class GeminiBot(commands.Bot):
         super().__init__(
             command_prefix="!",
             intents=intents,
+            help_command=None,
             status=discord.Status.online,
             activity=discord.Activity(type=discord.ActivityType.watching, name="/help | @Sweety")
         )
@@ -2256,23 +2836,37 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
 
 
 
-# ── App Slash Commands ──────────────────────────────────────────────────────
+# ── App Slash & Prefix Help ──────────────────────────────────────────────────
 
-@bot.tree.command(name="help", description="Show all available commands and help options")
-async def help_command(interaction: discord.Interaction):
+def make_help_embed() -> discord.Embed:
+    """Builds the global help guide embed with all system features."""
     embed = discord.Embed(
         title="🤖 Discord Gemini Server Builder & Shield", 
-        description="An all-in-one AI Architect, Auto-Mod, and Community Restorer Bot powered by Gemini 2.5 Flash / Groq!", 
+        description="An all-in-one AI Architect, Auto-Mod, Community Restorer Bot, and NBA Game Engine powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
+    embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View your (or someone's) squad, OVR rating & synergy\n• `/teambattle <opponent>` / `!teambattle` — Simulated 7-game NBA Finals Series showdown\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server", inline=False)
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
     embed.add_field(name="💖 **Wholesome Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/pat [user]` — Wholesome anime headpats\n• `/highfive [user]` — Epic high five\n• `/wave [user]` — Friendly anime wave\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/punch [user]` — Deliver a super anime punch", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
+    return embed
+
+
+@bot.tree.command(name="help", description="Show all available commands and help options")
+async def help_command(interaction: discord.Interaction):
+    embed = make_help_embed()
     await interaction.response.send_message(embed=embed)
+
+
+@bot.command(name="help")
+async def help_prefix_cmd(ctx: commands.Context):
+    """Show all available commands and help options: !help"""
+    embed = make_help_embed()
+    await ctx.send(embed=embed)
 
 
 
@@ -2990,6 +3584,63 @@ async def afk_slash_cmd(interaction: discord.Interaction, reason: Optional[str] 
     )
     embed.timestamp = discord.utils.utcnow()
     await interaction.response.send_message(embed=embed)
+
+
+# ── $15 All-Time NBA Dream Team Slash Commands ──────────────────────────────
+
+@bot.tree.command(name="buildteam", description="🏀 Open the interactive GM Draft Room to build your $15 All-Time NBA Starting 5")
+@app_commands.guild_only()
+async def buildteam_slash_cmd(interaction: discord.Interaction):
+    view = BuildTeamView(author_id=interaction.user.id)
+    embed = view.make_draft_embed()
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@bot.tree.command(name="myteam", description="🏀 View your (or another member's) active $15 All-Time Dream Team squad & OVR ratings")
+@app_commands.describe(user="The member whose dream team you want to view (defaults to yourself)")
+@app_commands.guild_only()
+async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[discord.Member] = None):
+    target = user or interaction.user
+    row = await db.get_dream_team(target.id)
+    if not row:
+        if target.id == interaction.user.id:
+            await interaction.response.send_message("❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` to draft your 5-man championship squad.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ **{target.display_name}** hasn't drafted a $15 Dream Team yet. Tell them to run `/buildteam`!", ephemeral=True)
+        return
+
+    card_embed = build_myteam_embed(target, row)
+    await interaction.response.send_message(embed=card_embed)
+
+
+@bot.tree.command(name="teambattle", description="🏀 Challenge another member's $15 Dream Team to a simulated 7-Game NBA Finals Series!")
+@app_commands.describe(opponent="The member whose dream team you want to challenge")
+@app_commands.guild_only()
+async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: discord.Member):
+    if opponent.id == interaction.user.id:
+        await interaction.response.send_message("❌ You cannot battle your own team! Challenge another server member.", ephemeral=True)
+        return
+
+    row_a = await db.get_dream_team(interaction.user.id)
+    if not row_a:
+        await interaction.response.send_message("❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` to draft your squad before challenging others.", ephemeral=True)
+        return
+
+    row_b = await db.get_dream_team(opponent.id)
+    if not row_b:
+        await interaction.response.send_message(f"❌ **{opponent.display_name}** hasn't built a $15 Dream Team yet! Ask them to draft one with `/buildteam`.", ephemeral=True)
+        return
+
+    battle_embed = build_teambattle_embed(interaction.user, opponent, row_a, row_b)
+    await interaction.response.send_message(embed=battle_embed)
+
+
+@bot.tree.command(name="teamleaderboard", description="🏀 View the server leaderboard of highest-rated $15 Dream Teams")
+@app_commands.guild_only()
+async def teamleaderboard_slash_cmd(interaction: discord.Interaction):
+    rows = await db.get_top_dream_teams(10)
+    lb_embed = build_teamleaderboard_embed(rows)
+    await interaction.response.send_message(embed=lb_embed)
 
 
 # ── Social & Wholesome Anime Action Slash Commands ──────────────────────────
@@ -4307,6 +4958,65 @@ async def punch_prefix_cmd(ctx: commands.Context, member: Optional[discord.Membe
     target = member or ctx.author
     embed = create_action_embed("punch", ctx.author, target, bot.user)
     await ctx.send(embed=embed)
+
+
+# ── $15 All-Time NBA Dream Team Prefix Commands ─────────────────────────────
+
+@bot.command(name="buildteam", aliases=["draftteam", "nbadraft"])
+@commands.guild_only()
+async def buildteam_prefix_cmd(ctx: commands.Context):
+    """Open the interactive GM Draft Room to build your $15 All-Time NBA Starting 5: !buildteam"""
+    view = BuildTeamView(author_id=ctx.author.id)
+    embed = view.make_draft_embed()
+    await ctx.send(embed=embed, view=view)
+
+
+@bot.command(name="myteam", aliases=["squad", "dreamteam"])
+@commands.guild_only()
+async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """View your (or another member's) active $15 Dream Team squad & OVR ratings: !myteam [@user]"""
+    target = member or ctx.author
+    row = await db.get_dream_team(target.id)
+    if not row:
+        if target.id == ctx.author.id:
+            await ctx.send(f"❌ {ctx.author.mention} **You haven't built a $15 Dream Team yet!**\nUse `!buildteam` or `/buildteam` to draft your 5-man championship squad.")
+        else:
+            await ctx.send(f"❌ **{target.display_name}** hasn't drafted a $15 Dream Team yet. Tell them to run `!buildteam`!")
+        return
+
+    card_embed = build_myteam_embed(target, row)
+    await ctx.send(embed=card_embed)
+
+
+@bot.command(name="teambattle", aliases=["finals", "nbabattle", "squadbattle"])
+@commands.guild_only()
+async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member):
+    """Challenge another member's $15 Dream Team to a simulated 7-Game NBA Finals Series: !teambattle @user"""
+    if opponent.id == ctx.author.id:
+        await ctx.send(f"❌ {ctx.author.mention} You cannot battle your own team! Challenge another server member: `!teambattle @user`")
+        return
+
+    row_a = await db.get_dream_team(ctx.author.id)
+    if not row_a:
+        await ctx.send(f"❌ {ctx.author.mention} **You haven't built a $15 Dream Team yet!**\nUse `!buildteam` to draft your squad before challenging others.")
+        return
+
+    row_b = await db.get_dream_team(opponent.id)
+    if not row_b:
+        await ctx.send(f"❌ **{opponent.display_name}** hasn't built a $15 Dream Team yet! Ask them to draft one with `!buildteam`.")
+        return
+
+    battle_embed = build_teambattle_embed(ctx.author, opponent, row_a, row_b)
+    await ctx.send(embed=battle_embed)
+
+
+@bot.command(name="teamleaderboard", aliases=["teamlb", "nbaleaderboard", "nbalb"])
+@commands.guild_only()
+async def teamleaderboard_prefix_cmd(ctx: commands.Context):
+    """View the server leaderboard of highest-rated $15 Dream Teams: !teamleaderboard or !teamlb"""
+    rows = await db.get_top_dream_teams(10)
+    lb_embed = build_teamleaderboard_embed(rows)
+    await ctx.send(embed=lb_embed)
 
 
 @bot.tree.command(name="mute", description="Timeout (mute) a member in the server")

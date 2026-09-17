@@ -244,6 +244,22 @@ class DatabaseManager:
                 afk_since REAL NOT NULL,
                 PRIMARY KEY (user_id, guild_id)
             );
+            """,
+            # Dream Teams Table ($15 All-Time Lineup Builder)
+            """
+            CREATE TABLE IF NOT EXISTS dream_teams (
+                user_id TEXT PRIMARY KEY,
+                guild_id TEXT,
+                pg TEXT NOT NULL,
+                sg TEXT NOT NULL,
+                sf TEXT NOT NULL,
+                pf TEXT NOT NULL,
+                c TEXT NOT NULL,
+                total_cost INTEGER NOT NULL,
+                ovr_rating REAL NOT NULL,
+                team_data TEXT,
+                updated_at REAL NOT NULL
+            );
             """
         ]
         
@@ -520,6 +536,24 @@ class DatabaseManager:
     async def get_all_afk_users(self) -> List[Dict[str, Any]]:
         """Loads all AFK records from database on startup."""
         return await self.fetch("SELECT user_id, guild_id, reason, afk_since FROM afk_users")
+
+    # ── Dream Teams ($15 All-Time Builder) ──────────────────────────────────
+    async def save_dream_team(self, user_id: Any, guild_id: Any, pg: str, sg: str, sf: str, pf: str, c: str, total_cost: int, ovr_rating: float, team_data: str, updated_at: float) -> bool:
+        """Saves or updates a user's $15 Dream Team lineup."""
+        if self.is_postgres:
+            query = "INSERT INTO dream_teams (user_id, guild_id, pg, sg, sf, pf, c, total_cost, ovr_rating, team_data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET guild_id = EXCLUDED.guild_id, pg = EXCLUDED.pg, sg = EXCLUDED.sg, sf = EXCLUDED.sf, pf = EXCLUDED.pf, c = EXCLUDED.c, total_cost = EXCLUDED.total_cost, ovr_rating = EXCLUDED.ovr_rating, team_data = EXCLUDED.team_data, updated_at = EXCLUDED.updated_at"
+        else:
+            query = "INSERT OR REPLACE INTO dream_teams (user_id, guild_id, pg, sg, sf, pf, c, total_cost, ovr_rating, team_data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        await self.execute(query, str(user_id), str(guild_id) if guild_id else None, pg, sg, sf, pf, c, int(total_cost), float(ovr_rating), team_data, float(updated_at))
+        return True
+
+    async def get_dream_team(self, user_id: Any) -> Optional[Dict[str, Any]]:
+        """Fetches a user's active $15 Dream Team lineup."""
+        return await self.fetchrow("SELECT user_id, guild_id, pg, sg, sf, pf, c, total_cost, ovr_rating, team_data, updated_at FROM dream_teams WHERE user_id = ?", str(user_id))
+
+    async def get_top_dream_teams(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Fetches the top dream teams ranked by OVR rating."""
+        return await self.fetch("SELECT user_id, guild_id, pg, sg, sf, pf, c, total_cost, ovr_rating, updated_at FROM dream_teams ORDER BY ovr_rating DESC, updated_at ASC LIMIT ?", int(limit))
 
     async def close(self):
         """Closes all database connections."""
