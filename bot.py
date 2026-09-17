@@ -1089,6 +1089,270 @@ async def log_mod_action(guild: discord.Guild, moderator: discord.User, target: 
         except Exception as e:
             logger.error(f"Failed to send mod action log: {e}")
 
+# ── Snipe & Edit-Snipe History Buffers & Helpers ───────────────────────────
+MAX_SNIPE_HISTORY = 10
+_snipe_cache: dict[int, list[dict]] = {}
+_editsnipe_cache: dict[int, list[dict]] = {}
+
+def record_deleted_message(message: discord.Message):
+    """Stores deleted message in channel ring buffer (capped at MAX_SNIPE_HISTORY)."""
+    if not message.guild or (message.author and message.author.bot):
+        return
+    # Skip if message has zero text, attachments, or stickers
+    if not message.content and not message.attachments and not getattr(message, "stickers", None):
+        return
+
+    chan_id = message.channel.id
+    if chan_id not in _snipe_cache:
+        _snipe_cache[chan_id] = []
+
+    attachments = []
+    for att in message.attachments:
+        ct = getattr(att, "content_type", "") or ""
+        fn = getattr(att, "filename", "") or ""
+        is_img = ct.startswith("image/") or fn.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
+        attachments.append({
+            "filename": fn or "attachment",
+            "url": att.url,
+            "proxy_url": getattr(att, "proxy_url", att.url),
+            "is_image": is_img
+        })
+
+    stickers = []
+    if hasattr(message, "stickers"):
+        for st in message.stickers:
+            stickers.append({
+                "name": getattr(st, "name", "sticker"),
+                "url": getattr(st, "url", "")
+            })
+
+    entry = {
+        "author": message.author,
+        "author_name": str(message.author),
+        "author_display_name": getattr(message.author, "display_name", str(message.author)),
+        "author_avatar": message.author.display_avatar.url if getattr(message.author, "display_avatar", None) else None,
+        "author_id": message.author.id,
+        "content": message.content or "",
+        "created_at": message.created_at,
+        "deleted_at": discord.utils.utcnow(),
+        "attachments": attachments,
+        "stickers": stickers,
+        "channel_id": chan_id,
+        "channel_name": getattr(message.channel, "name", "channel")
+    }
+
+    _snipe_cache[chan_id].insert(0, entry)
+    if len(_snipe_cache[chan_id]) > MAX_SNIPE_HISTORY:
+        _snipe_cache[chan_id].pop()
+
+def record_edited_message(before: discord.Message, after: discord.Message):
+    """Stores edited message in channel ring buffer (capped at MAX_SNIPE_HISTORY)."""
+    if not before.guild or (before.author and before.author.bot):
+        return
+    if before.content == after.content:
+        return
+
+    chan_id = before.channel.id
+    if chan_id not in _editsnipe_cache:
+        _editsnipe_cache[chan_id] = []
+
+    entry = {
+        "author": before.author,
+        "author_name": str(before.author),
+        "author_display_name": getattr(before.author, "display_name", str(before.author)),
+        "author_avatar": before.author.display_avatar.url if getattr(before.author, "display_avatar", None) else None,
+        "author_id": before.author.id,
+        "before_content": before.content or "*[No text content]*",
+        "after_content": after.content or "*[No text content]*",
+        "created_at": before.created_at,
+        "edited_at": after.edited_at or discord.utils.utcnow(),
+        "jump_url": getattr(after, "jump_url", ""),
+        "channel_id": chan_id,
+        "channel_name": getattr(before.channel, "name", "channel")
+    }
+
+    _editsnipe_cache[chan_id].insert(0, entry)
+    if len(_editsnipe_cache[chan_id]) > MAX_SNIPE_HISTORY:
+        _editsnipe_cache[chan_id].pop()
+
+def create_snipe_embed(channel: Union[discord.TextChannel, discord.Thread, discord.abc.GuildChannel, Any], index: int = 1) -> tuple[Optional[discord.Embed], Optional[str]]:
+    """Generates a Discord Embed for the sniped deleted message at 1-based index."""
+    chan_id = getattr(channel, "id", None)
+    if not chan_id:
+        return None, "❌ Could not determine channel."
+    cache = _snipe_cache.get(chan_id, [])
+    if not cache:
+        return None, f"🎯 **No recently deleted messages found in {getattr(channel, 'mention', f'#{channel}')}!**"
+
+    total = len(cache)
+    if index < 1 or index > total:
+        return None, f"⚠️ **Invalid index `{index}`.** There {'is' if total == 1 else 'are'} only **{total}** deleted message{'s' if total != 1 else ''} saved in {getattr(channel, 'mention', f'#{channel}')}. (Choose 1 to {total})"
+
+    entry = cache[index - 1]
+    
+    author_display = entry["author_display_name"]
+    author_id = entry["author_id"]
+    content = entry["content"]
+    created_at = entry["created_at"]
+    deleted_at = entry["deleted_at"]
+    attachments = entry["attachments"]
+    stickers = entry["stickers"]
+
+    embed = discord.Embed(
+        title=f"🎯 Sniped Deleted Message ({index}/{total})",
+        color=discord.Color.from_rgb(255, 75, 75)
+    )
+    
+    if entry.get("author_avatar"):
+        embed.set_author(name=f"{author_display} (@{entry['author_name']})", icon_url=entry["author_avatar"])
+    else:
+        embed.set_author(name=f"{author_display} (@{entry['author_name']})")
+
+    if content:
+        if len(content) > 2000:
+            embed.description = content[:1990] + "..."
+        else:
+            embed.description = content
+    else:
+        embed.description = "*[No text content]*"
+
+    first_image_set = False
+    if attachments:
+        att_links = []
+        for att in attachments:
+            if att.get("is_image") and not first_image_set:
+                embed.set_image(url=att.get("proxy_url") or att.get("url"))
+                first_image_set = True
+            att_links.append(f"[{att['filename']}]({att['url']})")
+        
+        embed.add_field(
+            name=f"📎 Attachments ({len(attachments)})",
+            value="\n".join(att_links)[:1000],
+            inline=False
+        )
+
+    if stickers:
+        st_list = [f"• {s['name']}" for s in stickers]
+        embed.add_field(
+            name="🏷️ Stickers",
+            value="\n".join(st_list)[:1000],
+            inline=False
+        )
+
+    created_ts = int(created_at.timestamp()) if isinstance(created_at, datetime.datetime) else int(time.time())
+    deleted_ts = int(deleted_at.timestamp()) if isinstance(deleted_at, datetime.datetime) else int(time.time())
+    
+    embed.add_field(
+        name="🕒 Sent",
+        value=f"<t:{created_ts}:R>\n`<t:{created_ts}:f>`",
+        inline=True
+    )
+    embed.add_field(
+        name="🗑️ Deleted",
+        value=f"<t:{deleted_ts}:R>\n`<t:{deleted_ts}:f>`",
+        inline=True
+    )
+    
+    embed.set_footer(text=f"Author ID: {author_id} • Channel: #{getattr(channel, 'name', 'channel')} • Index {index}/{total}")
+    return embed, None
+
+def create_editsnipe_embed(channel: Union[discord.TextChannel, discord.Thread, discord.abc.GuildChannel, Any], index: int = 1) -> tuple[Optional[discord.Embed], Optional[str]]:
+    """Generates a Discord Embed for the sniped edited message at 1-based index."""
+    chan_id = getattr(channel, "id", None)
+    if not chan_id:
+        return None, "❌ Could not determine channel."
+    cache = _editsnipe_cache.get(chan_id, [])
+    if not cache:
+        return None, f"✏️ **No recently edited messages found in {getattr(channel, 'mention', f'#{channel}')}!**"
+
+    total = len(cache)
+    if index < 1 or index > total:
+        return None, f"⚠️ **Invalid index `{index}`.** There {'is' if total == 1 else 'are'} only **{total}** edited message{'s' if total != 1 else ''} saved in {getattr(channel, 'mention', f'#{channel}')}. (Choose 1 to {total})"
+
+    entry = cache[index - 1]
+    
+    author_display = entry["author_display_name"]
+    author_id = entry["author_id"]
+    before_content = entry["before_content"]
+    after_content = entry["after_content"]
+    created_at = entry["created_at"]
+    edited_at = entry["edited_at"]
+    jump_url = entry.get("jump_url", "")
+
+    embed = discord.Embed(
+        title=f"✏️ Sniped Edited Message ({index}/{total})",
+        color=discord.Color.gold()
+    )
+    
+    if entry.get("author_avatar"):
+        embed.set_author(name=f"{author_display} (@{entry['author_name']})", icon_url=entry["author_avatar"])
+    else:
+        embed.set_author(name=f"{author_display} (@{entry['author_name']})")
+
+    embed.add_field(
+        name="🔴 Before Edit",
+        value=before_content[:1000] if before_content else "*[Empty]*",
+        inline=False
+    )
+    embed.add_field(
+        name="🟢 After Edit",
+        value=after_content[:1000] if after_content else "*[Empty]*",
+        inline=False
+    )
+
+    created_ts = int(created_at.timestamp()) if isinstance(created_at, datetime.datetime) else int(time.time())
+    edited_ts = int(edited_at.timestamp()) if isinstance(edited_at, datetime.datetime) else int(time.time())
+
+    time_text = f"**Sent:** <t:{created_ts}:R> | **Edited:** <t:{edited_ts}:R>"
+    if jump_url:
+        time_text += f"\n🔗 **[Jump to Message]({jump_url})**"
+
+    embed.add_field(name="🕒 Details", value=time_text, inline=False)
+    embed.set_footer(text=f"Author ID: {author_id} • Channel: #{getattr(channel, 'name', 'channel')} • Index {index}/{total}")
+    return embed, None
+
+def clear_snipe_history(channel_id: Optional[int] = None) -> tuple[int, int]:
+    """Clears snipe and editsnipe cache for a specific channel or all channels. Returns (deleted_count, edited_count)."""
+    if channel_id is not None:
+        del_cnt = len(_snipe_cache.pop(channel_id, []))
+        edit_cnt = len(_editsnipe_cache.pop(channel_id, []))
+        return del_cnt, edit_cnt
+    else:
+        del_cnt = sum(len(v) for v in _snipe_cache.values())
+        edit_cnt = sum(len(v) for v in _editsnipe_cache.values())
+        _snipe_cache.clear()
+        _editsnipe_cache.clear()
+        return del_cnt, edit_cnt
+
+def parse_snipe_args(ctx: commands.Context, args: tuple) -> tuple[discord.TextChannel, int]:
+    """Helper to flexibly parse (channel, index) from any combination of args e.g. !snipe, !snipe 2, !snipe #chat, !snipe #chat 2, !snipe 2 #chat"""
+    channel = ctx.channel
+    index = 1
+    for arg in args:
+        if isinstance(arg, discord.TextChannel):
+            channel = arg
+            continue
+        if isinstance(arg, str):
+            match = re.match(r'<#(\d+)>', arg.strip())
+            if match:
+                ch = ctx.guild.get_channel(int(match.group(1)))
+                if ch and isinstance(ch, discord.TextChannel):
+                    channel = ch
+                    continue
+            ch = discord.utils.get(ctx.guild.text_channels, name=arg.lstrip("#"))
+            if ch:
+                channel = ch
+                continue
+            if arg.isdigit():
+                val = int(arg)
+                if val > 100000:
+                    ch = ctx.guild.get_channel(val)
+                    if ch and isinstance(ch, discord.TextChannel):
+                        channel = ch
+                        continue
+                index = max(1, val)
+    return channel, index
+
 # ── Teardown & Nuke Handlers ───────────────────────────────────────────────
 
 async def teardown_guild(guild):
@@ -1631,7 +1895,7 @@ async def help_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
     embed.add_field(name="🏗️ **AI Server Architect**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="🏀 **SpaceYT Basketball Arena & Debates**", value="• `/debate [channel] [ping]` — Post a spicy NBA debate with live voting buttons\n• `/startbenchcut` — Roll a 3-player Start, Bench, Cut challenge\n• `/setdebatechannel <channel>` — Set automated daily debate channel\n• `/setdebatemention <type>` — Configure debate ping tag (@here/none)\n• `/toggledebates <status>` — Turn daily auto-debates on or off", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
@@ -2135,6 +2399,56 @@ async def purge_command(interaction: discord.Interaction, amount: int):
     except Exception as e:
         logger.error(f"Purge failed: {e}", exc_info=True)
         await interaction.followup.send("❌ Purge failed due to an internal error.", ephemeral=True)
+
+
+@bot.tree.command(name="snipe", description="View recently deleted messages in this or a specific channel")
+@app_commands.describe(
+    channel="Target channel to snipe from (defaults to current channel)",
+    index="Snipe history index (1 = most recent, 2 = 2nd most recent, etc.)"
+)
+@app_commands.guild_only()
+async def snipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, index: Optional[int] = 1):
+    target_channel = channel or interaction.channel
+    embed, err_msg = create_snipe_embed(target_channel, index=index or 1)
+    if err_msg:
+        await interaction.response.send_message(err_msg, ephemeral=True)
+    else:
+        await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="editsnipe", description="View recently edited messages in this or a specific channel")
+@app_commands.describe(
+    channel="Target channel to editsnipe from (defaults to current channel)",
+    index="Edit history index (1 = most recent, 2 = 2nd most recent, etc.)"
+)
+@app_commands.guild_only()
+async def editsnipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, index: Optional[int] = 1):
+    target_channel = channel or interaction.channel
+    embed, err_msg = create_editsnipe_embed(target_channel, index=index or 1)
+    if err_msg:
+        await interaction.response.send_message(err_msg, ephemeral=True)
+    else:
+        await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="clearsnipe", description="Clear deleted and edited message snipe history for safety/privacy")
+@app_commands.describe(channel="Channel to clear snipe cache for (defaults to current channel)")
+@app_commands.default_permissions(manage_messages=True)
+@app_commands.guild_only()
+async def clearsnipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
+    if not is_protected(interaction.user) and not interaction.permissions.manage_messages:
+        await interaction.response.send_message("❌ You need `Manage Messages` permissions to clear the snipe cache.", ephemeral=True)
+        return
+
+    target_channel = channel or interaction.channel
+    del_cnt, edit_cnt = clear_snipe_history(target_channel.id)
+    
+    embed = discord.Embed(
+        title="🧹 Snipe History Cleared",
+        description=f"Cleared **`{del_cnt}`** deleted messages and **`{edit_cnt}`** edited messages from {target_channel.mention}.",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="antiraid", description="Configure automated Join-Raid detection and Server Raid Shield")
@@ -3114,7 +3428,46 @@ async def sync_prefix_cmd(ctx: commands.Context):
         await msg.edit(content=f"❌ Command sync failed: `{e}`")
 
 
+@bot.command(name="snipe")
+@commands.guild_only()
+async def snipe_prefix_cmd(ctx: commands.Context, *args):
+    """View recently deleted messages: !snipe [channel] [index]"""
+    channel, index = parse_snipe_args(ctx, args)
+    embed, err_msg = create_snipe_embed(channel, index=index)
+    if err_msg:
+        await ctx.send(err_msg)
+    else:
+        await ctx.send(embed=embed)
 
+
+@bot.command(name="editsnipe", aliases=["esnipe"])
+@commands.guild_only()
+async def editsnipe_prefix_cmd(ctx: commands.Context, *args):
+    """View recently edited messages: !editsnipe [channel] [index] (or !esnipe)"""
+    channel, index = parse_snipe_args(ctx, args)
+    embed, err_msg = create_editsnipe_embed(channel, index=index)
+    if err_msg:
+        await ctx.send(err_msg)
+    else:
+        await ctx.send(embed=embed)
+
+
+@bot.command(name="clearsnipe", aliases=["csnipe", "clearsnipes"])
+@commands.guild_only()
+async def clearsnipe_prefix_cmd(ctx: commands.Context, channel: Optional[discord.TextChannel] = None):
+    """Clear deleted & edited snipe history: !clearsnipe [channel] (or !csnipe)"""
+    if not is_protected(ctx.author) and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ You need `Manage Messages` permission to clear snipe cache.")
+        return
+    
+    target_channel = channel or ctx.channel
+    del_cnt, edit_cnt = clear_snipe_history(target_channel.id)
+    embed = discord.Embed(
+        title="🧹 Snipe History Cleared",
+        description=f"Cleared **`{del_cnt}`** deleted messages and **`{edit_cnt}`** edited messages from {target_channel.mention}.",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
 
 
 @bot.tree.command(name="mute", description="Timeout (mute) a member in the server")
@@ -4122,6 +4475,24 @@ async def on_voice_state_update(member, before, after):
                 bot.temp_voice_channel_ids.discard(before.channel.id)
             except Exception as e:
                 logger.error(f"Error deleting empty temp channel: {e}")
+
+
+@bot.event
+async def on_message_delete(message: discord.Message):
+    """Captures deleted messages into the snipe ring buffer."""
+    try:
+        record_deleted_message(message)
+    except Exception as e:
+        logger.error(f"Error recording deleted message for snipe: {e}")
+
+
+@bot.event
+async def on_message_edit(before: discord.Message, after: discord.Message):
+    """Captures edited messages into the editsnipe ring buffer."""
+    try:
+        record_edited_message(before, after)
+    except Exception as e:
+        logger.error(f"Error recording edited message for editsnipe: {e}")
 
 
 @bot.event
