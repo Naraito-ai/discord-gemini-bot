@@ -2100,7 +2100,10 @@ class InteractiveTeamBattleView(discord.ui.View):
             return
 
         row_a = await db.get_dream_team(self.author.id) or self.row_a
-        row_b = await db.get_dream_team(self.opponent.id) or self.row_b
+        if getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id):
+            row_b = await ensure_sweety_ai_team(target_id=self.opponent.id) or self.row_b
+        else:
+            row_b = await db.get_dream_team(self.opponent.id) or self.row_b
         picks_a = extract_picks_from_row(row_a)
         picks_b = extract_picks_from_row(row_b)
         eval_a = evaluate_dream_team(picks_a)
@@ -2474,7 +2477,10 @@ class TeamBattleRematchView(discord.ui.View):
             return
 
         row_a = await db.get_dream_team(self.author.id) or self.row_a
-        row_b = await db.get_dream_team(self.opponent.id) or self.row_b
+        if getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id):
+            row_b = await ensure_sweety_ai_team(target_id=self.opponent.id) or self.row_b
+        else:
+            row_b = await db.get_dream_team(self.opponent.id) or self.row_b
         picks_a = extract_picks_from_row(row_a)
         picks_b = extract_picks_from_row(row_b)
         eval_a = evaluate_dream_team(picks_a)
@@ -2877,6 +2883,37 @@ def extract_picks_from_row(row: Any) -> Dict[str, Dict[str, Any]]:
             "C": find_nba_player("C", str(c_name)) or NBA_DREAM_PLAYERS["C"][0],
         }
     return picks
+
+
+async def ensure_sweety_ai_team(guild_id: Optional[int] = None, target_id: Optional[int] = None) -> Dict[str, Any]:
+    """Ensures Sweety AI Bot has an official balanced $15 All-Time Championship Dream Team saved in database."""
+    bot_id = target_id or (bot.user.id if bot.user else 719932313919684670)
+    row = await db.get_dream_team(bot_id)
+    if not row:
+        picks = {
+            "PG": find_nba_player("PG", "Jrue Holiday") or NBA_DREAM_PLAYERS["PG"][4],
+            "SG": find_nba_player("SG", "Michael Jordan") or NBA_DREAM_PLAYERS["SG"][0],
+            "SF": find_nba_player("SF", "LeBron James") or NBA_DREAM_PLAYERS["SF"][0],
+            "PF": find_nba_player("PF", "Anthony Davis") or NBA_DREAM_PLAYERS["PF"][3],
+            "C": find_nba_player("C", "Giannis Antetokounmpo") or NBA_DREAM_PLAYERS["C"][3],
+        }
+        eval_ai = evaluate_dream_team(picks)
+        now = time.time()
+        await db.save_dream_team(
+            user_id=bot_id,
+            guild_id=guild_id,
+            pg=picks["PG"]["name"],
+            sg=picks["SG"]["name"],
+            sf=picks["SF"]["name"],
+            pf=picks["PF"]["name"],
+            c=picks["C"]["name"],
+            total_cost=15,
+            ovr_rating=eval_ai["ovr"],
+            team_data=json.dumps(picks),
+            updated_at=now
+        )
+        row = await db.get_dream_team(bot_id)
+    return row
 
 
 NBA_ACHIEVEMENTS: Dict[str, Dict[str, str]] = {
@@ -4154,6 +4191,13 @@ class GeminiBot(commands.Bot):
         if uptime_key and render_url:
             asyncio.create_task(register_uptime_monitor(uptime_key, render_url))
 
+        # Step 8: Ensure Sweety AI Bot $15 Championship Team is ready
+        try:
+            await ensure_sweety_ai_team()
+            logger.info("🏀 Sweety AI $15 All-Time Championship Dream Team initialized")
+        except Exception as ai_team_err:
+            logger.warning(f"Could not init Sweety AI Dream Team: {ai_team_err}")
+
 bot = GeminiBot()
 
 @bot.tree.error
@@ -4984,7 +5028,11 @@ async def buildteam_slash_cmd(interaction: discord.Interaction):
 @app_commands.guild_only()
 async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[discord.Member] = None):
     target = user or interaction.user
-    row = await db.get_dream_team(target.id)
+    if getattr(target, "bot", False) or (bot.user and target.id == bot.user.id):
+        row = await ensure_sweety_ai_team(guild_id=interaction.guild.id if interaction.guild else None, target_id=target.id)
+    else:
+        row = await db.get_dream_team(target.id)
+    
     if not row:
         if target.id == interaction.user.id:
             await interaction.response.send_message("❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` to draft your 5-man championship squad.", ephemeral=True)
@@ -5007,12 +5055,27 @@ async def teamqueue_slash_cmd(interaction: discord.Interaction):
 @app_commands.guild_only()
 async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: discord.Member):
     if opponent.id == interaction.user.id:
-        await interaction.response.send_message("❌ You cannot battle your own team! Challenge another server member.", ephemeral=True)
+        await interaction.response.send_message("❌ You cannot battle your own team! Challenge another server member or `@Sweety`.", ephemeral=True)
         return
 
     row_a = await db.get_dream_team(interaction.user.id)
     if not row_a:
         await interaction.response.send_message("❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` to draft your squad before challenging others.", ephemeral=True)
+        return
+
+    if getattr(opponent, "bot", False) or (bot.user and opponent.id == bot.user.id):
+        row_b = await ensure_sweety_ai_team(guild_id=interaction.guild.id if interaction.guild else None, target_id=opponent.id)
+        picks_a = extract_picks_from_row(row_a)
+        picks_b = extract_picks_from_row(row_b)
+        eval_a = evaluate_dream_team(picks_a)
+        eval_b = evaluate_dream_team(picks_b)
+        live_view = InteractiveTeamBattleView(interaction.user, opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
+        embed = live_view.make_battle_embed()
+        await interaction.response.send_message(
+            content=f"🤖 **Challenge Accepted by {opponent.mention}! AI Coach Sweety has entered the court! Choose your live play call for Quarter 1 (PG Duel):**",
+            embed=embed,
+            view=live_view
+        )
         return
 
     row_b = await db.get_dream_team(opponent.id)
@@ -6476,7 +6539,11 @@ async def buildteam_prefix_cmd(ctx: commands.Context):
 async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """View your (or another member's) active $15 Dream Team squad, career record & GM badges: !myteam [@user]"""
     target = member or ctx.author
-    row = await db.get_dream_team(target.id)
+    if getattr(target, "bot", False) or (bot.user and target.id == bot.user.id):
+        row = await ensure_sweety_ai_team(guild_id=ctx.guild.id if ctx.guild else None, target_id=target.id)
+    else:
+        row = await db.get_dream_team(target.id)
+    
     if not row:
         if target.id == ctx.author.id:
             await ctx.send(f"❌ {ctx.author.mention} **You haven't built a $15 Dream Team yet!**\nUse `!buildteam` or `/buildteam` to draft your 5-man championship squad.")
@@ -6500,12 +6567,27 @@ async def teamqueue_prefix_cmd(ctx: commands.Context):
 async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member):
     """Challenge another member's $15 Dream Team to a tactical live NBA card battle: !teambattle @user"""
     if opponent.id == ctx.author.id:
-        await ctx.send(f"❌ {ctx.author.mention} You cannot battle your own team! Challenge another server member: `!teambattle @user`")
+        await ctx.send(f"❌ {ctx.author.mention} You cannot battle your own team! Challenge another server member or `@Sweety`: `!teambattle @Sweety`")
         return
 
     row_a = await db.get_dream_team(ctx.author.id)
     if not row_a:
         await ctx.send(f"❌ {ctx.author.mention} **You haven't built a $15 Dream Team yet!**\nUse `!buildteam` to draft your squad before challenging others.")
+        return
+
+    if getattr(opponent, "bot", False) or (bot.user and opponent.id == bot.user.id):
+        row_b = await ensure_sweety_ai_team(guild_id=ctx.guild.id if ctx.guild else None, target_id=opponent.id)
+        picks_a = extract_picks_from_row(row_a)
+        picks_b = extract_picks_from_row(row_b)
+        eval_a = evaluate_dream_team(picks_a)
+        eval_b = evaluate_dream_team(picks_b)
+        live_view = InteractiveTeamBattleView(ctx.author, opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
+        embed = live_view.make_battle_embed()
+        await ctx.send(
+            content=f"🤖 **Challenge Accepted by {opponent.mention}! AI Coach Sweety has entered the court! Choose your live play call for Quarter 1 (PG Duel):**",
+            embed=embed,
+            view=live_view
+        )
         return
 
     row_b = await db.get_dream_team(opponent.id)
