@@ -1,5 +1,11 @@
 # Environment variables - NEVER commit this
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+*.token
+*.secret
 
 # Python
 __pycache__/
@@ -24,8 +30,9 @@ build/
 *.db-shm
 *.db-wal
 
-# Logs
+# Logs & Metadata
 logs/
 .dual-graph/
 .agent/
 .claude/
+
