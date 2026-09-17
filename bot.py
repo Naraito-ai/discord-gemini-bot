@@ -1903,93 +1903,174 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
 
 # ── Live Interactive Tactical Battle Engine (Live Decision Buttons) ────────
 
-TACTICAL_OUTCOMES = {
+DEFENSIVE_SCHEMES: Dict[str, Dict[str, Any]] = {
+    "drop_coverage": {
+        "name": "🛡️ Sagging Drop Coverage",
+        "badge": "🛡️ Paint Pack",
+        "desc": "Defender sags deep into the paint to protect against drives, conceding space on the 3PT line.",
+        "weak_against": ["three", "pnr"],
+        "strong_against": ["drive"],
+        "scout_tip": "Punish drop coverage with **`🎯 Step-Back 3PT`** or **`🧠 Pick & Roll`**! Avoid driving into the paint.",
+        "counter_bonus": 0.35,
+        "bad_penalty": 0.28
+    },
+    "perimeter_press": {
+        "name": "🔒 Full-Court Perimeter Press",
+        "badge": "🔒 Arc Lock",
+        "desc": "Defender presses up high beyond the 3PT arc with tight hand-checking to deny the three.",
+        "weak_against": ["drive", "iso"],
+        "strong_against": ["three"],
+        "scout_tip": "Defender is overplaying the arc! Blow past them with **`💥 Power Drive & Slam`**!",
+        "counter_bonus": 0.35,
+        "bad_penalty": 0.28
+    },
+    "zone_trap": {
+        "name": "👥 Zone Double-Team & Trap",
+        "badge": "👥 Blitz Trap",
+        "desc": "Defense collapses a hard double-team on the ball to suffocate solo isolation ball-handlers.",
+        "weak_against": ["pnr", "three"],
+        "strong_against": ["iso", "defense"],
+        "scout_tip": "Hard double-team incoming! Pick it apart with **`🧠 Pick & Roll / Dish`**!",
+        "counter_bonus": 0.35,
+        "bad_penalty": 0.30
+    },
+    "isolation_lock": {
+        "name": "🛑 Physical 1-on-1 Lockdown",
+        "badge": "🛑 Clamp Grip",
+        "desc": "Defender is locked into individual single-coverage, reading crossovers and challenging mid-range pullups.",
+        "weak_against": ["pnr", "drive"],
+        "strong_against": ["iso"],
+        "scout_tip": "Physical 1-on-1 clamp! Call a screen with **`🧠 Pick & Roll`** or muscle with **`💥 Power Drive`**!",
+        "counter_bonus": 0.30,
+        "bad_penalty": 0.28
+    },
+    "switch_mismatch": {
+        "name": "🔄 Switch on Screen (Mismatch)",
+        "badge": "🔄 Mismatch Switch",
+        "desc": "Defense made an ill-timed switch on a screen, leaving a vulnerable positional mismatch on the perimeter.",
+        "weak_against": ["iso", "drive"],
+        "strong_against": ["defense"],
+        "scout_tip": "Mismatch detected on the perimeter! Take over with **`⚡ Mamba Iso`** or **`💥 Power Drive`**!",
+        "counter_bonus": 0.35,
+        "bad_penalty": 0.25
+    }
+}
+
+TACTICAL_OUTCOMES: Dict[str, Dict[str, Any]] = {
     "three": {
         "name": "🎯 Step-Back 3PT",
         "pts": 3,
         "favors": "pts_3",
-        "good_against": ["paint_drop", "zone_defense"],
-        "bad_against": ["perimeter_lock", "double_team"],
-        "success_msg": "{p1} reads the defense, creates space with a lethal step-back, and splashes a clutch 3-POINTER! 🎯 (+3 PTS)",
-        "fail_msg": "{p2} stays glued on the perimeter, heavily contesting {p1}'s three-point attempt — CLANG! It rims out."
+        "good_against": ["drop_coverage", "zone_trap"],
+        "bad_against": ["perimeter_press"],
+        "success_msg": "{p1} recognizes the Sagging Drop Coverage, steps back behind the arc, and splashes a clutch 28-foot three-pointer! 🎯 (+3 PTS)",
+        "fail_msg": "{p1} forces a heavily contested 3-pointer against {p2}'s tight perimeter press and clanks it off the back iron! 🛑"
     },
     "drive": {
         "name": "💥 Power Drive & Slam",
         "pts": 2,
         "favors": "inside",
-        "good_against": ["perimeter_lock", "tight_press"],
-        "bad_against": ["paint_drop", "rim_wall"],
-        "success_msg": "{p1} sees an opening in the lane, explodes past {p2}, and throws down a monster rim-rocker! 💥 (+2 PTS)",
-        "fail_msg": "{p2} rotates over to protect the paint, meeting {p1} at the rim for a vicious rejection! 🚫"
+        "good_against": ["perimeter_press", "switch_mismatch"],
+        "bad_against": ["drop_coverage"],
+        "success_msg": "{p1} blows right past {p2}'s high perimeter press and rattles the rim with a ferocious two-handed poster slam! 💥 (+2 PTS)",
+        "fail_msg": "{p1} drives directly into {p2}'s drop-coverage paint wall and gets violently rejected at the rim! 🚫"
     },
     "pnr": {
         "name": "🧠 Pick & Roll / Dish",
         "pts": 2,
         "favors": "playmaking",
-        "good_against": ["paint_drop", "iso_lock"],
-        "bad_against": ["switch_trap", "passing_lane_steal"],
-        "success_msg": "{p1} draws the defense on the screen-and-roll, delivering a magical pocket pass for an easy finish! 🧠 (+2 PTS)",
-        "fail_msg": "{p2} anticipates the pass, jumps into the passing lane, and deflects the ball away! ⚡"
+        "good_against": ["zone_trap", "drop_coverage", "isolation_lock"],
+        "bad_against": ["switch_mismatch"],
+        "success_msg": "{p1} masterfully threads a bounce pass through the blitzing double-team right into the pocket for a smooth layup! 🧠 (+2 PTS)",
+        "fail_msg": "{p1} attempts a risky cross-court dish against the switch, but {p2} jumps into the passing lane for a deflection! ⚡"
     },
     "defense": {
         "name": "🔒 Lockdown Clamp & Break",
         "pts": 2,
         "favors": "defense",
-        "good_against": ["mamba_iso", "loose_handles"],
-        "bad_against": ["ball_movement", "five_out"],
-        "success_msg": "{p1} puts on the full-court clamps, picks {p2}'s pocket, and coasts in for the fastbreak bucket! 🔒 (+2 PTS)",
-        "fail_msg": "{p2} protects the ball with veteran poise and draws a reaching foul on {p1}! 🛑"
+        "good_against": ["isolation_lock"],
+        "bad_against": ["zone_trap"],
+        "success_msg": "{p1} puts on suffocating full-court clamps, picks {p2}'s pocket cleanly, and glides in for an uncontested fastbreak layup! 🔒 (+2 PTS)",
+        "fail_msg": "{p2} protects the rock with elite veteran poise, drawing a reaching foul on {p1}! 🛑"
     },
     "iso": {
         "name": "⚡ Mamba Isolation Jumper",
         "pts": 2,
         "favors": "clutch",
-        "good_against": ["single_coverage", "sagging_guard"],
-        "bad_against": ["double_team", "zone_trap"],
-        "success_msg": "{p1} isolates at the top of the key, hits {p2} with a crossover, and drains a silky-smooth fadeaway! ⚡ (+2 PTS)",
-        "fail_msg": "{p2} stays disciplined on {p1}'s pump fake, forcing a tough off-balance miss as the shot clock expires! ⏱️"
+        "good_against": ["switch_mismatch", "perimeter_press"],
+        "bad_against": ["zone_trap", "isolation_lock"],
+        "success_msg": "{p1} sizes up {p2} on the mismatch, breaks their ankles with a killer hesitation crossover, and buries the signature fadeaway! ⚡ (+2 PTS)",
+        "fail_msg": "{p1} attempts to go 1-on-1 but gets smothered by {p2}'s disciplined defense and forced into a fading shot clock airball! ⏱️"
     }
 }
 
-DEFENSIVE_SCHEMES = [
-    "paint_drop", "perimeter_lock", "tight_press", "switch_trap", 
-    "zone_defense", "rim_wall", "double_team", "iso_lock"
-]
 
-def resolve_possession(action_key: str, pl_att: Dict[str, Any], pl_def: Dict[str, Any], momentum_att: int, momentum_def: int) -> Dict[str, Any]:
-    """Resolves an in-game coaching possession using tactical counters, player attributes, and momentum."""
+def resolve_possession(
+    action_key: str,
+    pl_att: Dict[str, Any],
+    pl_def: Dict[str, Any],
+    momentum_att: int,
+    momentum_def: int,
+    scheme_key: str = "drop_coverage",
+    play_streak: int = 1,
+    has_timeout_boost: bool = False
+) -> Dict[str, Any]:
+    """Resolves an in-game coaching possession using tactical counter reads, player attributes, anti-spam adaptation, and momentum."""
     action = TACTICAL_OUTCOMES.get(action_key, TACTICAL_OUTCOMES["three"])
     favored_stat = action["favors"]
     att_stat = pl_att.get(favored_stat, 80)
     def_stat = pl_def.get("defense", 80)
+    scheme_data = DEFENSIVE_SCHEMES.get(scheme_key, DEFENSIVE_SCHEMES["drop_coverage"])
 
-    # Pick opponent defensive scheme
-    scheme = random.choice(DEFENSIVE_SCHEMES)
     tactical_modifier = 0.0
+    read_notes = []
 
-    if scheme in action["good_against"]:
-        tactical_modifier += 0.28  # Good tactical call (+28% advantage)
-        read_note = "⭐ **Tactical Advantage!** You exploited opponent's defensive scheme."
-    elif scheme in action["bad_against"]:
-        tactical_modifier -= 0.22  # Countered by defense (-22% penalty)
-        read_note = "⚠️ **Defensive Read!** Opponent anticipated the play."
+    if scheme_key in action["good_against"]:
+        tactical_modifier += scheme_data.get("counter_bonus", 0.35)
+        read_notes.append(f"🎯 **PERFECT TACTICAL COUNTER! (+{int(scheme_data.get('counter_bonus', 0.35)*100)}% Boost)**\nYou successfully exploited `{scheme_data['name']}`!")
+    elif scheme_key in action["bad_against"]:
+        tactical_modifier -= scheme_data.get("bad_penalty", 0.28)
+        read_notes.append(f"⚠️ **BAD CALL / DEFENSIVE READ (-{int(scheme_data.get('bad_penalty', 0.28)*100)}% Penalty)**\nYou ran directly into `{scheme_data['name']}`!")
     else:
-        read_note = "⚡ **Neutral Matchup**"
+        read_notes.append(f"⚡ **Neutral Matchup** against `{scheme_data['name']}`.")
 
-    # Momentum modifier (+6% per hot badge)
+    # Player archetype affinity bonus/penalty
+    archetype_bonus = 0.0
+    if att_stat >= 95:
+        archetype_bonus += 0.10
+        read_notes.append(f"⭐ *Legendary {favored_stat.upper()} Mastery ({att_stat} / +10% Boost)*")
+    elif att_stat <= 82:
+        archetype_bonus -= 0.10
+        read_notes.append(f"⚠️ *Low {favored_stat.upper()} Rating ({att_stat} / -10% Penalty)*")
+
+    # Anti-spam consecutive play penalty
+    streak_penalty = 0.0
+    if play_streak == 2:
+        streak_penalty = 0.15
+        read_notes.append("⚠️ **Predictable Offense (-15%)**: Opponent defense adjusted to repeated play!")
+    elif play_streak >= 3:
+        streak_penalty = 0.35
+        read_notes.append("🛑 **DEFENSIVE TRAP (-35%)**: Opponent jumped the route on consecutive play spam!")
+
+    # Timeout boost
+    timeout_bonus = 0.20 if has_timeout_boost else 0.0
+    if has_timeout_boost:
+        read_notes.append("⏱️ **Coach ATO Set-Play Active (+20% Precision Boost)**")
+
+    # Momentum modifier (+6% per hot flame)
     momentum_mod = (momentum_att * 0.06) - (momentum_def * 0.04)
 
     # Base hit probability
     stat_diff = att_stat - def_stat
-    base_prob = 0.50 + (stat_diff * 0.008) + tactical_modifier + momentum_mod
-    base_prob = max(0.20, min(0.85, base_prob))
+    base_prob = 0.50 + (stat_diff * 0.008) + tactical_modifier + archetype_bonus - streak_penalty + timeout_bonus + momentum_mod
+    base_prob = max(0.15, min(0.92, base_prob))
 
     success = random.random() < base_prob
     pts_scored = action["pts"] if success else 0
 
     # Possible And-1 for drive
     and_one = False
-    if success and action_key == "drive" and random.random() < 0.20:
+    if success and action_key == "drive" and random.random() < 0.22:
         pts_scored += 1
         and_one = True
 
@@ -2005,13 +2086,15 @@ def resolve_possession(action_key: str, pl_att: Dict[str, Any], pl_def: Dict[str
         "success": success,
         "pts": pts_scored,
         "commentary": commentary,
-        "read_note": read_note,
-        "prob": round(base_prob * 100, 1)
+        "read_note": "\n".join(read_notes),
+        "prob": round(base_prob * 100, 1),
+        "tactical_counter": scheme_key in action["good_against"],
+        "bad_call": scheme_key in action["bad_against"]
     }
 
 
 class InteractiveTeamBattleView(discord.ui.View):
-    """Live turn-based interactive tactical card battle view with clickable playcalling buttons."""
+    """Live turn-based interactive tactical card battle view with Read & React scout reads, tactical counters, and coach perks."""
     def __init__(
         self,
         author: Union[discord.Member, discord.User],
@@ -2050,7 +2133,28 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.momentum_a = 0
         self.momentum_b = 0
         self.round_history = []
-        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a['ovr']} OVR) vs {opponent.display_name} ({eval_b['ovr']} OVR).\n*Choose your live play calls, build momentum & counter defenses to win!*"
+        
+        # Strategic tactical state
+        self.last_play_a: Optional[str] = None
+        self.play_streak_a: int = 0
+        self.timeouts_left_a: int = 1
+        self.has_timeout_boost_a: bool = False
+        
+        # Generate dynamic defensive schemes for all 5 rounds
+        scheme_keys = list(DEFENSIVE_SCHEMES.keys())
+        self.round_schemes = []
+        for pos in self.positions:
+            def_p = self.picks_b[pos]
+            if def_p.get("defense", 80) >= 95:
+                if pos in ["PF", "C"]:
+                    chosen_s = random.choice(["drop_coverage", "isolation_lock"])
+                else:
+                    chosen_s = random.choice(["perimeter_press", "isolation_lock"])
+            else:
+                chosen_s = random.choice(scheme_keys)
+            self.round_schemes.append(chosen_s)
+
+        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a['ovr']} OVR) vs {opponent.display_name} ({eval_b['ovr']} OVR).\n*Read the opponent's defensive scout look below and execute tactical counters!*"
         self.player_points = {self.author.display_name: {}, self.opponent.display_name: {}}
         self.is_game_over = False
         self.final_embed: Optional[discord.Embed] = None
@@ -2068,7 +2172,7 @@ class InteractiveTeamBattleView(discord.ui.View):
             self.add_item(btn_draft)
             return
 
-        # Row 0: Primary offensive plays
+        # Row 0: Primary offensive play calls
         btn_three = discord.ui.Button(label="Step-Back 3PT", style=discord.ButtonStyle.primary, emoji="🎯", custom_id="btn_three", row=0)
         btn_three.callback = lambda i: self.handle_tactical_action(i, "three")
         self.add_item(btn_three)
@@ -2081,7 +2185,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         btn_pnr.callback = lambda i: self.handle_tactical_action(i, "pnr")
         self.add_item(btn_pnr)
 
-        # Row 1: Tactical counters & fast finish
+        # Row 1: Tactical counters
         btn_clamp = discord.ui.Button(label="Lockdown Clamp", style=discord.ButtonStyle.secondary, emoji="🔒", custom_id="btn_defense", row=1)
         btn_clamp.callback = lambda i: self.handle_tactical_action(i, "defense")
         self.add_item(btn_clamp)
@@ -2090,9 +2194,43 @@ class InteractiveTeamBattleView(discord.ui.View):
         btn_iso.callback = lambda i: self.handle_tactical_action(i, "iso")
         self.add_item(btn_iso)
 
-        btn_sim = discord.ui.Button(label="Quick Sim Remainder", style=discord.ButtonStyle.secondary, emoji="⏩", custom_id="btn_sim", row=1)
+        # Row 2: Timeout & Quick Sim
+        btn_to = discord.ui.Button(
+            label=f"Coach Timeout ({self.timeouts_left_a} Left)",
+            style=discord.ButtonStyle.secondary,
+            emoji="⏱️",
+            custom_id="btn_timeout",
+            disabled=(self.timeouts_left_a <= 0),
+            row=2
+        )
+        btn_to.callback = self.handle_timeout_action
+        self.add_item(btn_to)
+
+        btn_sim = discord.ui.Button(label="Quick Sim Remainder", style=discord.ButtonStyle.secondary, emoji="⏩", custom_id="btn_sim", row=2)
         btn_sim.callback = self.handle_simulate_remainder
         self.add_item(btn_sim)
+
+    async def handle_timeout_action(self, interaction: discord.Interaction):
+        if interaction.user.id not in [self.author.id, self.opponent.id]:
+            await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
+            return
+
+        if self.timeouts_left_a <= 0:
+            await interaction.response.send_message("❌ You have already used your 1 Coach Timeout for this game!", ephemeral=True)
+            return
+
+        self.timeouts_left_a -= 1
+        self.has_timeout_boost_a = True
+        prev_opp_mom = self.momentum_b
+        self.momentum_b = 0
+        self.last_commentary = (
+            f"⏱️ **COACH TIMEOUT CALLED BY {interaction.user.display_name}!**\n"
+            f"• Iced opponent's heat momentum (`{prev_opp_mom} 🔥 ➔ 0`)!\n"
+            f"• Drew up a high-percentage **ATO Set-Play (+20% Precision Boost)** for the next possession!"
+        )
+        self._build_controls()
+        embed = self.make_battle_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
 
     async def rematch_callback(self, interaction: discord.Interaction):
         if interaction.user.id not in [self.author.id, self.opponent.id]:
@@ -2130,6 +2268,8 @@ class InteractiveTeamBattleView(discord.ui.View):
         pos_title = self.pos_fullnames[cur_pos]
         pl_a = self.picks_a[cur_pos]
         pl_b = self.picks_b[cur_pos]
+        cur_scheme_key = self.round_schemes[self.current_round]
+        scheme_data = DEFENSIVE_SCHEMES.get(cur_scheme_key, DEFENSIVE_SCHEMES["drop_coverage"])
 
         if self.duels_won_a > self.duels_won_b:
             status_text = f"🟢 **{self.author.display_name}** leads **`{self.duels_won_a} — {self.duels_won_b}`**"
@@ -2147,7 +2287,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         embed = discord.Embed(
             title=f"⚔️ LIVE NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}",
             description=(
-                f"### 🏀 Match Status: {status_text}\n"
+                f"### 🏀 Series Status: {status_text}\n"
                 f"**Quarter `{self.current_round + 1}/5`**: **{pos_title} ({cur_pos}) Matchup**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             ),
@@ -2156,20 +2296,42 @@ class InteractiveTeamBattleView(discord.ui.View):
         if hasattr(self.author, "display_avatar") and self.author.display_avatar:
             embed.set_thumbnail(url=self.author.display_avatar.url)
 
+        att_strengths = []
+        if pl_a.get("pts_3", 0) >= 94: att_strengths.append(f"🎯 3PT ({pl_a.get('pts_3')})")
+        if pl_a.get("inside", 0) >= 94: att_strengths.append(f"💥 Inside ({pl_a.get('inside')})")
+        if pl_a.get("playmaking", 0) >= 94: att_strengths.append(f"🧠 Playmaking ({pl_a.get('playmaking')})")
+        if pl_a.get("defense", 0) >= 94: att_strengths.append(f"🔒 Defense ({pl_a.get('defense')})")
+        if pl_a.get("clutch", 0) >= 94: att_strengths.append(f"⚡ Clutch ({pl_a.get('clutch')})")
+        att_str_fmt = " • ".join(att_strengths) if att_strengths else f"⭐ {pl_a.get('tag', 'Legend')}"
+
         matchup_value = (
             f"🟢 **{self.author.display_name}**: {pl_a['emoji']} **{pl_a['name']}** (`${pl_a['cost']}`) `[MOM: {mom_bar_a}]`\n"
+            f"> ⭐ **Signature**: {att_str_fmt}\n"
             f"🔴 **{self.opponent.display_name}**: {pl_b['emoji']} **{pl_b['name']}** (`${pl_b['cost']}`) `[MOM: {mom_bar_b}]`\n"
-            f"⚡ *Archetypes: {pl_a['tag']} vs {pl_b['tag']}*"
+            f"> 🛡️ **Defense Rating**: `{pl_b.get('defense', 85)} DEF` • *{pl_b.get('tag', 'Archetype')}*"
         )
-        embed.add_field(name=f"⭐ Current Duel • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
+        embed.add_field(name=f"⭐ Positional Duel • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
+
+        # Visible Defensive Scout Read
+        scout_value = (
+            f"🛡️ **Opponent Scheme**: **`{scheme_data['name']}`**\n"
+            f"*{scheme_data['desc']}*\n"
+            f"💡 **Scout Recommendation**: {scheme_data['scout_tip']}"
+        )
+        if self.play_streak_a >= 2:
+            scout_value += f"\n⚠️ **Defensive Anticipation**: You ran `{self.last_play_a.upper()}` last turn (-15% repeated play penalty)! Call a different counter."
+        if self.has_timeout_boost_a:
+            scout_value += "\n⏱️ **ATO Set-Play Boost**: +20% Precision Bonus active on your next call!"
+
+        embed.add_field(name="📋 Live Defensive Scout Read (Read & React)", value=scout_value, inline=False)
         embed.add_field(name="📜 Latest Play Action", value=f">>> {self.last_commentary}", inline=False)
 
         guide_text = (
-            "🎯 `3PT Step-Back` (+3) • 💥 `Power Drive` (+2+And-1) • 🧠 `Pick & Roll` (+2)\n"
-            "🔒 `Lockdown Clamp` (Steal) • ⚡ `Mamba Iso` (Clutch) • ⏩ `Quick Sim`"
+            "🎯 `3PT Step-Back` (Beats Drop) • 💥 `Power Drive` (Beats Press) • 🧠 `Pick & Roll` (Beats Traps)\n"
+            "🔒 `Lockdown Clamp` (Strips Iso) • ⚡ `Mamba Iso` (Beats Mismatches) • ⏱️ `Coach Timeout` (+20% ATO)"
         )
         embed.add_field(name="🎮 Choose Your Live Coach Decision Below", value=guide_text, inline=False)
-        embed.set_footer(text=f"Duels: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • Coaching decisions beat high OVR!")
+        embed.set_footer(text=f"Duels: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • Read the scout to guarantee advantage!")
         embed.timestamp = discord.utils.utcnow()
         return embed
 
@@ -2345,9 +2507,27 @@ class InteractiveTeamBattleView(discord.ui.View):
         pos_title = self.pos_fullnames[cur_pos]
         pl_a = self.picks_a[cur_pos]
         pl_b = self.picks_b[cur_pos]
+        cur_scheme_key = self.round_schemes[self.current_round]
+
+        # Update play streak
+        if self.last_play_a == action_key:
+            self.play_streak_a += 1
+        else:
+            self.last_play_a = action_key
+            self.play_streak_a = 1
 
         # 1. Resolve Challenger Attack Possession
-        res_a = resolve_possession(action_key, pl_a, pl_b, self.momentum_a, self.momentum_b)
+        res_a = resolve_possession(
+            action_key=action_key,
+            pl_att=pl_a,
+            pl_def=pl_b,
+            momentum_att=self.momentum_a,
+            momentum_def=self.momentum_b,
+            scheme_key=cur_scheme_key,
+            play_streak=self.play_streak_a,
+            has_timeout_boost=self.has_timeout_boost_a
+        )
+        self.has_timeout_boost_a = False
         self.round_pts_a += res_a["pts"]
         self.player_points[self.author.display_name][pl_a["name"]] = self.player_points[self.author.display_name].get(pl_a["name"], 0) + res_a["pts"]
 
@@ -2358,18 +2538,28 @@ class InteractiveTeamBattleView(discord.ui.View):
 
         # 2. Opponent dynamic tactical AI counter
         opp_tactics = ["three", "drive", "pnr", "defense", "iso"]
-        if pl_b.get("pts_3", 0) >= 92 and random.random() < 0.4:
+        if pl_b.get("pts_3", 0) >= 92 and random.random() < 0.45:
             opp_choice = "three"
-        elif pl_b.get("inside", 0) >= 92 and random.random() < 0.4:
+        elif pl_b.get("inside", 0) >= 92 and random.random() < 0.45:
             opp_choice = "drive"
-        elif pl_b.get("defense", 0) >= 92 and random.random() < 0.4:
+        elif pl_b.get("defense", 0) >= 92 and random.random() < 0.45:
             opp_choice = "defense"
-        elif pl_b.get("playmaking", 0) >= 92 and random.random() < 0.4:
+        elif pl_b.get("playmaking", 0) >= 92 and random.random() < 0.45:
             opp_choice = "pnr"
         else:
             opp_choice = random.choice(opp_tactics)
 
-        res_b = resolve_possession(opp_choice, pl_b, pl_a, self.momentum_b, self.momentum_a)
+        opp_def_scheme = random.choice(list(DEFENSIVE_SCHEMES.keys()))
+        res_b = resolve_possession(
+            action_key=opp_choice,
+            pl_att=pl_b,
+            pl_def=pl_a,
+            momentum_att=self.momentum_b,
+            momentum_def=self.momentum_a,
+            scheme_key=opp_def_scheme,
+            play_streak=1,
+            has_timeout_boost=False
+        )
         self.round_pts_b += res_b["pts"]
         self.player_points[self.opponent.display_name][pl_b["name"]] = self.player_points[self.opponent.display_name].get(pl_b["name"], 0) + res_b["pts"]
 
@@ -2399,6 +2589,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         })
 
         self.current_round += 1
+        self._build_controls()
         if self.current_round >= 5:
             self.is_game_over = True
             self._build_controls()
@@ -2419,12 +2610,14 @@ class InteractiveTeamBattleView(discord.ui.View):
             pos_title = self.pos_fullnames[cur_pos]
             pl_a = self.picks_a[cur_pos]
             pl_b = self.picks_b[cur_pos]
+            cur_scheme_key = self.round_schemes[self.current_round]
 
             choice_a = random.choice(tactics_list)
             choice_b = random.choice(tactics_list)
 
-            res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b)
-            res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a)
+            res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b, cur_scheme_key, 1, self.has_timeout_boost_a)
+            self.has_timeout_boost_a = False
+            res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False)
 
             self.round_pts_a += res_a["pts"]
             self.round_pts_b += res_b["pts"]
