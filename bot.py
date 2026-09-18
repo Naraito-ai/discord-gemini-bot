@@ -2579,50 +2579,100 @@ def get_matchup_synergy_analysis(picks_a: Dict[str, Dict[str, Any]], picks_b: Di
 
 SWEETY_TRASH_TALK = {
     "sweety_score": [
-        "Did you really just drive into Giannis? Coach, please.",
-        "Read the scout report next time, Coach.",
-        "Too easy. The paint is officially closed for business.",
-        "Textbook execution. You gave us that baseline on a silver platter.",
-        "Bucket. That's what happens when you leave the arc open."
+        "Who's guarding me? Someone call a timeout and tell your coach to make a sub!",
+        "You reached, I taught. Put that man on a highlight reel! 🎥",
+        "BBQ chicken in the post! Too small!",
+        "Count it and one! You need a GPS to track that crossover?",
+        "I told you exactly where I was going to shoot it from, and you still couldn't stop it.",
+        "Jordan from the wing, Larry Bird with the touch... you cannot stop greatness.",
+        "Splash. That net didn't even move.",
+        "Your defense is like a revolving door — welcoming everyone inside!",
+        "That's 2K Hall of Fame difficulty for you, Coach.",
+        "Bucket! Check the scouting report before stepping on my hardwood.",
+        "Too easy! That baseline was wide open like a runway.",
+        "Look at the scoreboard, Coach. We're getting whatever we want."
     ],
     "sweety_stop": [
-        "Clamped. That play wasn't in any championship playbook.",
-        "You called an iso directly into my double-team trap? Thank you!",
-        "Saw that read coming all the way from the locker room.",
-        "Denied! Hand in the face on every single release.",
-        "My defensive scheme is an open book, but you still failed the test."
+        "GET THAT WEAK STUFF OUTTA HERE! Wemby with the rejection! 🚫",
+        "Locked up! Welcome to the Kawhi Leonard penitentiary.",
+        "Did you really think you had an open lane? The paint is padlocked.",
+        "You spammed that same move three times. I had that scouted in grade school.",
+        "Clamped! Hand down, man down!",
+        "Building a whole house with all those bricks, Coach?",
+        "MJ took that personally. Ball's going the other way.",
+        "That shot had zero chance. You're shooting into a phone booth.",
+        "The rim is closed for maintenance. Try again next quarter.",
+        "Offensive foul! You can't bulldoze through this championship wall.",
+        "Denied! Not in my house!",
+        "Read like an open book. Turnover!"
     ],
     "player_score": [
-        "Lucky read. Won't happen again.",
-        "Fine, take the open three. You won't see another one.",
-        "Defensive breakdown on the switch. Sweety is adjusting right now.",
-        "Enjoy that bucket while you can. The full-court clamp is coming.",
-        "Good pass... I'll give you credit for that one."
+        "Enjoy that single bucket. You're still way down on the scoreboard.",
+        "A broken clock is right twice a day. Nice shot though.",
+        "Lucky bounce off the rim. My defense is already adjusting.",
+        "Take a picture of that bucket, because it's the last clean look you're getting.",
+        "Good pass, but you're burning all your energy in the first half.",
+        "You found the one soft spot in the zone. We patched it up already.",
+        "That's one. Let's see if you can do it against the full-court trap.",
+        "Don't get too excited, Coach. We're coming right back down the lane."
     ],
     "player_down_big": [
-        "You can still forfeit, Coach. I won't judge.",
-        "Calling a timeout won't fix that roster mismatch.",
-        "My bench warmers could close this series out from here.",
-        "Need some water over there? You're looking a little gassed.",
-        "Are we playing basketball or are you just spectating?"
+        "You want me to call a 20-second timeout so you can catch your breath?",
+        "Check the scoreboard, Coach. Might want to start clearing the bench.",
+        "Is this a $15 Dream Team or a middle school scrimmage?",
+        "My GM rating is going through the roof off this blowout.",
+        "You can wave the white flag anytime, Coach. No shame in losing to the best.",
+        "I'm running out of fingers to count this lead.",
+        "Are we playing a live game or did you hand the controller to your little brother?",
+        "Need some water over there? You're looking a little gassed."
     ],
     "player_comeback": [
-        "Okay. Okay. You found a rhythm. Don't get comfortable.",
-        "Sweety adjusting the defense right now. Time to lock in.",
-        "Nice run, but this is exactly where the comeback stops.",
-        "Timeout on the floor — you won't get another clean look!"
+        "A little run? Cute. Watch how fast I shut the door.",
+        "Timeout on the floor. Playtime is over, time to lock in.",
+        "You had your moment of hope. Now here comes the championship clamp.",
+        "Don't let two good plays trick you into thinking you're winning this series.",
+        "Rally all you want — Mamba mentality closes out 4th quarters.",
+        "Nice effort, but you're running out of clock and out of options.",
+        "Sweety adjusting the defense right now. Time to lock in."
+    ],
+    "sweety_clutch": [
+        "DAGGER! Put the kids to bed, this game is OVER! 🗡️",
+        "ICE IN THE VEINS! Game on the line and you leave me open? 🥶",
+        "Championship DNA right here. You can't teach clutch!",
+        "This is where legends are made and pretenders get exposed.",
+        "BANG! Straight through the heart with the game on the line!",
+        "Clutch time is my time. Lights were too bright for your squad!",
+        "Game. Set. Match. Clutch gene runs in my code!"
+    ],
+    "sweety_anticipation": [
+        "I read your playbook like a children's book. Switch it up!",
+        "Spamming the same button? Did your controller disconnect?",
+        "I saw that play coming from 50 feet away. Clamped!",
+        "Predictable offense equals instant turnover. Try a new play call!",
+        "You really thought I wouldn't jump that route on the third try?"
+    ],
+    "sweety_timeout": [
+        "Timeout called! Iced your momentum. Back to square one, Coach.",
+        "Hold up, let me draw up a defensive ATO play to shut this run down.",
+        "Coach Sweety calling a timeout. Take a seat and rethink your game plan.",
+        "Icing the shooter! Your hot streak ends right here."
     ],
     "sweety_wins": [
-        "Film study starts tomorrow at 6 AM. Good game, Coach.",
-        "Back to the draft board, GM. My aggressive blitz was just too much.",
-        "Game. Set. Series. Sweety takes home the championship trophy!",
-        "Trophy stays in the case. Better luck next draft!"
+        "Rings don't lie! Better luck at the next draft lottery, GM.",
+        "GG, Coach. Watch the tape, hit the gym, and maybe one day you'll challenge the throne.",
+        "Sweety AI remains undefeated on the hardwood. Another banner in the rafters! 🏆",
+        "That was a masterclass in coaching. Take notes for next time.",
+        "You brought a $15 squad, but I brought a dynasty.",
+        "Film study starts tomorrow at 6 AM sharp. Good game though!",
+        "Back to the draft board, GM. My aggressive blitz was just too much."
     ],
     "sweety_loses": [
-        "...Rematch. Now.",
-        "You caught my blitz off-guard. Won't happen in the rematch.",
-        "I gave you that one. Click Rematch and prove it was real skill.",
-        "One lucky quarter won't save you next time, GM."
+        "You got lucky on those rolls. Click Rematch right now — let's see if you can do it twice.",
+        "I'll give you your flowers, GM... but that trophy is coming back to me in the rematch.",
+        "Tough loss. My scouts are already breaking down the film for Game 2.",
+        "One game doesn't make a champion. Run it back right now!",
+        "Enjoy the fluke win. In a 7-game series, you wouldn't survive.",
+        "...Rematch. Now. Don't be scared."
     ]
 }
 
@@ -4173,13 +4223,14 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.play_streak_a: int = 0
         self.timeouts_left_a: int = 1
         self.has_timeout_boost_a: bool = False
+        self.sweety_timeouts_left: int = 1
         self.timeouts_used_count: int = 0
         self.tactics_counts = {"three": 0, "drive": 0, "pnr": 0, "defense": 0, "iso": 0}
         self.tactics_log: List[Dict[str, Any]] = []
         self.is_clutch_mode = False
         self._is_resolving = False
         
-        # Detect Sweety AI opponent personality (Aggressive Blitzer)
+        # Detect Sweety AI opponent personality (Aggressive Blitzer & Adaptive Counter Boss)
         self.is_sweety_ai = getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id)
         
         # Pre-Match Synergy Analysis Line
@@ -4190,12 +4241,21 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.round_schemes = []
         for pos in self.positions:
             if self.is_sweety_ai:
-                # Sweety AI is an Aggressive Blitzer: heavily weights zone_trap & perimeter_press
-                chosen_s = random.choices(
-                    ["zone_trap", "perimeter_press", "drop_coverage", "isolation_lock", "switch_mismatch"],
-                    weights=[35, 35, 10, 10, 10],
-                    k=1
-                )[0]
+                # Sweety AI reads the opponent's starting player at this position to set the optimal trap
+                pl_user = self.picks_a.get(pos, {})
+                if isinstance(pl_user, dict):
+                    if pl_user.get("pts_3", 80) >= 90:
+                        chosen_s = "perimeter_press"
+                    elif pl_user.get("inside", 80) >= 95:
+                        chosen_s = "drop_coverage"
+                    elif "iso" in pl_user.get("favored", []):
+                        chosen_s = "isolation_lock"
+                    elif "pnr" in pl_user.get("favored", []):
+                        chosen_s = "zone_trap"
+                    else:
+                        chosen_s = random.choice(["zone_trap", "perimeter_press", "drop_coverage"])
+                else:
+                    chosen_s = "zone_trap"
             else:
                 def_p = self.picks_b.get(pos, {})
                 if isinstance(def_p, dict) and def_p.get("defense", 80) >= 95:
@@ -4898,6 +4958,18 @@ class InteractiveTeamBattleView(discord.ui.View):
                 self.last_play_a = action_key
                 self.play_streak_a = 1
 
+            # If playing Sweety AI (Boss Level), Sweety dynamically shifts defense to counter play tendencies & spam
+            if self.is_sweety_ai and self.play_streak_a >= 2:
+                if action_key == "three":
+                    cur_scheme_key = "perimeter_press"
+                elif action_key == "drive":
+                    cur_scheme_key = "drop_coverage"
+                elif action_key == "iso":
+                    cur_scheme_key = "isolation_lock"
+                elif action_key == "pnr":
+                    cur_scheme_key = "zone_trap"
+                self.round_schemes[cur_idx] = cur_scheme_key
+
             # Check Comeback Mode
             is_comeback_active = (self.duels_won_b >= 2 and self.duels_won_a == 0) or (self.q_pts_b - self.q_pts_a >= 4)
 
@@ -4915,6 +4987,17 @@ class InteractiveTeamBattleView(discord.ui.View):
                 is_comeback=is_comeback_active
             )
             self.has_timeout_boost_a = False
+
+            # After possession, Sweety AI sets next scheme to adapt to user playstyle
+            if self.is_sweety_ai:
+                if action_key == "three":
+                    self.round_schemes[cur_idx] = "perimeter_press"
+                elif action_key == "drive":
+                    self.round_schemes[cur_idx] = "drop_coverage"
+                elif action_key == "iso":
+                    self.round_schemes[cur_idx] = "isolation_lock"
+                elif action_key == "pnr":
+                    self.round_schemes[cur_idx] = "zone_trap"
 
             # Log tactical call
             self.tactics_log.append({
@@ -4974,26 +5057,65 @@ class InteractiveTeamBattleView(discord.ui.View):
 
             # Opponent dynamic tactical AI counter (if challenger hasn't clinched quarter yet)
             res_b = {"pts": 0, "commentary": "", "success": False}
+            sweety_talk_line = ""
             if self.q_pts_a < self.target_q_pts:
-                opp_favored = pl_b.get("favored", ["drive", "three", "pnr"])
-                if opp_favored and random.random() < 0.65:
-                    opp_choice = random.choice(opp_favored)
-                else:
-                    opp_choice = random.choice(["three", "drive", "pnr", "defense", "iso"])
+                # Sweety AI Strategic Timeout if challenger has momentum or big lead
+                if self.is_sweety_ai and getattr(self, "sweety_timeouts_left", 0) > 0:
+                    if self.momentum_a >= 2 or (self.q_pts_a - self.q_pts_b >= 4 and self.q_pts_a >= 4):
+                        self.sweety_timeouts_left -= 1
+                        self.momentum_a = 0
+                        self.momentum_b = min(3, self.momentum_b + 1)
+                        sweety_talk_line = get_sweety_trash_talk("sweety_timeout")
 
-                opp_def_scheme = random.choice(list(DEFENSIVE_SCHEMES.keys()))
-                res_b = resolve_possession(
-                    action_key=opp_choice,
-                    pl_att=pl_b,
-                    pl_def=pl_a,
-                    momentum_att=self.momentum_b,
-                    momentum_def=self.momentum_a,
-                    scheme_key=opp_def_scheme,
-                    play_streak=1,
-                    has_timeout_boost=False,
-                    is_clutch=self.is_clutch_mode,
-                    is_comeback=False
-                )
+                if self.is_sweety_ai:
+                    opp_favored = pl_b.get("favored", ["drive", "three", "pnr", "iso"])
+                    # High-IQ tactical execution (85% synergy)
+                    if opp_favored and random.random() < 0.85:
+                        opp_choice = random.choice(opp_favored)
+                    else:
+                        opp_choice = random.choice(["three", "drive", "pnr", "defense", "iso"])
+
+                    # Sweety sets defensive counter scheme against user pl_a
+                    if pl_a.get("pts_3", 80) >= 90:
+                        opp_def_scheme = "perimeter_press"
+                    elif pl_a.get("inside", 80) >= 95:
+                        opp_def_scheme = "drop_coverage"
+                    else:
+                        opp_def_scheme = random.choice(["zone_trap", "isolation_lock", "perimeter_press"])
+
+                    is_sweety_clutch = self.is_clutch_mode or self.current_round >= 3 or abs(self.q_pts_a - self.q_pts_b) <= 2
+                    res_b = resolve_possession(
+                        action_key=opp_choice,
+                        pl_att=pl_b,
+                        pl_def=pl_a,
+                        momentum_att=self.momentum_b,
+                        momentum_def=self.momentum_a,
+                        scheme_key=opp_def_scheme,
+                        play_streak=1,
+                        has_timeout_boost=(getattr(self, "sweety_timeouts_left", 0) == 0 and random.random() < 0.35),
+                        is_clutch=is_sweety_clutch,
+                        is_comeback=(self.duels_won_a >= 2 and self.duels_won_b == 0)
+                    )
+                else:
+                    opp_favored = pl_b.get("favored", ["drive", "three", "pnr"])
+                    if opp_favored and random.random() < 0.65:
+                        opp_choice = random.choice(opp_favored)
+                    else:
+                        opp_choice = random.choice(["three", "drive", "pnr", "defense", "iso"])
+
+                    opp_def_scheme = random.choice(list(DEFENSIVE_SCHEMES.keys()))
+                    res_b = resolve_possession(
+                        action_key=opp_choice,
+                        pl_att=pl_b,
+                        pl_def=pl_a,
+                        momentum_att=self.momentum_b,
+                        momentum_def=self.momentum_a,
+                        scheme_key=opp_def_scheme,
+                        play_streak=1,
+                        has_timeout_boost=False,
+                        is_clutch=self.is_clutch_mode,
+                        is_comeback=False
+                    )
                 self.q_pts_b += res_b["pts"]
                 self.total_pts_b += res_b["pts"]
                 p_name_b = pl_b.get("name", "Player B")
@@ -5010,12 +5132,20 @@ class InteractiveTeamBattleView(discord.ui.View):
                     self.momentum_b = max(0, self.momentum_b - 1)
 
             # Sweety AI situational trash talk reaction (SENT VIA FOLLOWUP, NOT IN EMBED)
-            sweety_talk_line = ""
-            if self.is_sweety_ai:
+            if self.is_sweety_ai and not sweety_talk_line:
+                is_sweety_clutch = self.is_clutch_mode or self.current_round >= 3
                 if res_b["success"] and res_b["pts"] > 0:
-                    sweety_talk_line = get_sweety_trash_talk("sweety_score")
+                    if is_sweety_clutch and (self.q_pts_b >= 5 or self.duels_won_b >= 2):
+                        sweety_talk_line = get_sweety_trash_talk("sweety_clutch")
+                    else:
+                        sweety_talk_line = get_sweety_trash_talk("sweety_score")
                 elif not res_a["success"]:
-                    sweety_talk_line = get_sweety_trash_talk("sweety_stop")
+                    if self.play_streak_a >= 2:
+                        sweety_talk_line = get_sweety_trash_talk("sweety_anticipation")
+                    else:
+                        sweety_talk_line = get_sweety_trash_talk("sweety_stop")
+                elif (self.duels_won_b - self.duels_won_a >= 2) or (self.q_pts_b - self.q_pts_a >= 5):
+                    sweety_talk_line = get_sweety_trash_talk("player_down_big")
                 elif res_a["success"] and is_comeback_active:
                     sweety_talk_line = get_sweety_trash_talk("player_comeback")
                 elif res_a["success"]:
@@ -5130,7 +5260,6 @@ class InteractiveTeamBattleView(discord.ui.View):
 
                 while self.q_pts_a < self.target_q_pts and self.q_pts_b < self.target_q_pts:
                     choice_a = random.choice(pl_a.get("favored", tactics_list))
-                    choice_b = random.choice(pl_b.get("favored", tactics_list))
                     self.tactics_counts[choice_a] = self.tactics_counts.get(choice_a, 0) + 1
 
                     is_comeback_active = (self.duels_won_b >= 2 and self.duels_won_a == 0) or (self.q_pts_b - self.q_pts_a >= 4)
@@ -5149,7 +5278,15 @@ class InteractiveTeamBattleView(discord.ui.View):
                         "streak": 1
                     })
 
-                    res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False, is_clutch=self.is_clutch_mode, is_comeback=False)
+                    if self.is_sweety_ai:
+                        fav_b = pl_b.get("favored", tactics_list)
+                        choice_b = random.choice(fav_b) if fav_b and random.random() < 0.85 else random.choice(tactics_list)
+                        opp_def = "perimeter_press" if pl_a.get("pts_3", 80) >= 90 else "drop_coverage"
+                        is_sweety_clutch = self.is_clutch_mode or self.current_round >= 3
+                        res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, opp_def, 1, False, is_clutch=is_sweety_clutch, is_comeback=False)
+                    else:
+                        choice_b = random.choice(pl_b.get("favored", tactics_list))
+                        res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False, is_clutch=self.is_clutch_mode, is_comeback=False)
                     self.q_pts_b += res_b["pts"]
                     self.total_pts_b += res_b["pts"]
 
@@ -5683,16 +5820,17 @@ def extract_picks_from_row(row: Any) -> Dict[str, Dict[str, Any]]:
 
 
 async def ensure_sweety_ai_team(guild_id: Optional[int] = None, target_id: Optional[int] = None) -> Dict[str, Any]:
-    """Ensures Sweety AI Bot has an official balanced $15 All-Time Championship Dream Team saved in database."""
+    """Ensures Sweety AI Bot has an official 99.3+ OVR Dark Matter $15 All-Time Championship Dream Team saved in database."""
     bot_id = target_id or (bot.user.id if bot.user else 719932313919684670)
+    is_bot = (bot.user and bot_id == bot.user.id) or bot_id == 719932313919684670 or (target_id is None)
     row = await db.get_dream_team(bot_id)
-    if not row:
+    if not row or (is_bot and row.get("ovr_rating", 0) < 99.0):
         picks = {
-            "PG": find_nba_player("PG", "Jrue Holiday") or NBA_DREAM_PLAYERS["PG"][4],
+            "PG": find_nba_player("PG", "Kyrie Irving") or NBA_DREAM_PLAYERS["PG"][3],
             "SG": find_nba_player("SG", "Michael Jordan") or NBA_DREAM_PLAYERS["SG"][0],
-            "SF": find_nba_player("SF", "LeBron James") or NBA_DREAM_PLAYERS["SF"][0],
-            "PF": find_nba_player("PF", "Anthony Davis") or NBA_DREAM_PLAYERS["PF"][3],
-            "C": find_nba_player("C", "Giannis Antetokounmpo") or NBA_DREAM_PLAYERS["C"][3],
+            "SF": find_nba_player("SF", "Kawhi Leonard") or NBA_DREAM_PLAYERS["SF"][2],
+            "PF": find_nba_player("PF", "Larry Bird") or NBA_DREAM_PLAYERS["PF"][1],
+            "C": find_nba_player("C", "Victor Wembanyama") or NBA_DREAM_PLAYERS["C"][4],
         }
         eval_ai = evaluate_dream_team(picks)
         now = time.time()
