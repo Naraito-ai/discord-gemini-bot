@@ -1576,39 +1576,39 @@ async def reminder_delivery_loop():
 
 NBA_DREAM_PLAYERS = {
     "PG": [
-        {"name": "Stephen Curry", "cost": 5, "team": "GSW", "tag": "Unanimous MVP • Greatest Shooter Ever", "emoji": "🎯", "pts_3": 99, "defense": 78, "playmaking": 92, "inside": 84, "clutch": 98},
-        {"name": "Magic Johnson", "cost": 4, "team": "LAL", "tag": "5x Champ • Showtime Maestro", "emoji": "🪄", "pts_3": 78, "defense": 86, "playmaking": 99, "inside": 92, "clutch": 96},
-        {"name": "Chris Paul", "cost": 3, "team": "LAC", "tag": "Point God • Floor General", "emoji": "🧠", "pts_3": 86, "defense": 94, "playmaking": 96, "inside": 80, "clutch": 94},
-        {"name": "Kyrie Irving", "cost": 2, "team": "CLE", "tag": "Ankle Breaker • Finals Dagger", "emoji": "⚡", "pts_3": 92, "defense": 76, "playmaking": 88, "inside": 96, "clutch": 98},
-        {"name": "Jrue Holiday", "cost": 1, "team": "BOS", "tag": "2x Champ • Perimeter Clamp", "emoji": "🔒", "pts_3": 85, "defense": 97, "playmaking": 86, "inside": 82, "clutch": 90},
+        {"name": "Stephen Curry", "cost": 5, "team": "GSW", "tag": "Unanimous MVP • Greatest Shooter Ever", "emoji": "🎯", "archetype": "Sniper Specialist", "pts_3": 99, "defense": 78, "playmaking": 92, "inside": 84, "clutch": 98, "favored": ["three", "pnr"], "blocked": ["defense"]},
+        {"name": "Magic Johnson", "cost": 4, "team": "LAL", "tag": "5x Champ • Showtime Maestro", "emoji": "🪄", "archetype": "Showtime Floor General", "pts_3": 78, "defense": 86, "playmaking": 99, "inside": 92, "clutch": 96, "favored": ["pnr", "drive"], "blocked": ["three"]},
+        {"name": "Chris Paul", "cost": 3, "team": "LAC", "tag": "Point God • Floor General", "emoji": "🧠", "archetype": "Mid-Range General", "pts_3": 86, "defense": 94, "playmaking": 96, "inside": 80, "clutch": 94, "favored": ["pnr", "defense", "iso"], "blocked": []},
+        {"name": "Kyrie Irving", "cost": 2, "team": "CLE", "tag": "Ankle Breaker • Finals Dagger", "emoji": "⚡", "archetype": "Isolation Wizard", "pts_3": 92, "defense": 76, "playmaking": 88, "inside": 96, "clutch": 98, "favored": ["iso", "three", "drive"], "blocked": ["defense"]},
+        {"name": "Jrue Holiday", "cost": 1, "team": "BOS", "tag": "2x Champ • Perimeter Clamp", "emoji": "🔒", "archetype": "Perimeter Lock", "pts_3": 85, "defense": 97, "playmaking": 86, "inside": 82, "clutch": 90, "favored": ["defense", "pnr"], "blocked": ["iso"]},
     ],
     "SG": [
-        {"name": "Michael Jordan", "cost": 5, "team": "CHI", "tag": "6x Finals MVP • Undisputed GOAT", "emoji": "🐐", "pts_3": 82, "defense": 99, "playmaking": 88, "inside": 99, "clutch": 99},
-        {"name": "Kobe Bryant", "cost": 4, "team": "LAL", "tag": "5x Champ • Mamba Mentality", "emoji": "🐍", "pts_3": 86, "defense": 96, "playmaking": 86, "inside": 96, "clutch": 99},
-        {"name": "Dwyane Wade", "cost": 3, "team": "MIA", "tag": "3x Champ • Finals MVP Slashing Monster", "emoji": "⚡", "pts_3": 76, "defense": 93, "playmaking": 90, "inside": 97, "clutch": 96},
-        {"name": "Klay Thompson", "cost": 2, "team": "GSW", "tag": "4x Champ • Game 6 Splash Brother", "emoji": "🔥", "pts_3": 98, "defense": 92, "playmaking": 74, "inside": 78, "clutch": 95},
-        {"name": "Derrick White", "cost": 1, "team": "BOS", "tag": "All-Defensive • Ultimate Glue Guy", "emoji": "🦬", "pts_3": 87, "defense": 93, "playmaking": 82, "inside": 80, "clutch": 88},
+        {"name": "Michael Jordan", "cost": 5, "team": "CHI", "tag": "6x Finals MVP • Undisputed GOAT", "emoji": "🐐", "archetype": "Two-Way GOAT", "pts_3": 82, "defense": 99, "playmaking": 88, "inside": 99, "clutch": 99, "favored": ["iso", "drive", "defense"], "blocked": []},
+        {"name": "Kobe Bryant", "cost": 4, "team": "LAL", "tag": "5x Champ • Mamba Mentality", "emoji": "🐍", "archetype": "Mamba Shot-Maker", "pts_3": 86, "defense": 96, "playmaking": 86, "inside": 96, "clutch": 99, "favored": ["iso", "drive", "defense"], "blocked": []},
+        {"name": "Dwyane Wade", "cost": 3, "team": "MIA", "tag": "3x Champ • Finals MVP Slashing Flash", "emoji": "⚡", "archetype": "Slashing Guard", "pts_3": 76, "defense": 93, "playmaking": 90, "inside": 97, "clutch": 96, "favored": ["drive", "pnr", "defense"], "blocked": ["three"]},
+        {"name": "Klay Thompson", "cost": 2, "team": "GSW", "tag": "4x Champ • Catch & Shoot Flamethrower", "emoji": "🔥", "archetype": "3-and-D Sniper", "pts_3": 98, "defense": 92, "playmaking": 74, "inside": 78, "clutch": 95, "favored": ["three", "defense"], "blocked": ["drive", "iso"]},
+        {"name": "Derrick White", "cost": 1, "team": "BOS", "tag": "All-Defensive • Ultimate Glue Guy", "emoji": "🦬", "archetype": "Two-Way Glue", "pts_3": 87, "defense": 93, "playmaking": 82, "inside": 80, "clutch": 88, "favored": ["defense", "three"], "blocked": ["iso"]},
     ],
     "SF": [
-        {"name": "LeBron James", "cost": 5, "team": "MIA", "tag": "4x MVP • All-Around King", "emoji": "👑", "pts_3": 85, "defense": 95, "playmaking": 99, "inside": 99, "clutch": 97},
-        {"name": "Kevin Durant", "cost": 4, "team": "GSW", "tag": "2x Finals MVP • 7ft Walking Bucket", "emoji": "🎯", "pts_3": 95, "defense": 89, "playmaking": 85, "inside": 94, "clutch": 97},
-        {"name": "Kawhi Leonard", "cost": 3, "team": "TOR", "tag": "2x DPOY • The Klaw Lock", "emoji": "🤖", "pts_3": 89, "defense": 99, "playmaking": 82, "inside": 91, "clutch": 97},
-        {"name": "Jimmy Butler", "cost": 2, "team": "MIA", "tag": "Playoff Jimmy • Clutch Beast", "emoji": "☕", "pts_3": 80, "defense": 94, "playmaking": 86, "inside": 92, "clutch": 98},
-        {"name": "Alex Caruso", "cost": 1, "team": "OKC", "tag": "All-Defensive • Steal & Hustle Master", "emoji": "🦅", "pts_3": 82, "defense": 95, "playmaking": 80, "inside": 78, "clutch": 87},
+        {"name": "LeBron James", "cost": 5, "team": "MIA", "tag": "4x MVP • All-Around King", "emoji": "👑", "archetype": "All-Around Point Forward", "pts_3": 85, "defense": 95, "playmaking": 99, "inside": 99, "clutch": 97, "favored": ["drive", "pnr", "defense", "iso"], "blocked": []},
+        {"name": "Kevin Durant", "cost": 4, "team": "GSW", "tag": "2x Finals MVP • 7ft Walking Bucket", "emoji": "🎯", "archetype": "Unblockable 3-Level Scorer", "pts_3": 95, "defense": 89, "playmaking": 85, "inside": 94, "clutch": 97, "favored": ["three", "iso", "drive"], "blocked": []},
+        {"name": "Kawhi Leonard", "cost": 3, "team": "TOR", "tag": "2x DPOY • The Klaw Lock", "emoji": "🤖", "archetype": "Lockdown Two-Way Force", "pts_3": 89, "defense": 99, "playmaking": 82, "inside": 91, "clutch": 97, "favored": ["defense", "iso", "three"], "blocked": []},
+        {"name": "Jimmy Butler", "cost": 2, "team": "MIA", "tag": "Playoff Jimmy • Clutch Beast", "emoji": "☕", "archetype": "Playoff Enforcer", "pts_3": 80, "defense": 94, "playmaking": 86, "inside": 92, "clutch": 98, "favored": ["drive", "defense", "iso"], "blocked": []},
+        {"name": "Alex Caruso", "cost": 1, "team": "OKC", "tag": "All-Defensive • Steal & Hustle Master", "emoji": "🦅", "archetype": "Perimeter Disrupter", "pts_3": 82, "defense": 95, "playmaking": 80, "inside": 78, "clutch": 87, "favored": ["defense", "pnr"], "blocked": ["iso", "drive"]},
     ],
     "PF": [
-        {"name": "Tim Duncan", "cost": 5, "team": "SAS", "tag": "5x Champ • The Big Fundamental", "emoji": "🏛️", "pts_3": 60, "defense": 99, "playmaking": 84, "inside": 98, "clutch": 97},
-        {"name": "Larry Bird", "cost": 4, "team": "BOS", "tag": "3x MVP • Legendary Trash Talker", "emoji": "🍀", "pts_3": 94, "defense": 87, "playmaking": 95, "inside": 89, "clutch": 99},
-        {"name": "Dirk Nowitzki", "cost": 3, "team": "DAL", "tag": "Finals MVP • Unblockable Fadeaway", "emoji": "🇩🇪", "pts_3": 95, "defense": 79, "playmaking": 79, "inside": 93, "clutch": 98},
-        {"name": "Anthony Davis", "cost": 2, "team": "LAL", "tag": "NBA Champ • The Brow Two-Way Anchor", "emoji": "〰️", "pts_3": 76, "defense": 97, "playmaking": 78, "inside": 97, "clutch": 92},
-        {"name": "Naz Reid", "cost": 1, "team": "MIN", "tag": "6th Man of the Year • Fan Favorite Sniper", "emoji": "🐺", "pts_3": 88, "defense": 84, "playmaking": 74, "inside": 90, "clutch": 88},
+        {"name": "Tim Duncan", "cost": 5, "team": "SAS", "tag": "5x Champ • The Big Fundamental", "emoji": "🏛️", "archetype": "Interior Anchor & Bank Shot", "pts_3": 60, "defense": 99, "playmaking": 84, "inside": 98, "clutch": 97, "favored": ["drive", "defense", "pnr"], "blocked": ["three"]},
+        {"name": "Larry Bird", "cost": 4, "team": "BOS", "tag": "3x MVP • Legendary Trash Talker", "emoji": "🍀", "archetype": "Clutch Point Forward", "pts_3": 94, "defense": 87, "playmaking": 95, "inside": 89, "clutch": 99, "favored": ["three", "pnr", "iso"], "blocked": []},
+        {"name": "Dirk Nowitzki", "cost": 3, "team": "DAL", "tag": "Finals MVP • Unblockable Fadeaway", "emoji": "🇩🇪", "archetype": "One-Leg Fadeaway Specialist", "pts_3": 95, "defense": 79, "playmaking": 79, "inside": 93, "clutch": 98, "favored": ["iso", "three"], "blocked": ["defense", "drive"]},
+        {"name": "Anthony Davis", "cost": 2, "team": "LAL", "tag": "NBA Champ • The Brow Two-Way Anchor", "emoji": "〰️", "archetype": "Lob Threat & Shot-Blocker", "pts_3": 76, "defense": 97, "playmaking": 78, "inside": 97, "clutch": 92, "favored": ["drive", "defense", "pnr"], "blocked": ["three"]},
+        {"name": "Naz Reid", "cost": 1, "team": "MIN", "tag": "6th Man of the Year • Fan Favorite Sniper", "emoji": "🐺", "archetype": "Stretch Big", "pts_3": 88, "defense": 84, "playmaking": 74, "inside": 90, "clutch": 88, "favored": ["three", "drive"], "blocked": ["defense"]},
     ],
     "C": [
-        {"name": "Shaquille O'Neal", "cost": 5, "team": "LAL", "tag": "3x Finals MVP • Most Dominant Force", "emoji": "💥", "pts_3": 50, "defense": 93, "playmaking": 72, "inside": 99, "clutch": 95},
-        {"name": "Hakeem Olajuwon", "cost": 4, "team": "HOU", "tag": "2x DPOY • The Dream Shake", "emoji": "🌪️", "pts_3": 62, "defense": 99, "playmaking": 82, "inside": 98, "clutch": 97},
-        {"name": "Nikola Jokić", "cost": 3, "team": "DEN", "tag": "3x MVP • Triple-Double Magician", "emoji": "🃏", "pts_3": 87, "defense": 79, "playmaking": 99, "inside": 97, "clutch": 97},
-        {"name": "Giannis Antetokounmpo", "cost": 2, "team": "MIL", "tag": "2x MVP • Greek Freak Freight Train", "emoji": "🦌", "pts_3": 68, "defense": 97, "playmaking": 86, "inside": 99, "clutch": 94},
-        {"name": "Victor Wembanyama", "cost": 1, "team": "SAS", "tag": "7ft 4in • Alien Shot-Blocker", "emoji": "👽", "pts_3": 84, "defense": 98, "playmaking": 78, "inside": 91, "clutch": 90},
+        {"name": "Shaquille O'Neal", "cost": 5, "team": "LAL", "tag": "3x Finals MVP • Most Dominant Force", "emoji": "💥", "archetype": "Dominant Bully Big", "pts_3": 50, "defense": 93, "playmaking": 72, "inside": 99, "clutch": 95, "favored": ["drive", "defense"], "blocked": ["three"]},
+        {"name": "Hakeem Olajuwon", "cost": 4, "team": "HOU", "tag": "2x DPOY • The Dream Shake", "emoji": "🌪️", "archetype": "Post Footwork Genius", "pts_3": 62, "defense": 99, "playmaking": 82, "inside": 98, "clutch": 97, "favored": ["defense", "iso", "drive"], "blocked": ["three"]},
+        {"name": "Nikola Jokić", "cost": 3, "team": "DEN", "tag": "3x MVP • Triple-Double Magician", "emoji": "🃏", "archetype": "Post Playmaker & Touch Scorer", "pts_3": 87, "defense": 79, "playmaking": 99, "inside": 97, "clutch": 97, "favored": ["pnr", "drive", "three"], "blocked": ["defense"]},
+        {"name": "Giannis Antetokounmpo", "cost": 2, "team": "MIL", "tag": "2x MVP • Greek Freak Freight Train", "emoji": "🦌", "archetype": "Rim-Running Monster", "pts_3": 68, "defense": 97, "playmaking": 86, "inside": 99, "clutch": 94, "favored": ["drive", "defense", "pnr"], "blocked": ["three"]},
+        {"name": "Victor Wembanyama", "cost": 1, "team": "SAS", "tag": "7ft 4in • Alien Shot-Blocker", "emoji": "👽", "archetype": "Alien Rim Anchor", "pts_3": 84, "defense": 98, "playmaking": 78, "inside": 91, "clutch": 90, "favored": ["defense", "three", "pnr"], "blocked": ["drive"]},
     ]
 }
 
@@ -2018,9 +2018,10 @@ def resolve_possession(
     momentum_def: int,
     scheme_key: str = "drop_coverage",
     play_streak: int = 1,
-    has_timeout_boost: bool = False
+    has_timeout_boost: bool = False,
+    is_clutch: bool = False
 ) -> Dict[str, Any]:
-    """Resolves an in-game coaching possession using tactical counter reads, player attributes, anti-spam adaptation, and momentum."""
+    """Resolves an in-game coaching possession using tactical counter reads, player moveset archetypes, clutch genes, anti-spam adaptation, and momentum."""
     action = TACTICAL_OUTCOMES.get(action_key, TACTICAL_OUTCOMES["three"])
     favored_stat = action["favors"]
     att_stat = pl_att.get(favored_stat, 80)
@@ -2030,25 +2031,39 @@ def resolve_possession(
     tactical_modifier = 0.0
     read_notes = []
 
+    # 1. Scheme counters (Read & React)
     if scheme_key in action["good_against"]:
         tactical_modifier += scheme_data.get("counter_bonus", 0.35)
-        read_notes.append(f"🎯 **PERFECT TACTICAL COUNTER! (+{int(scheme_data.get('counter_bonus', 0.35)*100)}% Boost)**\nYou successfully exploited `{scheme_data['name']}`!")
+        read_notes.append(f"🎯 **TACTICAL COUNTER! (+{int(scheme_data.get('counter_bonus', 0.35)*100)}% Boost)**\nYou exploited `{scheme_data['name']}`!")
     elif scheme_key in action["bad_against"]:
         tactical_modifier -= scheme_data.get("bad_penalty", 0.28)
-        read_notes.append(f"⚠️ **BAD CALL / DEFENSIVE READ (-{int(scheme_data.get('bad_penalty', 0.28)*100)}% Penalty)**\nYou ran directly into `{scheme_data['name']}`!")
+        read_notes.append(f"⚠️ **BAD READ / TRAP (-{int(scheme_data.get('bad_penalty', 0.28)*100)}% Penalty)**\nYou ran directly into `{scheme_data['name']}`!")
     else:
         read_notes.append(f"⚡ **Neutral Matchup** against `{scheme_data['name']}`.")
 
-    # Player archetype affinity bonus/penalty
+    # 2. Player Archetype Move Set (Favored vs Blocked)
     archetype_bonus = 0.0
-    if att_stat >= 95:
-        archetype_bonus += 0.10
-        read_notes.append(f"⭐ *Legendary {favored_stat.upper()} Mastery ({att_stat} / +10% Boost)*")
-    elif att_stat <= 82:
-        archetype_bonus -= 0.10
-        read_notes.append(f"⚠️ *Low {favored_stat.upper()} Rating ({att_stat} / -10% Penalty)*")
+    favored_moves = pl_att.get("favored", [])
+    blocked_moves = pl_att.get("blocked", [])
+    if action_key in favored_moves:
+        archetype_bonus += 0.15
+        read_notes.append(f"⭐ **SIGNATURE PLAY (+15% Mastery)**: {pl_att.get('name', 'Player')} operates in their archetype sweet spot ({pl_att.get('archetype', 'Star')})!")
+    elif action_key in blocked_moves:
+        archetype_bonus -= 0.35
+        read_notes.append(f"🛑 **OUT-OF-ARCHETYPE BRICK RISK (-35% Penalty)**: {pl_att.get('name', 'Player')} is forced into an unnatural play call!")
 
-    # Anti-spam consecutive play penalty
+    # 3. Clutch Gene
+    clutch_bonus = 0.0
+    if is_clutch:
+        cl_val = pl_att.get("clutch", 85)
+        if cl_val >= 95:
+            clutch_bonus += 0.18
+            read_notes.append(f"🔥 **CLUTCH GENE (+18% Ice In Veins)**: {pl_att.get('name', 'Player')} has ice in their veins for the game-winner!")
+        elif cl_val <= 82:
+            clutch_bonus -= 0.12
+            read_notes.append(f"⚠️ **CLUTCH PRESSURE (-12% Penalty)**: High-stakes pressure shakes {pl_att.get('name', 'Player')}!")
+
+    # 4. Anti-spam consecutive play penalty
     streak_penalty = 0.0
     if play_streak == 2:
         streak_penalty = 0.15
@@ -2057,18 +2072,18 @@ def resolve_possession(
         streak_penalty = 0.35
         read_notes.append("🛑 **DEFENSIVE TRAP (-35%)**: Opponent jumped the route on consecutive play spam!")
 
-    # Timeout boost
+    # 5. Timeout boost
     timeout_bonus = 0.20 if has_timeout_boost else 0.0
     if has_timeout_boost:
         read_notes.append("⏱️ **Coach ATO Set-Play Active (+20% Precision Boost)**")
 
-    # Momentum modifier (+6% per hot flame)
+    # 6. Momentum modifier (+6% per hot flame)
     momentum_mod = (momentum_att * 0.06) - (momentum_def * 0.04)
 
     # Base hit probability
     stat_diff = att_stat - def_stat
-    base_prob = 0.50 + (stat_diff * 0.008) + tactical_modifier + archetype_bonus - streak_penalty + timeout_bonus + momentum_mod
-    base_prob = max(0.15, min(0.92, base_prob))
+    base_prob = 0.50 + (stat_diff * 0.008) + tactical_modifier + archetype_bonus + clutch_bonus - streak_penalty + timeout_bonus + momentum_mod
+    base_prob = max(0.10, min(0.95, base_prob))
 
     success = random.random() < base_prob
     pts_scored = action["pts"] if success else 0
@@ -2099,7 +2114,7 @@ def resolve_possession(
 
 
 class InteractiveTeamBattleView(discord.ui.View):
-    """Live turn-based interactive tactical card battle view with Read & React scout reads, tactical counters, and coach perks."""
+    """Live turn-based interactive tactical card battle view with Read & React scout reads, tactical counters, player moveset kits, and clutch mode."""
     def __init__(
         self,
         author: Union[discord.Member, discord.User],
@@ -2132,11 +2147,17 @@ class InteractiveTeamBattleView(discord.ui.View):
             "C": "Center"
         }
         
-        self.current_round = 0  # 0 to 4
-        self.duels_won_a = 0
-        self.duels_won_b = 0
-        self.round_pts_a = 0
-        self.round_pts_b = 0
+        self.current_round = 0  # 0 to 4 (representing PG -> C)
+        self.duels_won_a = 0     # Quarters won by A
+        self.duels_won_b = 0     # Quarters won by B
+        
+        # Quarter 7-PT race scoring
+        self.target_q_pts = 7
+        self.q_pts_a = 0
+        self.q_pts_b = 0
+        self.total_pts_a = 0
+        self.total_pts_b = 0
+        
         self.momentum_a = 0
         self.momentum_b = 0
         self.round_history = []
@@ -2146,6 +2167,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.play_streak_a: int = 0
         self.timeouts_left_a: int = 1
         self.has_timeout_boost_a: bool = False
+        self.is_clutch_mode = False
         
         # Generate dynamic defensive schemes for all 5 rounds
         scheme_keys = list(DEFENSIVE_SCHEMES.keys())
@@ -2161,7 +2183,7 @@ class InteractiveTeamBattleView(discord.ui.View):
                 chosen_s = random.choice(scheme_keys)
             self.round_schemes.append(chosen_s)
 
-        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a.get('ovr', 90)} OVR) vs {opponent.display_name} ({eval_b.get('ovr', 90)} OVR).\n*Read the opponent's defensive scout look below and execute tactical counters!*"
+        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a.get('ovr', 90)} OVR) vs {opponent.display_name} ({eval_b.get('ovr', 90)} OVR).\n*First to 7 PTS wins each quarter! Read the opponent's defensive scout look below and execute your player's signature moves!*"
         self.player_points = {
             self.author.id: {},
             self.opponent.id: {},
@@ -2184,6 +2206,19 @@ class InteractiveTeamBattleView(discord.ui.View):
             self.add_item(btn_draft)
             return
 
+        cur_idx = min(self.current_round, len(self.positions) - 1)
+        cur_pos = self.positions[cur_idx]
+        pl_a = self.picks_a.get(cur_pos, {})
+        favored_a = pl_a.get("favored", []) if isinstance(pl_a, dict) else []
+        blocked_a = pl_a.get("blocked", []) if isinstance(pl_a, dict) else []
+
+        def _btn_label(base_lbl: str, key: str) -> str:
+            if key in favored_a:
+                return f"{base_lbl} ⭐"
+            elif key in blocked_a:
+                return f"{base_lbl} ⚠️"
+            return base_lbl
+
         # Row 0: Primary offensive play calls
         # NOTE: lambdas are not awaitable coroutine functions in discord.py — use named async wrappers
         async def _cb_three(i: discord.Interaction): await self.handle_tactical_action(i, "three")
@@ -2192,24 +2227,24 @@ class InteractiveTeamBattleView(discord.ui.View):
         async def _cb_defense(i: discord.Interaction): await self.handle_tactical_action(i, "defense")
         async def _cb_iso(i: discord.Interaction): await self.handle_tactical_action(i, "iso")
 
-        btn_three = discord.ui.Button(label="Step-Back 3PT", style=discord.ButtonStyle.primary, emoji="🎯", custom_id="btn_three", row=0)
+        btn_three = discord.ui.Button(label=_btn_label("Step-Back 3PT", "three"), style=discord.ButtonStyle.primary, emoji="🎯", custom_id="btn_three", row=0)
         btn_three.callback = _cb_three
         self.add_item(btn_three)
 
-        btn_drive = discord.ui.Button(label="Power Drive & Slam", style=discord.ButtonStyle.danger, emoji="💥", custom_id="btn_drive", row=0)
+        btn_drive = discord.ui.Button(label=_btn_label("Power Drive", "drive"), style=discord.ButtonStyle.danger, emoji="💥", custom_id="btn_drive", row=0)
         btn_drive.callback = _cb_drive
         self.add_item(btn_drive)
 
-        btn_pnr = discord.ui.Button(label="Pick & Roll / Dish", style=discord.ButtonStyle.success, emoji="🧠", custom_id="btn_pnr", row=0)
+        btn_pnr = discord.ui.Button(label=_btn_label("Pick & Roll", "pnr"), style=discord.ButtonStyle.success, emoji="🧠", custom_id="btn_pnr", row=0)
         btn_pnr.callback = _cb_pnr
         self.add_item(btn_pnr)
 
         # Row 1: Tactical counters
-        btn_clamp = discord.ui.Button(label="Lockdown Clamp", style=discord.ButtonStyle.secondary, emoji="🔒", custom_id="btn_defense", row=1)
+        btn_clamp = discord.ui.Button(label=_btn_label("Lockdown Clamp", "defense"), style=discord.ButtonStyle.secondary, emoji="🔒", custom_id="btn_defense", row=1)
         btn_clamp.callback = _cb_defense
         self.add_item(btn_clamp)
 
-        btn_iso = discord.ui.Button(label="Mamba Iso", style=discord.ButtonStyle.primary, emoji="⚡", custom_id="btn_iso", row=1)
+        btn_iso = discord.ui.Button(label=_btn_label("Mamba Iso", "iso"), style=discord.ButtonStyle.primary, emoji="⚡", custom_id="btn_iso", row=1)
         btn_iso.callback = _cb_iso
         self.add_item(btn_iso)
 
@@ -2225,7 +2260,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         btn_to.callback = self.handle_timeout_action
         self.add_item(btn_to)
 
-        btn_sim = discord.ui.Button(label="Quick Sim Remainder", style=discord.ButtonStyle.secondary, emoji="⏩", custom_id="btn_sim", row=2)
+        btn_sim = discord.ui.Button(label="Quick Sim Match", style=discord.ButtonStyle.secondary, emoji="⏩", custom_id="btn_sim", row=2)
         btn_sim.callback = self.handle_simulate_remainder
         self.add_item(btn_sim)
 
@@ -2334,45 +2369,58 @@ class InteractiveTeamBattleView(discord.ui.View):
             status_text = f"⚖️ **Series Tied `{self.duels_won_a} — {self.duels_won_b}`**"
             status_color = discord.Color.orange()
 
+        if self.is_clutch_mode:
+            status_color = discord.Color.red()
+
         mom_bar_a = "🔥" * max(0, self.momentum_a) or "⚪"
         mom_bar_b = "🔥" * max(0, self.momentum_b) or "⚪"
 
+        # Quarter Progress Bar
+        q_bar_a = "🟩" * min(7, self.q_pts_a) + "⬜" * max(0, 7 - self.q_pts_a)
+        q_bar_b = "🟥" * min(7, self.q_pts_b) + "⬜" * max(0, 7 - self.q_pts_b)
+
+        embed_title = f"🔥 CLUTCH TIME: {self.author.display_name} vs {self.opponent.display_name}" if self.is_clutch_mode else f"⚔️ LIVE NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}"
+        
+        desc_lines = [
+            f"### 🏀 Series Status: {status_text} *(Best of 5 Quarters)*",
+            f"**Quarter `{cur_idx + 1}/5`**: **{pos_title} ({cur_pos}) Duel**",
+            f"⚡ **Quarter Race (First to 7 PTS)**:\n> 🟢 **{self.author.display_name}**: `{self.q_pts_a}/7 PTS` {q_bar_a}\n> 🔴 **{self.opponent.display_name}**: `{self.q_pts_b}/7 PTS` {q_bar_b}",
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ]
+        if self.is_clutch_mode:
+            desc_lines.insert(0, "# 🚨 🔥 CLUTCH TIME DECIDER! WINNER TAKES THE SERIES! 🔥")
+
         embed = discord.Embed(
-            title=f"⚔️ LIVE NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}",
-            description=(
-                f"### 🏀 Series Status: {status_text}\n"
-                f"**Quarter `{cur_idx + 1}/5`**: **{pos_title} ({cur_pos}) Matchup**\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            ),
+            title=embed_title,
+            description="\n".join(desc_lines),
             color=status_color
         )
         if hasattr(self.author, "display_avatar") and self.author.display_avatar:
             embed.set_thumbnail(url=self.author.display_avatar.url)
 
-        att_strengths = []
-        if pl_a.get("pts_3", 0) >= 94: att_strengths.append(f"🎯 3PT ({pl_a.get('pts_3')})")
-        if pl_a.get("inside", 0) >= 94: att_strengths.append(f"💥 Inside ({pl_a.get('inside')})")
-        if pl_a.get("playmaking", 0) >= 94: att_strengths.append(f"🧠 Playmaking ({pl_a.get('playmaking')})")
-        if pl_a.get("defense", 0) >= 94: att_strengths.append(f"🔒 Defense ({pl_a.get('defense')})")
-        if pl_a.get("clutch", 0) >= 94: att_strengths.append(f"⚡ Clutch ({pl_a.get('clutch')})")
-        att_str_fmt = " • ".join(att_strengths) if att_strengths else f"⭐ {pl_a.get('tag', 'Legend')}"
+        # Player kit info
+        favored_names = [TACTICAL_OUTCOMES[k]["name"] for k in pl_a.get("favored", []) if k in TACTICAL_OUTCOMES]
+        blocked_names = [TACTICAL_OUTCOMES[k]["name"] for k in pl_a.get("blocked", []) if k in TACTICAL_OUTCOMES]
+        fav_str = " • ".join(favored_names) if favored_names else "⭐ Balanced All-Around"
+        blk_str = f" | ⚠️ *Weakness*: {', '.join(blocked_names)}" if blocked_names else ""
 
         matchup_value = (
             f"🟢 **{self.author.display_name}**: {pl_a.get('emoji', '🏀')} **{pl_a.get('name', 'Player A')}** (`${pl_a.get('cost', 1)}`) `[MOM: {mom_bar_a}]`\n"
-            f"> ⭐ **Signature**: {att_str_fmt}\n"
+            f"> 🌟 **Archetype**: `{pl_a.get('archetype', 'Star')}`\n"
+            f"> ⭐ **Signature Moves**: {fav_str}{blk_str}\n"
             f"🔴 **{self.opponent.display_name}**: {pl_b.get('emoji', '🏀')} **{pl_b.get('name', 'Player B')}** (`${pl_b.get('cost', 1)}`) `[MOM: {mom_bar_b}]`\n"
-            f"> 🛡️ **Defense Rating**: `{pl_b.get('defense', 85)} DEF` • *{pl_b.get('tag', 'Archetype')}*"
+            f"> 🛡️ **Defense Rating**: `{pl_b.get('defense', 85)} DEF` • *{pl_b.get('archetype', 'Archetype')}*"
         )
-        embed.add_field(name=f"⭐ Positional Duel • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
+        embed.add_field(name=f"⭐ Positional Matchup • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
 
-        # Visible Defensive Scout Read
+        # Visible Defensive Scout Read (Telegraph)
         scout_value = (
             f"🛡️ **Opponent Scheme**: **`{scheme_data['name']}`**\n"
             f"*{scheme_data['desc']}*\n"
             f"💡 **Scout Recommendation**: {scheme_data['scout_tip']}"
         )
         if self.play_streak_a >= 2:
-            scout_value += f"\n⚠️ **Defensive Anticipation**: You ran `{str(self.last_play_a).upper()}` last turn (-15% repeated play penalty)! Call a different counter."
+            scout_value += f"\n⚠️ **Defensive Anticipation**: You ran `{str(self.last_play_a).upper()}` last possession (-15% repeated play penalty)! Call a different counter."
         if self.has_timeout_boost_a:
             scout_value += "\n⏱️ **ATO Set-Play Boost**: +20% Precision Bonus active on your next call!"
 
@@ -2380,11 +2428,11 @@ class InteractiveTeamBattleView(discord.ui.View):
         embed.add_field(name="📜 Latest Play Action", value=f">>> {self.last_commentary}", inline=False)
 
         guide_text = (
-            "🎯 `3PT Step-Back` (Beats Drop) • 💥 `Power Drive` (Beats Press) • 🧠 `Pick & Roll` (Beats Traps)\n"
-            "🔒 `Lockdown Clamp` (Strips Iso) • ⚡ `Mamba Iso` (Beats Mismatches) • ⏱️ `Coach Timeout` (+20% ATO)"
+            "🎯 `3PT` (Beats Drop) • 💥 `Drive` (Beats Press) • 🧠 `PnR` (Beats Traps)\n"
+            "🔒 `Clamp` (Strips Iso) • ⚡ `Mamba Iso` (Beats Mismatches) • ⭐ = Player Signature"
         )
         embed.add_field(name="🎮 Choose Your Live Coach Decision Below", value=guide_text, inline=False)
-        embed.set_footer(text=f"Duels: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • Read the scout to guarantee advantage!")
+        embed.set_footer(text=f"Quarters Won: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • First to 7 PTS wins each quarter!")
         embed.timestamp = discord.utils.utcnow()
         return embed
 
@@ -2400,7 +2448,7 @@ class InteractiveTeamBattleView(discord.ui.View):
             loser_member = self.author
             winner_is_a = False
         else:
-            if self.round_pts_a >= self.round_pts_b:
+            if self.total_pts_a >= self.total_pts_b:
                 winner_name = self.author.display_name
                 winner_member = self.author
                 loser_member = self.opponent
@@ -2411,12 +2459,12 @@ class InteractiveTeamBattleView(discord.ui.View):
                 loser_member = self.author
                 winner_is_a = False
 
-        final_score_a = 96 + (self.duels_won_a * 6) + (self.round_pts_a * 2)
-        final_score_b = 96 + (self.duels_won_b * 6) + (self.round_pts_b * 2)
+        final_score_a = 98 + (self.duels_won_a * 7) + self.total_pts_a
+        final_score_b = 98 + (self.duels_won_b * 7) + self.total_pts_b
         if winner_is_a and final_score_a <= final_score_b:
-            final_score_a = final_score_b + 2
+            final_score_a = final_score_b + 3
         elif not winner_is_a and final_score_b <= final_score_a:
-            final_score_b = final_score_a + 2
+            final_score_b = final_score_a + 3
 
         winner_pts = final_score_a if winner_is_a else final_score_b
         loser_pts = final_score_b if winner_is_a else final_score_a
@@ -2429,7 +2477,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         new_achievements_winner = ["first_champ"]
         if winner_eval.get("ovr", 0) < loser_eval.get("ovr", 0):
             new_achievements_winner.append("budget_maestro")
-        if winner_duels == 5:
+        if winner_duels >= 3 and loser_duels == 0:
             new_achievements_winner.append("the_clamps")
 
         # Backcourt check (PG and SG)
@@ -2496,7 +2544,7 @@ class InteractiveTeamBattleView(discord.ui.View):
             title=f"🏆 FINAL WHISTLE: {self.author.display_name} vs {self.opponent.display_name}",
             description=(
                 f"# 👑 `{winner_name}` WINS THE SERIES!\n\n"
-                f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Duels Won: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
+                f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Quarters Won: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
                 f"• 🟢 **{self.author.display_name} ({self.eval_a.get('ovr', 90)} OVR)**: {tier_a} • `Record: {updated_stats_a.get('wins', 0)}W-{updated_stats_a.get('losses', 0)}L ({streak_a_fmt})`\n"
                 f"• 🔴 **{self.opponent.display_name} ({self.eval_b.get('ovr', 90)} OVR)**: {tier_b} • `Record: {updated_stats_b.get('wins', 0)}W-{updated_stats_b.get('losses', 0)}L ({streak_b_fmt})`\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -2529,7 +2577,7 @@ class InteractiveTeamBattleView(discord.ui.View):
                 p_b_fmt = f"**{p_b}** `(+{pts_b})`"
             box_lines.append(f"`{pos:<2}` {res_icon} {p_a_fmt} ── **`{pts_a} - {pts_b}`** ── {p_b_fmt}")
 
-        embed.add_field(name="🏀 Positional Duels Breakdown (Best of 5)", value="\n".join(box_lines) if box_lines else "*No duels recorded*", inline=False)
+        embed.add_field(name="🏀 Positional Quarters Breakdown (First to 7 PTS)", value="\n".join(box_lines) if box_lines else "*No duels recorded*", inline=False)
 
         winning_picks = self.picks_a if winner_is_a else self.picks_b
         winning_user_id = winner_member.id
@@ -2562,13 +2610,15 @@ class InteractiveTeamBattleView(discord.ui.View):
                 "team": "NBA",
                 "emoji": "🏀",
                 "cost": 1,
-                "tag": "Legend"
+                "tag": "Legend",
+                "archetype": "Clutch Leader"
             }
 
         p_name = mvp_player.get("name", "Team Captain")
         p_emoji = mvp_player.get("emoji", "🏀")
         p_team = mvp_player.get("team", "NBA")
         p_tag = mvp_player.get("tag", "Legend")
+        p_arch = mvp_player.get("archetype", "Clutch MVP")
         extra_pts = scores_map.get(p_name, 0) if isinstance(scores_map, dict) else 0
 
         mvp_pts = random.randint(28, 38) + (extra_pts * 2)
@@ -2577,7 +2627,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         mvp_blk = random.randint(1, 4)
 
         mvp_value = (
-            f"{p_emoji} **{p_name}** ({p_team}) — *{p_tag}*\n"
+            f"{p_emoji} **{p_name}** ({p_team}) — *{p_arch}*\n"
             f"📊 **Final Statline**: **`{mvp_pts} PTS`** • **`{mvp_reb} REB`** • **`{mvp_ast} AST`** • **`{mvp_blk} BLK`**"
         )
         embed.add_field(name="🎖️ Player of the Match (MVP) Trophy", value=mvp_value, inline=False)
@@ -2609,17 +2659,7 @@ class InteractiveTeamBattleView(discord.ui.View):
                     await interaction.edit_original_response(embed=embed, view=self)
                 return
 
-            cur_idx = self.current_round
-            if cur_idx >= len(self.positions):
-                self.is_game_over = True
-                self._build_controls()
-                embed = await self._process_game_over()
-                if not interaction.response.is_done():
-                    await interaction.response.edit_message(embed=embed, view=self)
-                else:
-                    await interaction.edit_original_response(embed=embed, view=self)
-                return
-
+            cur_idx = min(self.current_round, len(self.positions) - 1)
             cur_pos = self.positions[cur_idx]
             pos_title = self.pos_fullnames.get(cur_pos, cur_pos)
             pl_a = self.picks_a.get(cur_pos, {})
@@ -2642,10 +2682,13 @@ class InteractiveTeamBattleView(discord.ui.View):
                 momentum_def=self.momentum_b,
                 scheme_key=cur_scheme_key,
                 play_streak=self.play_streak_a,
-                has_timeout_boost=self.has_timeout_boost_a
+                has_timeout_boost=self.has_timeout_boost_a,
+                is_clutch=self.is_clutch_mode
             )
             self.has_timeout_boost_a = False
-            self.round_pts_a += res_a["pts"]
+            self.q_pts_a += res_a["pts"]
+            self.total_pts_a += res_a["pts"]
+
             p_name_a = pl_a.get("name", "Player A")
             if self.author.id not in self.player_points:
                 self.player_points[self.author.id] = {}
@@ -2659,70 +2702,90 @@ class InteractiveTeamBattleView(discord.ui.View):
             else:
                 self.momentum_a = max(0, self.momentum_a - 1)
 
-            # 2. Opponent dynamic tactical AI counter
-            opp_tactics = ["three", "drive", "pnr", "defense", "iso"]
-            if pl_b.get("pts_3", 0) >= 92 and random.random() < 0.45:
-                opp_choice = "three"
-            elif pl_b.get("inside", 0) >= 92 and random.random() < 0.45:
-                opp_choice = "drive"
-            elif pl_b.get("defense", 0) >= 92 and random.random() < 0.45:
-                opp_choice = "defense"
-            elif pl_b.get("playmaking", 0) >= 92 and random.random() < 0.45:
-                opp_choice = "pnr"
+            # 2. Opponent dynamic tactical AI counter (if challenger hasn't clinched quarter yet)
+            res_b = {"pts": 0, "commentary": "", "success": False}
+            if self.q_pts_a < self.target_q_pts:
+                opp_favored = pl_b.get("favored", ["drive", "three", "pnr"])
+                if opp_favored and random.random() < 0.65:
+                    opp_choice = random.choice(opp_favored)
+                else:
+                    opp_choice = random.choice(["three", "drive", "pnr", "defense", "iso"])
+
+                opp_def_scheme = random.choice(list(DEFENSIVE_SCHEMES.keys()))
+                res_b = resolve_possession(
+                    action_key=opp_choice,
+                    pl_att=pl_b,
+                    pl_def=pl_a,
+                    momentum_att=self.momentum_b,
+                    momentum_def=self.momentum_a,
+                    scheme_key=opp_def_scheme,
+                    play_streak=1,
+                    has_timeout_boost=False,
+                    is_clutch=self.is_clutch_mode
+                )
+                self.q_pts_b += res_b["pts"]
+                self.total_pts_b += res_b["pts"]
+                p_name_b = pl_b.get("name", "Player B")
+                if self.opponent.id not in self.player_points:
+                    self.player_points[self.opponent.id] = {}
+                self.player_points[self.opponent.id][p_name_b] = self.player_points[self.opponent.id].get(p_name_b, 0) + res_b["pts"]
+                if self.opponent.display_name not in self.player_points:
+                    self.player_points[self.opponent.display_name] = {}
+                self.player_points[self.opponent.display_name][p_name_b] = self.player_points[self.opponent.display_name].get(p_name_b, 0) + res_b["pts"]
+
+                if res_b["success"]:
+                    self.momentum_b = min(3, self.momentum_b + 1)
+                else:
+                    self.momentum_b = max(0, self.momentum_b - 1)
+
+            # Check if Quarter is won (First to 7 PTS)
+            quarter_concluded = (self.q_pts_a >= self.target_q_pts) or (self.q_pts_b >= self.target_q_pts)
+            
+            if quarter_concluded:
+                a_won_q = (self.q_pts_a > self.q_pts_b) or (self.q_pts_a == self.q_pts_b and res_a["success"])
+                if a_won_q:
+                    self.duels_won_a += 1
+                    winner_q_name = self.author.display_name
+                else:
+                    self.duels_won_b += 1
+                    winner_q_name = self.opponent.display_name
+
+                self.round_history.append({
+                    "pos": cur_pos,
+                    "pos_title": pos_title,
+                    "pl_a": pl_a,
+                    "pl_b": pl_b,
+                    "pts_a": self.q_pts_a,
+                    "pts_b": self.q_pts_b,
+                    "a_won": a_won_q,
+                    "commentary": f"🏆 **{winner_q_name} takes Quarter {cur_idx + 1} ({self.q_pts_a} — {self.q_pts_b})!**"
+                })
+
+                self.last_commentary = (
+                    f"🏁 **QUARTER {cur_idx + 1} ({pos_title}) CLINCHED BY {winner_q_name}!** *(Final: {self.q_pts_a} — {self.q_pts_b})*\n"
+                    f"• **{self.author.display_name}**: {res_a['commentary']}\n"
+                    f"• **{self.opponent.display_name}**: {res_b['commentary'] if res_b.get('commentary') else 'Turnover / Stop'}"
+                )
+
+                self.current_round += 1
+                self.q_pts_a = 0
+                self.q_pts_b = 0
+                self.play_streak_a = 0
+
+                # Check if Series is over (Best of 5: First to 3 quarters, or after 5 rounds)
+                if self.duels_won_a >= 3 or self.duels_won_b >= 3 or self.current_round >= 5:
+                    self.is_game_over = True
+                    self._build_controls()
+                    embed = await self._process_game_over()
+                else:
+                    if (self.duels_won_a == 2 and self.duels_won_b == 2) or self.current_round == 4:
+                        self.is_clutch_mode = True
+                    self._build_controls()
+                    embed = self.make_battle_embed()
             else:
-                opp_choice = random.choice(opp_tactics)
-
-            opp_def_scheme = random.choice(list(DEFENSIVE_SCHEMES.keys()))
-            res_b = resolve_possession(
-                action_key=opp_choice,
-                pl_att=pl_b,
-                pl_def=pl_a,
-                momentum_att=self.momentum_b,
-                momentum_def=self.momentum_a,
-                scheme_key=opp_def_scheme,
-                play_streak=1,
-                has_timeout_boost=False
-            )
-            self.round_pts_b += res_b["pts"]
-            p_name_b = pl_b.get("name", "Player B")
-            if self.opponent.id not in self.player_points:
-                self.player_points[self.opponent.id] = {}
-            self.player_points[self.opponent.id][p_name_b] = self.player_points[self.opponent.id].get(p_name_b, 0) + res_b["pts"]
-            if self.opponent.display_name not in self.player_points:
-                self.player_points[self.opponent.display_name] = {}
-            self.player_points[self.opponent.display_name][p_name_b] = self.player_points[self.opponent.display_name].get(p_name_b, 0) + res_b["pts"]
-
-            if res_b["success"]:
-                self.momentum_b = min(3, self.momentum_b + 1)
-            else:
-                self.momentum_b = max(0, self.momentum_b - 1)
-
-            # Round winner evaluation
-            round_a_won = (res_a["pts"] > res_b["pts"]) or (res_a["pts"] == res_b["pts"] and res_a["success"])
-            if round_a_won:
-                self.duels_won_a += 1
-            elif res_b["pts"] > res_a["pts"]:
-                self.duels_won_b += 1
-
-            self.last_commentary = f"{res_a['read_note']}\n• **{self.author.display_name}**: {res_a['commentary']}\n• **{self.opponent.display_name}**: {res_b['commentary']}"
-
-            self.round_history.append({
-                "pos": cur_pos,
-                "pos_title": pos_title,
-                "pl_a": pl_a,
-                "pl_b": pl_b,
-                "pts_a": res_a["pts"],
-                "pts_b": res_b["pts"],
-                "a_won": round_a_won,
-                "commentary": res_a["commentary"]
-            })
-
-            self.current_round += 1
-            if self.current_round >= 5:
-                self.is_game_over = True
-                self._build_controls()
-                embed = await self._process_game_over()
-            else:
+                # Quarter continues
+                opp_cmt = f"\n• **{self.opponent.display_name}**: {res_b['commentary']}" if res_b.get("commentary") else ""
+                self.last_commentary = f"{res_a['read_note']}\n• **{self.author.display_name}**: {res_a['commentary']}{opp_cmt}"
                 self._build_controls()
                 embed = self.make_battle_embed()
 
@@ -2745,48 +2808,54 @@ class InteractiveTeamBattleView(discord.ui.View):
                 return
 
             tactics_list = ["three", "drive", "pnr", "defense", "iso"]
-            while self.current_round < 5:
+            while self.current_round < 5 and self.duels_won_a < 3 and self.duels_won_b < 3:
                 cur_pos = self.positions[self.current_round]
                 pos_title = self.pos_fullnames.get(cur_pos, cur_pos)
                 pl_a = self.picks_a.get(cur_pos, {})
                 pl_b = self.picks_b.get(cur_pos, {})
                 cur_scheme_key = self.round_schemes[self.current_round] if self.current_round < len(self.round_schemes) else "drop_coverage"
 
-                choice_a = random.choice(tactics_list)
-                choice_b = random.choice(tactics_list)
+                while self.q_pts_a < self.target_q_pts and self.q_pts_b < self.target_q_pts:
+                    choice_a = random.choice(pl_a.get("favored", tactics_list))
+                    choice_b = random.choice(pl_b.get("favored", tactics_list))
 
-                res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b, cur_scheme_key, 1, self.has_timeout_boost_a)
-                self.has_timeout_boost_a = False
-                res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False)
+                    res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b, cur_scheme_key, 1, self.has_timeout_boost_a, is_clutch=self.is_clutch_mode)
+                    self.has_timeout_boost_a = False
+                    self.q_pts_a += res_a["pts"]
+                    self.total_pts_a += res_a["pts"]
 
-                self.round_pts_a += res_a["pts"]
-                self.round_pts_b += res_b["pts"]
+                    res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False, is_clutch=self.is_clutch_mode)
+                    self.q_pts_b += res_b["pts"]
+                    self.total_pts_b += res_b["pts"]
+
+                a_won_q = (self.q_pts_a > self.q_pts_b) or (self.q_pts_a == self.q_pts_b and res_a["success"])
+                if a_won_q:
+                    self.duels_won_a += 1
+                else:
+                    self.duels_won_b += 1
+
                 p_name_a = pl_a.get("name", "Player A")
                 p_name_b = pl_b.get("name", "Player B")
                 if self.author.id not in self.player_points:
                     self.player_points[self.author.id] = {}
-                self.player_points[self.author.id][p_name_a] = self.player_points[self.author.id].get(p_name_a, 0) + res_a["pts"]
+                self.player_points[self.author.id][p_name_a] = self.player_points[self.author.id].get(p_name_a, 0) + self.q_pts_a
                 if self.opponent.id not in self.player_points:
                     self.player_points[self.opponent.id] = {}
-                self.player_points[self.opponent.id][p_name_b] = self.player_points[self.opponent.id].get(p_name_b, 0) + res_b["pts"]
-
-                round_a_won = (res_a["pts"] > res_b["pts"]) or (res_a["pts"] == res_b["pts"] and res_a["success"])
-                if round_a_won:
-                    self.duels_won_a += 1
-                elif res_b["pts"] > res_a["pts"]:
-                    self.duels_won_b += 1
+                self.player_points[self.opponent.id][p_name_b] = self.player_points[self.opponent.id].get(p_name_b, 0) + self.q_pts_b
 
                 self.round_history.append({
                     "pos": cur_pos,
                     "pos_title": pos_title,
                     "pl_a": pl_a,
                     "pl_b": pl_b,
-                    "pts_a": res_a["pts"],
-                    "pts_b": res_b["pts"],
-                    "a_won": round_a_won,
+                    "pts_a": self.q_pts_a,
+                    "pts_b": self.q_pts_b,
+                    "a_won": a_won_q,
                     "commentary": res_a["commentary"]
                 })
                 self.current_round += 1
+                self.q_pts_a = 0
+                self.q_pts_b = 0
 
             self.is_game_over = True
             self._build_controls()
@@ -2897,15 +2966,16 @@ class TeamBattleChallengeView(discord.ui.View):
                 f"🏀 {self.opponent.mention}, **{self.author.display_name}** has challenged your $15 Starting 5 to a head-to-head NBA battle!\n\n"
                 f"• 🟢 **{self.author.display_name}'s Squad**: `{self.eval_a.get('ovr', 90)} OVR` • {self.eval_a.get('tier', 'Starting 5').split('•')[0].strip()} (`${self.eval_a.get('total_cost', 15)}/$15`)\n"
                 f"• 🔴 **{self.opponent.display_name}'s Squad**: `{self.eval_b.get('ovr', 90)} OVR` • {self.eval_b.get('tier', 'Starting 5').split('•')[0].strip()} (`${self.eval_b.get('total_cost', 15)}/$15`)\n\n"
-                f"🏆 **Format**: 5-Round Positional Head-to-Head Duels (PG ➔ SG ➔ SF ➔ PF ➔ C)\n"
+                f"🏆 **Format**: 5 Positional Quarters (PG ➔ SG ➔ SF ➔ PF ➔ C) • **First to 7 PTS Wins Each Quarter!**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"📋 **Tactical Coaching Rules (Read & React Cheat-Sheet)**:\n"
-                f"• 🎯 **Step-Back 3PT** ────► Beats `🛡️ Sagging Drop Coverage`\n"
-                f"• 💥 **Power Drive** ──────► Beats `🔒 High Perimeter Press`\n"
-                f"• 🧠 **Pick & Roll** ──────► Beats `👥 Double-Teams & Zone Traps`\n"
-                f"• 🔒 **Lockdown Clamps** ──► Beats `⚡ Solo Mamba Isolation`\n"
-                f"• ⚡ **Mamba Iso** ────────► Beats `🔄 Switch Mismatches`\n"
-                f"• ⏱️ **Coach Timeout** ────► Ices Momentum & Grants `+20% ATO Precision Boost`\n"
+                f"📋 **Basketball Tactical Rules & Counter Reads**:\n"
+                f"• 🎯 **Step-Back 3PT** ────► Exploits `🛡️ Sagging Drop Coverage` & Zone\n"
+                f"• 💥 **Power Drive** ──────► Blows past `🔒 High Perimeter Press` & Switches\n"
+                f"• 🧠 **Pick & Roll** ──────► Picks apart `👥 Double-Teams & Blitzes`\n"
+                f"• 🔒 **Lockdown Clamps** ──► Strips `🛑 Solo 1-on-1 Isolation`\n"
+                f"• ⚡ **Mamba Iso** ────────► Punishes `🔄 Switch Mismatches`\n"
+                f"• ⭐ **Player Movesets**: Stars excel at signature moves (⭐) & brick unnatural calls (⚠️)\n"
+                f"• 🔥 **Clutch Time**: Deciding 5th quarter triggers sudden-death Clutch Mode!\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🎮 **Live Tactical Battle**: Click **Accept & Play Live** to coach in real-time or **Quick Sim** for instant results!"
             ),
@@ -2913,7 +2983,7 @@ class TeamBattleChallengeView(discord.ui.View):
         )
         if hasattr(self.author, "display_avatar") and self.author.display_avatar:
             embed.set_thumbnail(url=self.author.display_avatar.url)
-        embed.set_footer(text="Challenge expires in 90 seconds • Best of 5 Duels determines winner")
+        embed.set_footer(text="Challenge expires in 90 seconds • Best of 5 Quarters (First to 7 PTS) determines champion")
         embed.timestamp = discord.utils.utcnow()
         return embed
 
