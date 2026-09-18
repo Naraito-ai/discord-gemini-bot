@@ -276,7 +276,21 @@ class DatabaseManager:
                 daily_wins INTEGER DEFAULT 0,
                 last_daily_win_date TEXT DEFAULT '',
                 achievements TEXT DEFAULT '[]',
+                coaching_dna TEXT DEFAULT '{}',
                 updated_at REAL NOT NULL
+            );
+            """,
+            # Head-to-Head NBA Member Rivalries Table
+            """
+            CREATE TABLE IF NOT EXISTS nba_rivalries (
+                player_a TEXT NOT NULL,
+                player_b TEXT NOT NULL,
+                wins_a INTEGER DEFAULT 0,
+                wins_b INTEGER DEFAULT 0,
+                ties INTEGER DEFAULT 0,
+                last_5 TEXT DEFAULT '[]',
+                updated_at REAL NOT NULL,
+                PRIMARY KEY (player_a, player_b)
             );
             """
         ]
@@ -293,6 +307,12 @@ class DatabaseManager:
                     await self.execute("ALTER TABLE team_battle_stats ADD COLUMN daily_wins INTEGER DEFAULT 0;")
                 if "last_daily_win_date" not in col_names:
                     await self.execute("ALTER TABLE team_battle_stats ADD COLUMN last_daily_win_date TEXT DEFAULT '';")
+                if "coaching_dna" not in col_names:
+                    await self.execute("ALTER TABLE team_battle_stats ADD COLUMN coaching_dna TEXT DEFAULT '{}';")
+            else:
+                await self.execute("ALTER TABLE team_battle_stats ADD COLUMN IF NOT EXISTS daily_wins INTEGER DEFAULT 0;")
+                await self.execute("ALTER TABLE team_battle_stats ADD COLUMN IF NOT EXISTS last_daily_win_date TEXT DEFAULT '';")
+                await self.execute("ALTER TABLE team_battle_stats ADD COLUMN IF NOT EXISTS coaching_dna TEXT DEFAULT '{}';")
         except Exception as alter_err:
             logger.debug(f"Column check for team_battle_stats: {alter_err}")
             
@@ -587,13 +607,24 @@ class DatabaseManager:
 
     # ── Team Battle Career Stats & Leaderboard ──────────────────────────────
     async def get_team_battle_stats(self, user_id: Any) -> Dict[str, Any]:
-        """Fetches a member's career NBA team battle record, streak, and achievements."""
-        row = await self.fetchrow("SELECT user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, daily_wins, last_daily_win_date, achievements, updated_at FROM team_battle_stats WHERE user_id = ?", str(user_id))
+        """Fetches a member's career NBA team battle record, streak, achievements, and coaching DNA."""
+        row = await self.fetchrow("SELECT user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, daily_wins, last_daily_win_date, achievements, coaching_dna, updated_at FROM team_battle_stats WHERE user_id = ?", str(user_id))
         if row:
             try:
                 achievements = json.loads(row.get("achievements") or "[]")
             except Exception:
                 achievements = []
+            try:
+                coaching_dna = json.loads(row.get("coaching_dna") or "{}")
+            except Exception:
+                coaching_dna = {}
+            coaching_dna.setdefault("three", 0)
+            coaching_dna.setdefault("drive", 0)
+            coaching_dna.setdefault("pnr", 0)
+            coaching_dna.setdefault("defense", 0)
+            coaching_dna.setdefault("iso", 0)
+            coaching_dna.setdefault("timeouts", 0)
+            coaching_dna.setdefault("total", 0)
             return {
                 "wins": row.get("wins", 0),
                 "losses": row.get("losses", 0),
@@ -604,11 +635,13 @@ class DatabaseManager:
                 "total_points": row.get("total_points", 0),
                 "daily_wins": row.get("daily_wins", 0),
                 "last_daily_win_date": row.get("last_daily_win_date", ""),
-                "achievements": achievements
+                "achievements": achievements,
+                "coaching_dna": coaching_dna
             }
         return {
             "wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0,
-            "total_duels_won": 0, "total_points": 0, "daily_wins": 0, "last_daily_win_date": "", "achievements": []
+            "total_duels_won": 0, "total_points": 0, "daily_wins": 0, "last_daily_win_date": "", "achievements": [],
+            "coaching_dna": {"three": 0, "drive": 0, "pnr": 0, "defense": 0, "iso": 0, "timeouts": 0, "total": 0}
         }
 
     async def update_team_battle_record(
@@ -619,9 +652,11 @@ class DatabaseManager:
         duels_won: int,
         points_scored: int,
         new_achievements: Optional[List[str]] = None,
-        is_daily_win: bool = False
+        is_daily_win: bool = False,
+        tactics_used: Optional[Dict[str, int]] = None,
+        timeouts_used: int = 0
     ):
-        """Updates career record, streaks, points, daily challenge wins, and unlocks achievements."""
+        """Updates career record, streaks, points, daily challenge wins, coaching DNA, and unlocks achievements."""
         stats = await self.get_team_battle_stats(user_id)
         wins = stats["wins"]
         losses = stats["losses"]
@@ -633,6 +668,7 @@ class DatabaseManager:
         daily_wins = stats.get("daily_wins", 0)
         last_daily_win_date = stats.get("last_daily_win_date", "")
         achievements_set = set(stats["achievements"])
+        dna = dict(stats.get("coaching_dna", {}))
 
         if is_daily_win:
             daily_wins += 1
@@ -654,29 +690,130 @@ class DatabaseManager:
             losses += 1
             streak = streak - 1 if streak < 0 else -1
 
+        if tactics_used:
+            for k, count in tactics_used.items():
+                dna[k] = dna.get(k, 0) + count
+                dna["total"] = dna.get("total", 0) + count
+        if timeouts_used:
+            dna["timeouts"] = dna.get("timeouts", 0) + timeouts_used
+
         now = datetime.now().timestamp()
         ach_json = json.dumps(list(achievements_set))
+        dna_json = json.dumps(dna)
 
         if self.is_postgres:
             query = """
-                INSERT INTO team_battle_stats (user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, daily_wins, last_daily_win_date, achievements, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO team_battle_stats (user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, daily_wins, last_daily_win_date, achievements, coaching_dna, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (user_id) DO UPDATE SET
                     wins = EXCLUDED.wins, losses = EXCLUDED.losses, ties = EXCLUDED.ties,
                     streak = EXCLUDED.streak, best_streak = EXCLUDED.best_streak,
                     total_duels_won = EXCLUDED.total_duels_won, total_points = EXCLUDED.total_points,
                     daily_wins = EXCLUDED.daily_wins, last_daily_win_date = EXCLUDED.last_daily_win_date,
-                    achievements = EXCLUDED.achievements, updated_at = EXCLUDED.updated_at
+                    achievements = EXCLUDED.achievements, coaching_dna = EXCLUDED.coaching_dna, updated_at = EXCLUDED.updated_at
             """
         else:
-            query = "INSERT OR REPLACE INTO team_battle_stats (user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, daily_wins, last_daily_win_date, achievements, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            query = "INSERT OR REPLACE INTO team_battle_stats (user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, daily_wins, last_daily_win_date, achievements, coaching_dna, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
-        await self.execute(query, str(user_id), wins, losses, ties, streak, best_streak, total_duels, total_pts, daily_wins, last_daily_win_date, ach_json, now)
+        await self.execute(query, str(user_id), wins, losses, ties, streak, best_streak, total_duels, total_pts, daily_wins, last_daily_win_date, ach_json, dna_json, now)
+
+    async def get_nba_rivalry(self, user_a_id: Any, user_b_id: Any) -> Dict[str, Any]:
+        """Fetches head-to-head rivalry history and match count between two users."""
+        u1, u2 = str(user_a_id), str(user_b_id)
+        p_a, p_b = (u1, u2) if u1 < u2 else (u2, u1)
+        row = await self.fetchrow("SELECT player_a, player_b, wins_a, wins_b, ties, last_5 FROM nba_rivalries WHERE player_a = ? AND player_b = ?", p_a, p_b)
+        if not row:
+            return {
+                "player_a": p_a, "player_b": p_b,
+                "wins_a": 0, "wins_b": 0, "ties": 0,
+                "user_a_wins": 0, "user_b_wins": 0,
+                "total_matches": 0, "is_rivalry": False,
+                "last_5": [], "streak": 0, "leader_id": None
+            }
+        w_a = row.get("wins_a", 0)
+        w_b = row.get("wins_b", 0)
+        ties = row.get("ties", 0)
+        total = w_a + w_b + ties
+        try:
+            last_5 = json.loads(row.get("last_5") or "[]")
+        except Exception:
+            last_5 = []
+
+        user_a_wins = w_a if u1 == p_a else w_b
+        user_b_wins = w_b if u1 == p_a else w_a
+
+        streak_winner = last_5[-1] if last_5 else None
+        streak_count = 0
+        if streak_winner and streak_winner != "tie":
+            for winner in reversed(last_5):
+                if winner == streak_winner:
+                    streak_count += 1
+                else:
+                    break
+
+        leader_id = None
+        if user_a_wins > user_b_wins:
+            leader_id = u1
+        elif user_b_wins > user_a_wins:
+            leader_id = u2
+
+        return {
+            "player_a": p_a, "player_b": p_b,
+            "wins_a": w_a, "wins_b": w_b, "ties": ties,
+            "user_a_wins": user_a_wins, "user_b_wins": user_b_wins,
+            "total_matches": total,
+            "is_rivalry": total >= 3,
+            "last_5": last_5,
+            "streak": streak_count,
+            "streak_winner": streak_winner,
+            "leader_id": leader_id
+        }
+
+    async def update_nba_rivalry(self, winner_id: Any, loser_id: Any, is_tie: bool = False) -> Dict[str, Any]:
+        """Updates head-to-head match count and last-5 results for a rivalry matchup."""
+        u1, u2 = str(winner_id), str(loser_id)
+        p_a, p_b = (u1, u2) if u1 < u2 else (u2, u1)
+        row = await self.fetchrow("SELECT player_a, player_b, wins_a, wins_b, ties, last_5 FROM nba_rivalries WHERE player_a = ? AND player_b = ?", p_a, p_b)
+        w_a = row.get("wins_a", 0) if row else 0
+        w_b = row.get("wins_b", 0) if row else 0
+        ties = row.get("ties", 0) if row else 0
+        try:
+            last_5 = json.loads(row.get("last_5") or "[]") if row else []
+        except Exception:
+            last_5 = []
+
+        if is_tie:
+            ties += 1
+            last_5.append("tie")
+        elif u1 == p_a:
+            w_a += 1
+            last_5.append(u1)
+        else:
+            w_b += 1
+            last_5.append(u1)
+
+        last_5 = last_5[-5:]
+        now = datetime.now().timestamp()
+        last_5_json = json.dumps(last_5)
+
+        if self.is_postgres:
+            query = """
+                INSERT INTO nba_rivalries (player_a, player_b, wins_a, wins_b, ties, last_5, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (player_a, player_b) DO UPDATE SET
+                    wins_a = EXCLUDED.wins_a, wins_b = EXCLUDED.wins_b, ties = EXCLUDED.ties,
+                    last_5 = EXCLUDED.last_5, updated_at = EXCLUDED.updated_at
+            """
+        else:
+            query = "INSERT OR REPLACE INTO nba_rivalries (player_a, player_b, wins_a, wins_b, ties, last_5, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+
+        await self.execute(query, p_a, p_b, w_a, w_b, ties, last_5_json, now)
+        return await self.get_nba_rivalry(winner_id, loser_id)
 
     async def get_top_battle_records(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Fetches top coaches ranked by wins and win streak."""
         query = """
-            SELECT user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, daily_wins, last_daily_win_date, achievements
+            SELECT user_id, wins, losses, ties, streak, best_streak, total_duels_won, total_points, daily_wins, last_daily_win_date, achievements, coaching_dna
             FROM team_battle_stats
             ORDER BY wins DESC, streak DESC, total_points DESC
             LIMIT ?

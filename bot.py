@@ -2047,103 +2047,993 @@ def get_daily_challenge_lineup(target_date: Optional[str] = None) -> Dict[str, A
 DEFENSIVE_SCHEMES: Dict[str, Dict[str, Any]] = {
     "drop_coverage": {
         "name": "🛡️ Sagging Drop Coverage",
+        "short_scout": "🛡️ Drop Coverage — Arc open, paint loaded",
         "badge": "🛡️ Paint Pack",
         "desc": "Defender sags deep into the paint to protect against drives, conceding space on the 3PT line.",
         "weak_against": ["three", "pnr"],
         "strong_against": ["drive"],
-        "scout_tip": "Punish drop coverage with **`🎯 Step-Back 3PT`** or **`🧠 Pick & Roll`**! Avoid driving into the paint.",
         "counter_bonus": 0.35,
-        "bad_penalty": 0.28
+        "bad_penalty": 0.28,
+        "wrong_call_reasons": {
+            "drive": "You drove directly into a loaded paint wall with the rim protected",
+            "defense": "You played passive while the offense sank the open perimeter look"
+        }
     },
     "perimeter_press": {
         "name": "🔒 Full-Court Perimeter Press",
+        "short_scout": "🔒 Perimeter Press — Driving lanes open, arc denied",
         "badge": "🔒 Arc Lock",
         "desc": "Defender presses up high beyond the 3PT arc with tight hand-checking to deny the three.",
         "weak_against": ["drive", "iso"],
         "strong_against": ["three"],
-        "scout_tip": "Defender is overplaying the arc! Blow past them with **`💥 Power Drive & Slam`**!",
         "counter_bonus": 0.35,
-        "bad_penalty": 0.28
+        "bad_penalty": 0.28,
+        "wrong_call_reasons": {
+            "three": "You forced a contested 3PT against a suffocating perimeter press",
+            "defense": "You gave up driving position while the defender pressed up tight"
+        }
     },
     "zone_trap": {
         "name": "👥 Zone Double-Team & Trap",
+        "short_scout": "👥 Zone Blitz — Double-team active, PnR pocket open",
         "badge": "👥 Blitz Trap",
         "desc": "Defense collapses a hard double-team on the ball to suffocate solo isolation ball-handlers.",
         "weak_against": ["pnr", "three"],
         "strong_against": ["iso", "defense"],
-        "scout_tip": "Hard double-team incoming! Pick it apart with **`🧠 Pick & Roll / Dish`**!",
         "counter_bonus": 0.35,
-        "bad_penalty": 0.30
+        "bad_penalty": 0.30,
+        "wrong_call_reasons": {
+            "iso": "You tried to isolate against an aggressive double-team blitz and got stripped",
+            "defense": "You hesitated against the blitz, allowing the trap to force a turnover"
+        }
     },
     "isolation_lock": {
         "name": "🛑 Physical 1-on-1 Lockdown",
+        "short_scout": "🛑 1-on-1 Clamp — Strict coverage, call a screen",
         "badge": "🛑 Clamp Grip",
         "desc": "Defender is locked into individual single-coverage, reading crossovers and challenging mid-range pullups.",
         "weak_against": ["pnr", "drive"],
         "strong_against": ["iso"],
-        "scout_tip": "Physical 1-on-1 clamp! Call a screen with **`🧠 Pick & Roll`** or muscle with **`💥 Power Drive`**!",
         "counter_bonus": 0.30,
-        "bad_penalty": 0.28
+        "bad_penalty": 0.28,
+        "wrong_call_reasons": {
+            "iso": "You challenged an elite 1-on-1 lockdown defender without a screen",
+            "three": "You took a rushed pull-up over an elite perimeter clamp"
+        }
     },
     "switch_mismatch": {
         "name": "🔄 Switch on Screen (Mismatch)",
+        "short_scout": "🔄 Switch Mismatch — Isolation & driving mismatch open",
         "badge": "🔄 Mismatch Switch",
         "desc": "Defense made an ill-timed switch on a screen, leaving a vulnerable positional mismatch on the perimeter.",
         "weak_against": ["iso", "drive"],
         "strong_against": ["defense"],
-        "scout_tip": "Mismatch detected on the perimeter! Take over with **`⚡ Mamba Iso`** or **`💥 Power Drive`**!",
         "counter_bonus": 0.35,
-        "bad_penalty": 0.25
+        "bad_penalty": 0.25,
+        "wrong_call_reasons": {
+            "pnr": "You called another screen, letting the defense recover from the mismatch",
+            "defense": "You played passive instead of attacking the glaring mismatch"
+        }
     }
 }
 
 TACTICAL_OUTCOMES: Dict[str, Dict[str, Any]] = {
     "three": {
-        "name": "🎯 Step-Back 3PT",
+        "name": "Step-Back 3PT",
         "pts": 3,
         "favors": "pts_3",
         "good_against": ["drop_coverage", "zone_trap"],
         "bad_against": ["perimeter_press"],
-        "success_msg": "{p1} recognizes the Sagging Drop Coverage, steps back behind the arc, and splashes a clutch 28-foot three-pointer! 🎯 (+3 PTS)",
-        "fail_msg": "{p1} forces a heavily contested 3-pointer against {p2}'s tight perimeter press and clanks it off the back iron! 🛑"
+        "success_msg": "{p1} recognizes the Sagging Drop, steps back behind the arc, and splashes a clutch 28-footer! 🎯 (+3 PTS)",
+        "fail_msg": "{p1} forces a heavily contested 3PT against {p2}'s tight perimeter press and clanks it off the back iron! 🛑"
     },
     "drive": {
-        "name": "💥 Power Drive & Slam",
+        "name": "Power Drive",
         "pts": 2,
         "favors": "inside",
         "good_against": ["perimeter_press", "switch_mismatch"],
         "bad_against": ["drop_coverage"],
-        "success_msg": "{p1} blows right past {p2}'s high perimeter press and rattles the rim with a ferocious two-handed poster slam! 💥 (+2 PTS)",
-        "fail_msg": "{p1} drives directly into {p2}'s drop-coverage paint wall and gets violently rejected at the rim! 🚫"
+        "success_msg": "{p1} blows past {p2}'s high perimeter press and rattles the rim with a ferocious poster slam! 💥 (+2 PTS)",
+        "fail_msg": "{p1} drives directly into {p2}'s drop-coverage paint wall and gets rejected at the rim! 🚫"
     },
     "pnr": {
-        "name": "🧠 Pick & Roll / Dish",
+        "name": "Pick & Roll",
         "pts": 2,
         "favors": "playmaking",
         "good_against": ["zone_trap", "drop_coverage", "isolation_lock"],
         "bad_against": ["switch_mismatch"],
-        "success_msg": "{p1} masterfully threads a bounce pass through the blitzing double-team right into the pocket for a smooth layup! 🧠 (+2 PTS)",
-        "fail_msg": "{p1} attempts a risky cross-court dish against the switch, but {p2} jumps into the passing lane for a deflection! ⚡"
+        "success_msg": "{p1} threads a bounce pass through the blitzing double-team right into the pocket for an easy layup! 🧠 (+2 PTS)",
+        "fail_msg": "{p1} attempts a risky cross-court dish against the switch, but {p2} jumps the passing lane! ⚡"
     },
     "defense": {
-        "name": "🔒 Lockdown Clamp & Break",
+        "name": "Lockdown Clamp",
         "pts": 2,
         "favors": "defense",
         "good_against": ["isolation_lock"],
         "bad_against": ["zone_trap"],
-        "success_msg": "{p1} puts on suffocating full-court clamps, picks {p2}'s pocket cleanly, and glides in for an uncontested fastbreak layup! 🔒 (+2 PTS)",
-        "fail_msg": "{p2} protects the rock with elite veteran poise, drawing a reaching foul on {p1}! 🛑"
+        "success_msg": "{p1} puts on suffocating clamps, picks {p2}'s pocket cleanly, and glides in for the fastbreak score! 🔒 (+2 PTS)",
+        "fail_msg": "{p2} protects the rock with veteran poise, drawing a reaching foul on {p1}! 🛑"
     },
     "iso": {
-        "name": "⚡ Mamba Isolation Jumper",
+        "name": "Mamba Iso",
         "pts": 2,
         "favors": "clutch",
         "good_against": ["switch_mismatch", "perimeter_press"],
         "bad_against": ["zone_trap", "isolation_lock"],
-        "success_msg": "{p1} sizes up {p2} on the mismatch, breaks their ankles with a killer hesitation crossover, and buries the signature fadeaway! ⚡ (+2 PTS)",
-        "fail_msg": "{p1} attempts to go 1-on-1 but gets smothered by {p2}'s disciplined defense and forced into a fading shot clock airball! ⏱️"
+        "success_msg": "{p1} sizes up {p2} on the mismatch, freezes them with a hesitation crossover, and sinks the fadeaway! ⚡ (+2 PTS)",
+        "fail_msg": "{p1} attempts to go 1-on-1 but gets smothered by {p2}'s disciplined trap and forced into a fading airball! ⏱️"
     }
 }
+
+
+# ── Team Synergy Classification & Matchup Counters ─────────────────────────
+
+def classify_team_synergy(picks: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """Classifies a 5-man squad into a tactical synergy archetype with counter strengths and weaknesses."""
+    if not picks:
+        return {"name": "Balanced Starting 5", "icon": "⚖️", "counters": "None", "countered_by": "None", "desc": "Balanced execution", "matchup_tip": "Balanced all-around squad capable of adapting to any defense."}
+    
+    total_3pt = sum(p.get("pts_3", 80) for p in picks.values())
+    total_def = sum(p.get("defense", 80) for p in picks.values())
+    total_ins = sum(p.get("inside", 80) for p in picks.values())
+    total_ply = sum(p.get("playmaking", 80) for p in picks.values())
+    
+    avg_3pt = total_3pt / 5.0
+    avg_def = total_def / 5.0
+    avg_ins = total_ins / 5.0
+    avg_ply = total_ply / 5.0
+
+    scores = {
+        "Splash Dynasty": avg_3pt + 2.0,
+        "Lockdown Grit": avg_def + 1.0,
+        "Paint Monsters": avg_ins + 1.5,
+        "Showtime Fastbreak": avg_ply + 1.0
+    }
+    top_synergy = max(scores, key=scores.get)
+
+    if top_synergy == "Splash Dynasty" and avg_3pt >= 87.0:
+        return {
+            "name": "Splash Dynasty",
+            "icon": "🎯",
+            "counters": "Paint Monsters",
+            "countered_by": "Lockdown Grit",
+            "desc": "Deep perimeter shooting and spacing",
+            "matchup_tip": "Perimeter spacing punishes drop coverage; perimeter press disrupts shooters."
+        }
+    elif top_synergy == "Lockdown Grit" and avg_def >= 87.0:
+        return {
+            "name": "Lockdown Grit",
+            "icon": "🔒",
+            "counters": "Splash Dynasty",
+            "countered_by": "Showtime Fastbreak",
+            "desc": "Suffocating perimeter and interior clamps",
+            "matchup_tip": "Physical clamps disrupt 3PT shooters; ball movement and PnR dissects 1-on-1 pressure."
+        }
+    elif top_synergy == "Paint Monsters" and avg_ins >= 87.0:
+        return {
+            "name": "Paint Monsters",
+            "icon": "💥",
+            "counters": "Showtime Fastbreak",
+            "countered_by": "Splash Dynasty",
+            "desc": "Dominant rim protection and interior power",
+            "matchup_tip": "Interior power overpowers small guards; vulnerable to 5-out perimeter spacing."
+        }
+    elif top_synergy == "Showtime Fastbreak" and avg_ply >= 87.0:
+        return {
+            "name": "Showtime Fastbreak",
+            "icon": "⚡",
+            "counters": "Lockdown Grit",
+            "countered_by": "Paint Monsters",
+            "desc": "High-IQ playmaking and transition tempo",
+            "matchup_tip": "Surgical passing picks apart 1-on-1 lockdown; vulnerable to deep paint walls."
+        }
+    return {
+        "name": "Balanced Juggernaut",
+        "icon": "⚖️",
+        "counters": "None",
+        "countered_by": "None",
+        "desc": "All-around positional versatility with no glaring flaws",
+        "matchup_tip": "Versatile all-around squad capable of adapting to any defensive scheme."
+    }
+
+def get_matchup_synergy_analysis(picks_a: Dict[str, Dict[str, Any]], picks_b: Dict[str, Dict[str, Any]], name_a: str, name_b: str) -> str:
+    """Generates punchy pre-match matchup analysis identifying synergy advantages and counter dynamics."""
+    syn_a = classify_team_synergy(picks_a)
+    syn_b = classify_team_synergy(picks_b)
+    
+    if syn_a["name"] == syn_b["name"]:
+        return f"⚔️ **MATCHUP**: Mirror match! Both run **{syn_a['icon']} {syn_a['name']}** — execution decides it."
+    elif syn_a.get("counters") == syn_b["name"]:
+        return f"⚔️ **MATCHUP**: {name_a}'s **{syn_a['icon']} {syn_a['name']}** counters {name_b}'s **{syn_b['icon']} {syn_b['name']}** — {syn_a['matchup_tip']}"
+    elif syn_b.get("counters") == syn_a["name"]:
+        return f"⚔️ **MATCHUP**: {name_b}'s **{syn_b['icon']} {syn_b['name']}** counters {name_a}'s **{syn_a['icon']} {syn_a['name']}** — {syn_b['matchup_tip']}"
+    else:
+        return f"⚔️ **MATCHUP**: {name_a} (**{syn_a['icon']} {syn_a['name']}**) vs {name_b} (**{syn_b['icon']} {syn_b['name']}**) — Contrasting styles!"
+
+
+# ── Sweety AI Coaching Personality: Aggressive Blitzer ─────────────────────
+
+SWEETY_TRASH_TALK = {
+    "sweety_score": [
+        "Did you really just drive into Giannis? Coach, please.",
+        "Read the scout report next time, Coach.",
+        "Too easy. The paint is officially closed for business.",
+        "Textbook execution. You gave us that baseline on a silver platter.",
+        "Bucket. That's what happens when you leave the arc open."
+    ],
+    "sweety_stop": [
+        "Clamped. That play wasn't in any championship playbook.",
+        "You called an iso directly into my double-team trap? Thank you!",
+        "Saw that read coming all the way from the locker room.",
+        "Denied! Hand in the face on every single release.",
+        "My defensive scheme is an open book, but you still failed the test."
+    ],
+    "player_score": [
+        "Lucky read. Won't happen again.",
+        "Fine, take the open three. You won't see another one.",
+        "Defensive breakdown on the switch. Sweety is adjusting right now.",
+        "Enjoy that bucket while you can. The full-court clamp is coming.",
+        "Good pass... I'll give you credit for that one."
+    ],
+    "player_down_big": [
+        "You can still forfeit, Coach. I won't judge.",
+        "Calling a timeout won't fix that roster mismatch.",
+        "My bench warmers could close this series out from here.",
+        "Need some water over there? You're looking a little gassed.",
+        "Are we playing basketball or are you just spectating?"
+    ],
+    "player_comeback": [
+        "Okay. Okay. You found a rhythm. Don't get comfortable.",
+        "Sweety adjusting the defense right now. Time to lock in.",
+        "Nice run, but this is exactly where the comeback stops.",
+        "Timeout on the floor — you won't get another clean look!"
+    ],
+    "sweety_wins": [
+        "Film study starts tomorrow at 6 AM. Good game, Coach.",
+        "Back to the draft board, GM. My aggressive blitz was just too much.",
+        "Game. Set. Series. Sweety takes home the championship trophy!",
+        "Trophy stays in the case. Better luck next draft!"
+    ],
+    "sweety_loses": [
+        "...Rematch. Now.",
+        "You caught my blitz off-guard. Won't happen in the rematch.",
+        "I gave you that one. Click Rematch and prove it was real skill.",
+        "One lucky quarter won't save you next time, GM."
+    ]
+}
+
+def get_sweety_trash_talk(trigger: str) -> str:
+    """Returns a witty, competitive coaching trash talk line from Sweety AI."""
+    lines = SWEETY_TRASH_TALK.get(trigger, SWEETY_TRASH_TALK["sweety_score"])
+    return f"🤖 **Sweety**: *\"{random.choice(lines)}\"*"
+
+
+# ── Coaching DNA & Playstyle Reputation System ─────────────────────────────
+
+def get_coaching_dna_profile(dna: Dict[str, Any]) -> Dict[str, Any]:
+    """Analyzes a GM's historical play-calling tendency to determine their coaching style, tendencies, and opponent adaptations."""
+    three = dna.get("three", 0)
+    drive = dna.get("drive", 0)
+    pnr = dna.get("pnr", 0)
+    defense = dna.get("defense", 0)
+    iso = dna.get("iso", 0)
+    total = max(1, three + drive + pnr + defense + iso)
+    
+    pct_3 = int((three / total) * 100)
+    pct_drv = int((drive / total) * 100)
+    pct_pnr = int((pnr / total) * 100)
+    pct_def = int((defense / total) * 100)
+    pct_iso = int((iso / total) * 100)
+    
+    rates = [
+        ("Splash Gunner", pct_3, "🎯", "Opponents press up high on you 30% more to contest the arc."),
+        ("Rim Punisher", pct_drv, "💥", "Opponents sag into drop coverage to protect the paint against you."),
+        ("Floor General", pct_pnr, "🧠", "Opponents switch aggressively on screens to blow up your PnR."),
+        ("Lockdown Tactician", pct_def, "🔒", "Opponents use rapid ball movement to bypass your on-ball clamps."),
+        ("Iso Specialist", pct_iso, "⚡", "Opponents collapse early double-teams to strip your solo isolations.")
+    ]
+    rates.sort(key=lambda x: x[1], reverse=True)
+    top_style = rates[0]
+    
+    if top_style[1] < 32:
+        style_name = "Master Strategist"
+        style_icon = "⚖️"
+        style_desc = "Balanced & Unpredictable"
+        tendency = "Opponents struggle to anticipate your unpredictable play-calling."
+    else:
+        style_name = top_style[0]
+        style_icon = top_style[2]
+        style_desc = f"{top_style[1]}% Preference"
+        tendency = top_style[3]
+        
+    return {
+        "style_title": f"{style_icon} {style_name}",
+        "style_desc": style_desc,
+        "tendency": tendency,
+        "pct_3": pct_3,
+        "pct_drv": pct_drv,
+        "pct_pnr": pct_pnr,
+        "pct_def": pct_def,
+        "pct_iso": pct_iso,
+        "timeouts": dna.get("timeouts", 0),
+        "total_calls": total
+    }
+
+
+NBA_PLAYER_COMMENTARY: Dict[str, Dict[str, Any]] = {
+    "Stephen Curry": {
+        "buildups": [
+            ("sizes up the defender from 30 feet with rapid crossover dribbles...", "steps back beyond the arc and launches with lightning-fast release..."),
+            ("dribbles through a maze of off-ball screens on the wing...", "catches on the fly, squares up, and elevates over the contest..."),
+            ("pushes the pace in transition and pulls up from the logo...", "rises smoothly as the defense scrambles to contest...")
+        ],
+        "makes": [
+            "🔥 **SPLASH! FROM WAY DOWNTOWN!** The Baby-Faced Assassin doesn't miss!",
+            "🎯 **LOGO DAGGER!** Steph Curry hits nothing but net from 32 feet out!",
+            "⚡ **UNREAL HANDLES INTO A RAINBOW THREE!** Curry sends the arena into absolute bedlam!",
+            "👑 **NIGHT NIGHT!** Steph drains the off-balance fadeaway three with a defender draped all over him!"
+        ],
+        "misses": [
+            "Clanks off the back iron from deep! The crowd groans as the heat check rims out.",
+            "Curry gets contested tightly on the release and the 3-pointer falls short!",
+            "Uncharacteristic airball on a rushed step-back against the suffocating perimeter clamp!"
+        ],
+        "mvp_quote": "I can do all things. Count it and put 'em to sleep!"
+    },
+    "Magic Johnson": {
+        "buildups": [
+            ("pushes the fastbreak in the open floor with commanding vision...", "serves up a dazzling no-look pass right through the defense..."),
+            ("backs down the guard with his towering 6'9 frame...", "spins into the paint with a graceful baby hook motion..."),
+            ("orchestrates the half-court set with wizardly precision...", "fakes the cross-court pass and glides straight to the rim...")
+        ],
+        "makes": [
+            "🪄 **SHOWTIME MAGIC!** Dazzling no-look behind-the-back dish for the highlight reel bucket!",
+            "👑 **BABY HOOK PERFECTION!** Magic Johnson glides in and drops the iconic junior skyhook over the contest!",
+            "✨ **SHOWTIME RUNS DEEP!** Magic orchestrates a flawless 5-on-4 break and finishes with ease!",
+            "💥 **FLOOR GENERAL DOMINANCE!** Magic brushes off the contact for the tough and-one finish!"
+        ],
+        "misses": [
+            "Magic's no-look pass gets read by the help defender for a costly turnover!",
+            "The baby hook spins around the cylinder and rolls out off the back rim!",
+            "Magic gets trapped in the corner and forced into a contested stepback that misses wide!"
+        ],
+        "mvp_quote": "Showtime never stops! When the lights are brightest, we put on a show."
+    },
+    "Chris Paul": {
+        "buildups": [
+            ("snakes through the high pick-and-roll with veteran patience...", "drags the big man out to his favorite right elbow sweet spot..."),
+            ("reads the defensive coverage like an open textbook...", "pulls up on a dime from 15 feet over the dropping center..."),
+            ("probes the paint with low dribble cadence...", "fakes the pocket pass and elevates into the lane...")
+        ],
+        "makes": [
+            "🧠 **POINT GOD MASTERCLASS!** CP3 stops on a dime and swishes the deadly mid-range elbow jumper!",
+            "🎯 **SURGICAL POCKET PASS!** Chris Paul dissects the blitz with millimeter precision for the score!",
+            "🔒 **VETERAN POISE!** CP3 snakes the screen, draws the contact, and buries the runner off glass!",
+            "⚡ **CLUTCH MIDDY!** The mid-range assassin gives the defender a hesitation and buries the pull-up!"
+        ],
+        "misses": [
+            "CP3's elbow jumper rims in and out off the front iron!",
+            "The defense stays disciplined on the snake dribble, forcing CP3 into a tough off-balance heave!",
+            "CP3 tries to bait the reach-in foul, but the refs swallow their whistle as the shot misses!"
+        ],
+        "mvp_quote": "Basketball is chess, not checkers. We dictated every single possession."
+    },
+    "Kyrie Irving": {
+        "buildups": [
+            ("dances on the perimeter with an endless bag of dribble combinations...", "unleashes a vicious inside-out crossover that freezes the defender..."),
+            ("slashes into the paint against three collapsing rim protectors...", "contorts his body in mid-air for a high English scoop..."),
+            ("isolates on the right wing with seconds ticking down...", "steps back with a lightning between-the-legs rhythm pull-up...")
+        ],
+        "makes": [
+            "⚡ **ANKLE-BREAKER DANCER!** Kyrie Irving drops the defender to the floor and buries the step-back jumper!",
+            "🎨 **PURE ARTISTRY AT THE RIM!** Kyrie spins a mind-boggling high-English scoop off the top corner of the backboard!",
+            "🎯 **FINALS DAGGER VIBES!** Kyrie isolates on the wing and swishes an unguardable contested triple!",
+            "🔥 **WIZARD WITH THE ROCK!** Kyrie splits two defenders and finishes the reverse layup effortlessly!"
+        ],
+        "misses": [
+            "Kyrie's acrobatic scoop kiss hits the side of the rim and bounds away!",
+            "The defense refuses to bite on the crossovers, forcing Kyrie into a wild contested floater that misses!",
+            "Kyrie loses his handle in traffic for a rare loose-ball turnover!"
+        ],
+        "mvp_quote": "Every move on that hardwood is art. You can't put a ceiling on pure creativity."
+    },
+    "Jrue Holiday": {
+        "buildups": [
+            ("picks up the ball-handler full court with suffocating posture...", "shuffles his feet and pokes the ball loose into the backcourt..."),
+            ("attacks the closeout with rock-solid fundamentals...", "pulls up for a confident rhythm jumper from the elbow..."),
+            ("posts up the smaller guard on the low block...", "backs down with strength and turns into a solid hook...")
+        ],
+        "makes": [
+            "🔒 **CLAMPS ENGAGED!** Jrue Holiday strips the ball cleanly at mid-court and takes it coast-to-coast!",
+            "🎯 **TWO-WAY CLUTCH BUCKET!** Jrue steps into a confident rhythm jumper and buries it smoothly!",
+            "🛡️ **LOCKDOWN FORCE!** Jrue overpowers the opposing guard in the post and drops in the turnaround!",
+            "💥 **WINNING PLAYS ONLY!** Jrue grabs the critical offensive board and converts the gritty putback!"
+        ],
+        "misses": [
+            "Jrue's corner 3-pointer rims out off the back iron!",
+            "Jrue's contested layup gets altered by the rim protector!",
+            "Defenders crowd the lane and force Jrue into a hurried baseline floater that clangs off the rim."
+        ],
+        "mvp_quote": "Defense wins championships. When you lock down every inch of the floor, victory is guaranteed."
+    },
+    "Michael Jordan": {
+        "buildups": [
+            ("elevates into the stratosphere from the baseline...", "hangs in mid-air defying gravity as the defender falls back down..."),
+            ("sizes up the defender with the legendary triple-threat stance...", "explodes to the cup with unstoppable first-step burst..."),
+            ("isolates at the top of the key in crunch time...", "hits the crossover, pulls up on a dime, and elevates above everyone...")
+        ],
+        "makes": [
+            "🐐 **THE GOAT ELEVATES!** Michael Jordan hangs in the air for an eternity and drains the iconic baseline fadeaway!",
+            "💥 **HANGTIME TO WONDERLAND!** MJ switches hands in mid-air around two defenders and lays it in off the glass!",
+            "⚡ **POSTER OF THE CENTURY!** Jordan takes off from outside the dotted line and posterizes the entire defense!",
+            "👑 **BLACK CAT IN THE CLUTCH!** MJ steals the ball at the top of the key and flushes an emphatic breakaway dunk!"
+        ],
+        "misses": [
+            "Jordan's hanging jumper clips the back of the iron and bounces away!",
+            "The double-team collapses in the air, forcing MJ into an impossible angle that brushes the side net.",
+            "MJ gets bumped on the release but no whistle as the turnaround clangs off the rim!"
+        ],
+        "mvp_quote": "I've failed over and over and over again in my life. And that is why I succeed."
+    },
+    "Kobe Bryant": {
+        "buildups": [
+            ("catches on the right wing and turns on the Mamba Mentality...", "pumps twice, fades away with high arc over two outstretched defenders..."),
+            ("drives hard left, plants both feet, and elevates into the defender's chest...", "releases the fadeaway with ice flowing through his veins..."),
+            ("isolates on the elbow with the clock expiring...", "unleashes the signature dream turnaround jumper...")
+        ],
+        "makes": [
+            "🐍 **MAMBA MENTALITY!** Kobe Bryant swishes the impossible double-teamed fadeaway with ice in his veins!",
+            "🔥 **COLD-BLOODED ASSASSIN!** Kobe pumps, pivots, and hits the falling out-of-bounds buzzer beater!",
+            "⚡ **81-POINT ENERGY!** Kobe slashes baseline and throws down a thunderous reverse windmill dunk!",
+            "💀 **HEARTBREAKER!** Kobe stares down the defender and pulls up from 26 feet for pure perfection!"
+        ],
+        "misses": [
+            "Kobe's heavily contested triple-teamed fadeaway rattles out of the rim!",
+            "The fadeaway has the arc, but it catches the front iron and ricochets into the lane!",
+            "Kobe's difficult turnaround off one leg falls just short against the high contest!"
+        ],
+        "mvp_quote": "Mamba never quits. Mamba never loses. Heroes come and go, but legends are forever."
+    },
+    "Dwyane Wade": {
+        "buildups": [
+            ("turns on the afterburners on the wing with blinding speed...", "eurosteps through two defenders with reckless acrobatics..."),
+            ("rises high in transition on the fastbreak...", "cocks the ball back for a monster one-handed slam..."),
+            ("probes the baseline with rapid shoulder fakes...", "splits the double team and elevates toward the rim...")
+        ],
+        "makes": [
+            "⚡ **FLASH EXPLOSION!** Dwyane Wade blows past three defenders with a wicked eurostep for the acrobatic scoop!",
+            "💥 **THE FLASH POSTER!** Wade elevates right down Main Street and hammers down a vicious dunk through contact!",
+            "🔒 **FLASH STRIP & DUNK!** Wade blocks the shot on one end and speeds ahead for an electrifying tomahawk jam!",
+            "🎯 **MID-RANGE POETRY!** Wade pulls up on the dime off the screen and hits nothing but net!"
+        ],
+        "misses": [
+            "Wade attacks the cup at full throttle, but gets walled off by the bigs at the rim!",
+            "Wade's pull-up jumper rattles on the rim and rolls off to the left!",
+            "The defense draws a charge just as Wade leaves his feet on the drive!"
+        ],
+        "mvp_quote": "My whole life has been about attacking the basket without fear. We left everything on that court."
+    },
+    "Klay Thompson": {
+        "buildups": [
+            ("sprints off a double pin-down screen in the corner...", "catches with square shoulders and instantaneous release form..."),
+            ("sets his feet in transition behind the 3PT line...", "fires the pure jumper with textbook mechanics over the defender..."),
+            ("moves relentlessly without the ball into the pocket...", "catches and shoots in 0.3 seconds...")
+        ],
+        "makes": [
+            "🔥 **FLAMETHROWER ACTIVATED!** Klay Thompson catches and fires from 28 feet — PURE WATER!",
+            "🎯 **37-POINT QUARTER FORM!** Klay curls off the screen and buries the contested corner triple without a dribble!",
+            "💦 **SPLASH BROTHER MAGIC!** Klay drains the step-back three right in the defender's eyes!",
+            "🔒 **TWO-WAY MASTERY!** Klay locks down the shooter, leaks out, and splashes the transition trey!"
+        ],
+        "misses": [
+            "Klay's catch-and-shoot 3PT hits the front of the rim and bounces off!",
+            "The defender sticks a hand right in Klay's landing zone, throwing off the shooting arc!",
+            "Klay is forced to put the ball on the floor and the rushed pull-up clangs away."
+        ],
+        "mvp_quote": "When that shooting stroke gets into rhythm, there isn't a defensive scheme in the universe that can stop it."
+    },
+    "Derrick White": {
+        "buildups": [
+            ("makes the decisive smart pass, then cuts behind the arc...", "catches in rhythm and lets it fly without hesitation..."),
+            ("stays attached to the ball-handler on the perimeter...", "times his jump perfectly for the block and transition break..."),
+            ("attacks the closeout with disciplined poise...", "steps into the paint for a smooth floater...")
+        ],
+        "makes": [
+            "🦬 **THE BUFFALO ROAMS!** Derrick White drains a fearless clutch three-pointer to ignite the crowd!",
+            "🔒 **ELITE CHASEDOWN BLOCK!** Derrick White swats the layup off the backboard and sparks the fastbreak!",
+            "🧠 **ULTIMATE GLUE GUY IQ!** White cuts backdoor for a picture-perfect reverse layup through traffic!",
+            "🎯 **ICE IN HIS VEINS!** White knocks down the spot-up corner three with zero hesitation!"
+        ],
+        "misses": [
+            "White's corner triple rims out off the backboard flange!",
+            "White's float shot hangs on the rim and rolls away into the defender's hands.",
+            "The closeout from the defense forces White into a rushed pass that goes out of bounds."
+        ],
+        "mvp_quote": "Do the little things right on every single possession, and the big wins take care of themselves."
+    },
+    "LeBron James": {
+        "buildups": [
+            ("builds up speed like a runaway freight train across half-court...", "surges into the paint absorbing contact like a bulldozer..."),
+            ("surveys the defense from the top of the key with GOAT vision...", "steps back for the signature deep high-arching dagger..."),
+            ("posts up on the wing and reads every help defender...", "spins baseline with unstoppable force toward the rim...")
+        ],
+        "makes": [
+            "👑 **KING JAMES WITH NO REGARD FOR HUMAN LIFE!** LeBron detonates a rim-rocking tomahawk slam through two defenders!",
+            "🎯 **THE CHOSEN ONE DAGGER!** LeBron steps back behind the arc and buries the cold-blooded deep three!",
+            "🧠 **POINT FORWARD PERFECTION!** LeBron rifles an impossible laser pass across the court for the easy score!",
+            "💥 **AND-ONE POWER BULLY!** LeBron barrels through the contact, lays it off glass, and flexes for the crowd!"
+        ],
+        "misses": [
+            "LeBron's deep stepback three rims off the back iron!",
+            "The defense sets a wall of three bodies in the restricted area, forcing LeBron's contested layup to spin off the rim.",
+            "LeBron seeks the foul call on the drive, but the contact goes uncalled as the ball rolls off."
+        ],
+        "mvp_quote": "Strive for greatness. Every single possession is an opportunity to prove who owns this court."
+    },
+    "Kevin Durant": {
+        "buildups": [
+            ("rises up from the top of the key with an unblockable 7-foot release point...", "flicks the wrist with silk-smooth mechanics over the outstretched contest..."),
+            ("hits the defender with a devastating high-speed crossover...", "pulls up on a dime from 18 feet with pure elevation..."),
+            ("isolates on the wing and surveys the floor...", "gives the shoulder shimmy and elevates into the sky...")
+        ],
+        "makes": [
+            "🎯 **EASY MONEY SNIPER!** Kevin Durant rises over the contest from 30 feet — NOTHING BUT NET!",
+            "🗡️ **THE SLIM REAPER STRIKES!** Durant pulls up on a dime in transition and buries an unguardable dagger!",
+            "✨ **SEVEN-FOOT SILK!** KD hits the defender with the hesitation crossover and drains the mid-range pullup!",
+            "👑 **AUTOMATIC EFFICIENCY!** Durant isolates at the elbow and knocks down the fadeaway with ease!"
+        ],
+        "misses": [
+            "Durant's pull-up jumper catches the front iron and bounces away!",
+            "The physical contest forces Durant into an off-balance release that rims out.",
+            "Durant's spot-up 3-pointer spins 360 degrees around the cylinder and drops away."
+        ],
+        "mvp_quote": "I'm Kevin Durant. You know who I am. Y'all know what I do."
+    },
+    "Kawhi Leonard": {
+        "buildups": [
+            ("engages the massive claw hands on defense...", "pokes the ball loose with emotionless precision and attacks the break..."),
+            ("backs into the mid-post with terminator footwork...", "rises for the signature robotic high-release fadeaway..."),
+            ("drives into the lane absorbing contact like a brick wall...", "elevates for the strong two-handed finish...")
+        ],
+        "makes": [
+            "🤖 **BOARD MAN GETS PAID!** Kawhi Leonard rips the ball cleanly, runs the floor, and detonates a two-handed slam!",
+            "🎯 **THE KLAW BOUNCE!** Kawhi fades away from the baseline — bounces four times on the rim and DROPS IN!",
+            "🔒 **CLAW LOCKDOWN TO BUCKET!** Kawhi clamps the opposing star, grabs the rebound, and buries the pull-up jumper!",
+            "💥 **UNTOUCHABLE ROBOTIC MIDDY!** Kawhi rises on two feet and swishes the mid-range jumper over two defenders!"
+        ],
+        "misses": [
+            "Kawhi's mid-range fadeaway rattles on the rim and rolls out!",
+            "The rim protector meets Kawhi at the summit and alters the layup attempt.",
+            "Kawhi gets crowded by a secondary helper, forcing a difficult baseline runner that misses."
+        ],
+        "mvp_quote": "Board man gets paid. We just come out here, play defense, and get the win."
+    },
+    "Jimmy Butler": {
+        "buildups": [
+            ("lowers the shoulder and drives right into the defender's chest...", "absorbs the heavy contact in mid-air and flips up a gritty layup..."),
+            ("picks up the opposing star full court with snarling intensity...", "forces the turnover and leads the transition charge..."),
+            ("dives on the hardwood for the loose ball...", "scrambles up and drives right into the defender's chest...")
+        ],
+        "makes": [
+            "☕ **PLAYOFF JIMMY IN FULL EFFECT!** Butler muscles through three defenders, absorbs the hit, and flips in the and-one!",
+            "🔥 **BIG FACE COFFEE CLUTCH!** Butler isolates at the elbow and drains the tough contested turnaround jumper!",
+            "🔒 **DOG MENTALITY!** Butler dives on the floor for the loose ball, recovers, and finishes with a power layup!",
+            "💥 **RELENTLESS HEART!** Butler out-hustles everyone on the court for the game-defining bucket!"
+        ],
+        "misses": [
+            "Butler's contested pull-up jumper falls short against the physical contest!",
+            "Butler seeks the foul call on the drive, but the contact goes uncalled as the layup misses.",
+            "Butler's 3-pointer from the wing bounces off the backboard flange!"
+        ],
+        "mvp_quote": "We got dogs on this team. We don't care about the odds — we just go out there and take what's ours."
+    },
+    "Alex Caruso": {
+        "buildups": [
+            ("dives onto the hardwood to poke the ball loose...", "scrambles up and leads the fastbreak attack at full speed..."),
+            ("times the backdoor cut with surgical precision...", "elevates for the surprise two-handed slam over the defense..."),
+            ("shadows the ball-handler step for step on the perimeter...", "reads the pass and intercepts cleanly...")
+        ],
+        "makes": [
+            "🦅 **THE CARUSHOW TAKES FLIGHT!** Alex Caruso flies in for a breathtaking posterizing alley-oop slam!",
+            "🔒 **THE ULTIMATE HUSTLE!** Caruso picks the pocket at the arc, dives for the loose ball, and lays it in!",
+            "🎯 **STEALTH SNIPER!** Caruso spaces to the corner and buries the open spot-up three-pointer!",
+            "🛡️ **DEFENSIVE CLINIC!** Caruso forces the shot-clock turnover and converts on the other end!"
+        ],
+        "misses": [
+            "Caruso's spot-up corner three rims out off the front iron!",
+            "Caruso's contested layup gets altered by the rim protector!",
+            "Caruso's bounce pass on the break gets deflected out of bounds by the retreating defense."
+        ],
+        "mvp_quote": "Heart, hustle, and defense on every single play. We earned every single point out there."
+    },
+    "Tim Duncan": {
+        "buildups": [
+            ("sets his pivot foot on the left block with Hall-of-Fame poise...", "elevates with timeless form for the signature 45-degree bank shot..."),
+            ("walls off the paint on defense with masterclass positioning...", "cleans the glass and pivots into a low-post seal..."),
+            ("receives the entry pass and backs down methodically...", "drops the shoulder and spins into a soft jump hook...")
+        ],
+        "makes": [
+            "🏛️ **THE BIG FUNDAMENTAL BANK SHOT!** Tim Duncan kisses the ball off the glass with mathematical precision — 2 PTS!",
+            "🔒 **DEFENSIVE MASTERCLASS!** Duncan swats the drive without leaving his feet and scores the hook shot on the other end!",
+            "👑 **POST CLINIC!** Duncan pivots, gives the shoulder shimmy, and lays in the smooth finger roll over the contest!",
+            "🧠 **TIMELESS DOMINANCE!** Duncan seals his defender deep in the paint and drops in an effortless power hook!"
+        ],
+        "misses": [
+            "Duncan's bank shot hits the glass slightly hard and rims away!",
+            "The double-team strips the ball low before Duncan can get into his shooting motion.",
+            "Duncan's jump hook spins 360 degrees around the rim and drops out into the defender's arms."
+        ],
+        "mvp_quote": "Good, better, best. Never let it rest until your good is better and your better is best."
+    },
+    "Larry Bird": {
+        "buildups": [
+            ("tells the defender exactly where he's going to hit the shot...", "steps back into the corner and fires with pinpoint high arc..."),
+            ("fakes the pass with a wizardly flick of the wrist...", "pulls up from 25 feet with ice-cold confidence..."),
+            ("battles on the glass against the bigs...", "grabs the offensive board and flips in a reverse putback...")
+        ],
+        "makes": [
+            "🍀 **LARRY LEGEND SENDS HIS REGARDS!** Bird buries the deep rainbow three right in the defender's face after calling the shot!",
+            "🧠 **BASKETBALL SAVANT!** Bird delivers a magical touch-pass across two defenders and follows up with the slick tip-in!",
+            "🔥 **TRASH TALK CERTIFIED!** Bird fades out of bounds from behind the backboard and SWISHES IT ANYWAY!",
+            "⚡ **COLD-BLOODED BOSTON DAGGER!** Bird knocks down the game-winning jumper with ice flowing through his veins!"
+        ],
+        "misses": [
+            "Bird's rainbow three-pointer rims around the cylinder and spins out!",
+            "The defender gets a fingertip on Bird's turnaround jumper, altering the trajectory!",
+            "Bird's behind-the-back dish is anticipated by the defensive wing for a turnover."
+        ],
+        "mvp_quote": "I asked them before the game who was coming in second. Now they have their answer."
+    },
+    "Dirk Nowitzki": {
+        "buildups": [
+            ("posts up at the high free-throw line...", "kicks out the right leg into the legendary one-legged flamingo fadeaway..."),
+            ("trails the fastbreak to the top of the key...", "catches and fires the towering 7-foot three over the outstretched hands..."),
+            ("isolates at the mid-post with patient jab steps...", "elevates with unguardable arc...")
+        ],
+        "makes": [
+            "🇩🇪 **THE FLAMINGO FADEAWAY!** Dirk Nowitzki rises on one leg with high arc — completely unguardable, SWISH!",
+            "🎯 **SEVEN-FOOT SNIPER!** Dirk trails the break, sets his feet, and buries a towering 28-foot bomb!",
+            "👑 **MAVERICK LEGEND!** Dirk isolates at the elbow, gives the jab step, and sinks the baseline turnaround!",
+            "⚡ **CLUTCH FINALS HEROICS!** Dirk draws the foul on the one-legged jumper and knocks it down for an and-one!"
+        ],
+        "misses": [
+            "Dirk's one-legged fadeaway hits the back iron and ricochets high into the air!",
+            "The defender challenges Dirk's release point tightly, forcing the high arc to miss off the front lip.",
+            "Dirk's spot-up three-pointer bounces off the rim into a scramble for the rebound."
+        ],
+        "mvp_quote": "If you don't believe in yourself, nobody else will. We fought through every single possession tonight."
+    },
+    "Anthony Davis": {
+        "buildups": [
+            ("rolls aggressively to the rim off the high screen...", "elevates high above the rim for the thunderous lob catch..."),
+            ("spreads his 7'6 wingspan across the paint...", "swats the driving layup into the luxury seats and runs the floor..."),
+            ("faces up at the mid-range with quick jab steps...", "rises for the smooth pull-up jumper...")
+        ],
+        "makes": [
+            "〰️ **THE BROW ROARS!** Anthony Davis catches the alley-oop in the stratosphere and throws down a violent two-handed slam!",
+            "🔒 **PAINT DENIED BY THE BROW!** AD swats the shot into the stands, runs the floor, and flushes the putback dunk!",
+            "🎯 **UNGUARDABLE PICK & POP!** AD pops to the midrange and drains the silky smooth 18-foot jumper!",
+            "💥 **AND-ONE POWER BULLY!** Davis powers through two defenders in the post for the gritty three-point play!"
+        ],
+        "misses": [
+            "AD's alley-oop attempt gets contested at the rim and slips through his fingertips!",
+            "AD's mid-range face-up jumper rattles on the iron and drops away.",
+            "The low-post double team collapses on Davis, forcing a tough contested hook that rims out."
+        ],
+        "mvp_quote": "Defense sets the tone. When we control the paint and own the glass, we are unstoppable."
+    },
+    "Naz Reid": {
+        "buildups": [
+            ("steps out beyond the 3PT line with confident rhythm...", "lets fly a smooth, high-arching stroke over the dropping big..."),
+            ("attacks the closeout with surprising guard-like handles...", "glides to the rim for the soft touch layup off glass..."),
+            ("drags the defense out with perimeter spacing...", "pumps and drives into the paint with power...")
+        ],
+        "makes": [
+            "🐺 **NAZ REID. NAZ REID. NAZ REID!** Naz Reid knocks down the clutch trailing three-pointer as the crowd goes crazy!",
+            "💥 **GUARD HANDLES IN A BIG BODY!** Naz Reid breaks down his man off the dribble and finishes with a nasty one-handed jam!",
+            "🔥 **SIXTH MAN FLAME!** Reid catches fire from beyond the arc, burying back-to-back triples!",
+            "⚡ **SMOOTH OFF-GLASS TOUCH!** Reid attacks the mismatch and kisses the high floater off the glass!"
+        ],
+        "misses": [
+            "Naz Reid's spot-up three clanks off the backboard rim!",
+            "Reid's driving runner gets contested and misses off the front edge of the cylinder.",
+            "The defense cuts off Reid's driving lane, forcing a tough step-back that goes wide."
+        ],
+        "mvp_quote": "Two words: NAZ REID. Stay ready so you don't have to get ready!"
+    },
+    "Shaquille O'Neal": {
+        "buildups": [
+            ("establishes deep low-post positioning under the basket...", "drop-steps with 325 pounds of unstoppable raw power..."),
+            ("catches the entry pass and backs down the helpless defender...", "turns with violent force and detonates on the rim..."),
+            ("seals off the paint on the roll...", "catches the entry pass and rises with two hands...")
+        ],
+        "makes": [
+            "💥 **SHAQ ATTACK! RIM BREAKER!** Shaquille O'Neal obliterates the defender and nearly rips the backboard off the stanchion!",
+            "🍗 **BBQ CHICKEN ALERT!** Shaq backs the center into the basket stanchion and flushes an earth-shattering poster slam!",
+            "⚡ **MOST DOMINANT FORCE EVER!** Shaq absorbs contact from three defenders and powers in the two-handed monster jam!",
+            "👑 **DIESEL POWER!** Shaq drop-steps into the lane and delivers a backboard-shaking dunk!"
+        ],
+        "misses": [
+            "Shaq's jump hook bounces off the back iron into a pack of rebounders!",
+            "The defense sends a hard triple-team foul, hacking the big diesel before he can elevate!",
+            "Shaq gets pushed just far enough out of the paint that his turnaround hook misses wide."
+        ],
+        "mvp_quote": "BBQ Chicken alert! When the Diesel gets rolling, there isn't a team on Earth that can slow me down."
+    },
+    "Hakeem Olajuwon": {
+        "buildups": [
+            ("receives the entry pass and begins the post dance...", "hits the defender with the legendary Dream Shake shimmy..."),
+            ("fakes left, spins right, and fakes the jump hook...", "slides under the airborne defender with graceful footwork..."),
+            ("catches at the elbow and faces up...", "crosses over and drops into a soft turnaround baseline jumper...")
+        ],
+        "makes": [
+            "🌪️ **THE DREAM SHAKE!** Hakeem Olajuwon sends the defender flying with three pump-fakes before a silky reverse layup!",
+            "🔒 **HISTORIC SHOT BLOCKER!** Hakeem blocks the shot on one end and runs the floor for an emphatic fastbreak dunk!",
+            "✨ **FOOTWORK GENIUS!** Hakeem pivots twice, creates 5 feet of separation, and buries the unblockable fadeaway!",
+            "👑 **POST PERFECTION!** Olajuwon hits the defender with the spin move of the century for an effortless score!"
+        ],
+        "misses": [
+            "Hakeem's dream shake fadeaway catches the front iron and rolls away!",
+            "The defender stays grounded on the pump fake, contesting Hakeem's turnaround hook at the apex.",
+            "Hakeem's spin move gets crowded by a second defender for a blocked attempt."
+        ],
+        "mvp_quote": "Footwork and patience can conquer any defense. The Dream Shake never gets old."
+    },
+    "Nikola Jokić": {
+        "buildups": [
+            ("surveys the floor with superhuman court vision...", "flicks a no-look overhead water-polo pass right on the money..."),
+            ("backs into the lane with unorthodox rhythm...", "elevates off the wrong foot for the Sombor Shuffle..."),
+            ("posts at the top of the key conducting the orchestra...", "fakes the handoff and floats a soft touch scoop...")
+        ],
+        "makes": [
+            "🃏 **THE SOMBOR SHUFFLE!** Nikola Jokić fades off his right foot with impossible high arc and SWISHES IT CLEAN!",
+            "🪄 **TRIPLE-DOUBLE MAGICIAN!** Jokić dishes a pinpoint full-court laser pass through three defenders for the easy score!",
+            "🎯 **TOUCH SHOT GENIUS!** Jokić flips a soft-touch floater from 12 feet out — PURE PERFECTION!",
+            "👑 **MVP MASTERCLASS!** Jokić orchestrates the entire half-court offense and finishes with a graceful tip-in!"
+        ],
+        "misses": [
+            "Jokić's Sombor Shuffle hits the back of the rim and bounds away!",
+            "Jokić's touch pass is deflected by an outstretched arm in the passing lane!",
+            "The defender crowds Jokić's body on the post fade, forcing the high-arcing floater to fall short."
+        ],
+        "mvp_quote": "Basketball is simple when everyone shares the ball and plays for each other. Job's done, we can go home now."
+    },
+    "Giannis Antetokounmpo": {
+        "buildups": [
+            ("gathers the rebound and takes three gigantic eurostep strides...", "surges through half-court like a runaway Greek locomotive..."),
+            ("attacks the rim from the three-point line in two steps...", "rises high above the rim for the poster slam..."),
+            ("drives the lane with unstoppable physical force...", "absorbs contact in the air and extends for the flush...")
+        ],
+        "makes": [
+            "🦌 **GREEK FREAK FREIGHT TRAIN!** Giannis eurosteps from the 3PT line and detonates a ferocious poster dunk!",
+            "💥 **UNSTOPPABLE PHYSICAL FORCE!** Giannis barrels through three defenders, absorbs the hard hit, and slams it home for the AND-ONE!",
+            "🔒 **CHASEDOWN BLOCK TO SLAM!** Giannis pins the layup against the glass and finishes with an 80-foot transition dunk!",
+            "⚡ **SUPERHUMAN REACH!** Giannis extends his 7'3 wingspan and flushes a terrifying reverse tomahawk!"
+        ],
+        "misses": [
+            "Giannis's driving layup gets altered by a wall of three paint defenders and rolls off the rim!",
+            "Giannis is called for an offensive charge as the defense sets their feet just outside the restricted area!",
+            "Giannis's pull-up jumper from the mid-range clanks hard off the back iron."
+        ],
+        "mvp_quote": "Never give up. When you focus on your past, that's your ego. When you focus on the future, that's your pride. Focus on the moment!"
+    },
+    "Victor Wembanyama": {
+        "buildups": [
+            ("spreads his 8-foot wingspan across the entire perimeter...", "rises up for an 8-foot release point stepback three..."),
+            ("swats the opposing shot without even leaving the floor...", "runs the floor like a 7'4 guard for the transition finish..."),
+            ("catches on the wing and crosses over...", "elevates high into the sky for a breathtaking finish...")
+        ],
+        "makes": [
+            "👽 **ALIEN SIGHTING!** Victor Wembanyama swats the shot, grabs his own rebound, and drains a step-back 3-pointer!",
+            "🔒 **THE GREAT WALL OF TEXAS!** Wemby blocks the shot with one hand and slams home the putback with the other!",
+            "⚡ **UNGUARDABLE 8-FOOT RELEASE!** Wemby elevates over the contest from 28 feet — NOTHING BUT NET!",
+            "💥 **ASTRONOMICAL ALLEY-OOP!** Wemby catches the lob at the top of the backboard square and hammers it down!"
+        ],
+        "misses": [
+            "Wemby's step-back three-pointer from 30 feet clangs off the back iron!",
+            "The defense swarms Wemby's handle on the drive, poking the ball loose for a turnover.",
+            "Wemby's turnaround hook shot brushes the front rim and rolls away into the defender's hands."
+        ],
+        "mvp_quote": "This is just the beginning. The future is here, and the rim is completely locked."
+    }
+}
+
+
+def get_player_possession_flavor(
+    p_name: str,
+    action_key: str,
+    success: bool,
+    pl_att: Dict[str, Any],
+    pl_def: Dict[str, Any],
+    scheme_data: Dict[str, Any],
+    and_one: bool = False,
+    bad_call: bool = False
+) -> Tuple[str, str, str, str]:
+    """Returns (buildup_1, buildup_2, final_commentary, short_result) with pure basketball-reason explanations and max 2 lines."""
+    p_data = NBA_PLAYER_COMMENTARY.get(p_name)
+    att_name = pl_att.get("name", p_name)
+    def_name = pl_def.get("name", "Defender")
+    def_emoji = pl_def.get("emoji", "🛡️")
+    att_emoji = pl_att.get("emoji", "🏀")
+
+    # 1. Buildup setup
+    if p_data and p_data.get("buildups"):
+        buildup_pair = random.choice(p_data["buildups"])
+        b1 = f"{att_emoji} **{att_name}** {buildup_pair[0]}"
+        b2 = f"⏳ {buildup_pair[1]}"
+    else:
+        if action_key == "three":
+            b1 = f"{att_emoji} **{att_name}** sizes up {def_emoji} **{def_name}** and steps back behind the arc..."
+            b2 = "⏳ Rises up over the contest with pure shooting arc..."
+        elif action_key == "drive":
+            b1 = f"{att_emoji} **{att_name}** puts his head down and attacks the lane..."
+            b2 = f"⏳ Collides in mid-air against {def_emoji} **{def_name}** at the rim..."
+        elif action_key == "pnr":
+            b1 = f"{att_emoji} **{att_name}** calls for the high ball screen..."
+            b2 = "⏳ Reads the defensive coverage and threads the needle..."
+        elif action_key == "defense":
+            b1 = f"{att_emoji} **{att_name}** gets low in a defensive stance..."
+            b2 = f"⏳ Anticipates **{def_name}**'s crossover and swipes at the rock..."
+        else:
+            b1 = f"{att_emoji} **{att_name}** clears out the floor for isolation..."
+            b2 = f"⏳ Hits {def_emoji} **{def_name}** with a hesitation pullback..."
+
+    # 2. Commentary line (Max 2 lines, basketball reasons)
+    if success:
+        if p_data and p_data.get("makes"):
+            cmt = random.choice(p_data["makes"])
+        else:
+            action = TACTICAL_OUTCOMES.get(action_key, TACTICAL_OUTCOMES["three"])
+            cmt = action["success_msg"].format(
+                p1=f"{att_emoji} **{att_name}**",
+                p2=f"{def_emoji} **{def_name}**"
+            )
+        if and_one:
+            cmt += " 🔥 **AND-ONE FOUL! (+1 Extra Pt)**"
+        act_name = TACTICAL_OUTCOMES.get(action_key, {}).get("name", "Bucket")
+        pts_add = 3 if action_key == "three" else (3 if and_one else 2)
+        short_result = f"{att_name} scored on {act_name} (+{pts_add} PTS)"
+    else:
+        wrong_reasons = scheme_data.get("wrong_call_reasons", {})
+        if bad_call and action_key in wrong_reasons:
+            reason_text = wrong_reasons[action_key]
+            cmt = f"🚫 **REJECTED!** {reason_text} *(Contested by {def_emoji} **{def_name}**)*"
+            short_result = f"{att_name}'s {TACTICAL_OUTCOMES.get(action_key, {}).get('name', 'play')} was blocked by {def_name}"
+        elif p_data and p_data.get("misses"):
+            miss_base = random.choice(p_data["misses"])
+            cmt = f"🛑 **STOPPED!** {miss_base} *(Contested by {def_emoji} **{def_name}**)*"
+            short_result = f"{att_name} missed against {def_name}"
+        else:
+            action = TACTICAL_OUTCOMES.get(action_key, TACTICAL_OUTCOMES["three"])
+            cmt = action["fail_msg"].format(
+                p1=f"{att_emoji} **{att_name}**",
+                p2=f"{def_emoji} **{def_name}**"
+            )
+            short_result = f"{att_name}'s play failed against {def_name}"
+
+    return b1, b2, cmt, short_result
+
+
+def get_nba_player_mvp_quote(player_name: str) -> str:
+    """Fetches an iconic player quote for the ESPN Player of the Match recap."""
+    p_data = NBA_PLAYER_COMMENTARY.get(player_name)
+    if p_data and p_data.get("mvp_quote"):
+        return p_data["mvp_quote"]
+    return "Heart, hustle, and team basketball. We left everything on that hardwood."
+
+
+def format_momentum_status(mom: int) -> str:
+    """Formats momentum level into visual flames."""
+    if mom <= 0:
+        return "⚪"
+    return "🔥" * min(3, mom)
+
+
+def resolve_possession(
+    action_key: str,
+    pl_att: Dict[str, Any],
+    pl_def: Dict[str, Any],
+    momentum_att: int,
+    momentum_def: int,
+    scheme_key: str = "drop_coverage",
+    play_streak: int = 1,
+    has_timeout_boost: bool = False,
+    is_clutch: bool = False,
+    is_comeback: bool = False
+) -> Dict[str, Any]:
+    """Resolves an in-game coaching possession using tactical counter reads, player moveset archetypes, clutch genes, comeback rally, anti-spam adaptation, and momentum."""
+    action = TACTICAL_OUTCOMES.get(action_key, TACTICAL_OUTCOMES["three"])
+    favored_stat = action["favors"]
+    att_stat = pl_att.get(favored_stat, 80)
+    def_stat = pl_def.get("defense", 80)
+    scheme_data = DEFENSIVE_SCHEMES.get(scheme_key, DEFENSIVE_SCHEMES["drop_coverage"])
+
+    tactical_modifier = 0.0
+    is_counter = scheme_key in action["good_against"]
+    is_bad = scheme_key in action["bad_against"]
+
+    # 1. Scheme counters (Read & React)
+    if is_counter:
+        tactical_modifier += scheme_data.get("counter_bonus", 0.35)
+    elif is_bad:
+        tactical_modifier -= scheme_data.get("bad_penalty", 0.28)
+
+    # 2. Player Archetype Move Set (Favored vs Blocked)
+    archetype_bonus = 0.0
+    favored_moves = pl_att.get("favored", [])
+    blocked_moves = pl_att.get("blocked", [])
+    is_sig = action_key in favored_moves
+    if is_sig:
+        archetype_bonus += 0.15
+    elif action_key in blocked_moves:
+        archetype_bonus -= 0.35
+
+    # 3. Clutch Gene
+    clutch_bonus = 0.0
+    if is_clutch:
+        cl_val = pl_att.get("clutch", 85)
+        if cl_val >= 95:
+            clutch_bonus += 0.18
+        elif cl_val <= 82:
+            clutch_bonus -= 0.12
+
+    # 4. Comeback Rally Bonus
+    comeback_bonus = 0.15 if is_comeback else 0.0
+    if is_comeback and pl_att.get("clutch", 85) >= 90:
+        comeback_bonus += 0.08
+
+    # 5. Anti-spam consecutive play penalty
+    streak_penalty = 0.0
+    is_spam = play_streak >= 2
+    if play_streak == 2:
+        streak_penalty = 0.15
+    elif play_streak >= 3:
+        streak_penalty = 0.35
+
+    # 6. Timeout boost
+    timeout_bonus = 0.20 if has_timeout_boost else 0.0
+
+    # 7. Momentum modifier
+    momentum_mod = (momentum_att * 0.06) - (momentum_def * 0.04)
+
+    # Base hit probability
+    stat_diff = att_stat - def_stat
+    base_prob = 0.50 + (stat_diff * 0.008) + tactical_modifier + archetype_bonus + clutch_bonus + comeback_bonus - streak_penalty + timeout_bonus + momentum_mod
+    base_prob = max(0.10, min(0.95, base_prob))
+
+    success = random.random() < base_prob
+    pts_scored = action["pts"] if success else 0
+
+    # Possible And-1 for drive
+    and_one = False
+    if success and action_key == "drive" and random.random() < 0.22:
+        pts_scored += 1
+        and_one = True
+
+    p_att_name = pl_att.get("name", "Player")
+    buildup_1, buildup_2, commentary, short_result = get_player_possession_flavor(
+        p_name=p_att_name,
+        action_key=action_key,
+        success=success,
+        pl_att=pl_att,
+        pl_def=pl_def,
+        scheme_data=scheme_data,
+        and_one=and_one,
+        bad_call=is_bad
+    )
+
+    return {
+        "success": success,
+        "pts": pts_scored,
+        "buildup_1": buildup_1,
+        "buildup_2": buildup_2,
+        "commentary": commentary,
+        "short_result": short_result,
+        "is_counter": is_counter,
+        "is_bad": is_bad,
+        "is_sig": is_sig,
+        "is_spam": is_spam
+    }
 
 NBA_PLAYER_COMMENTARY: Dict[str, Dict[str, Any]] = {
     "Stephen Curry": {
@@ -2633,7 +3523,7 @@ def get_player_possession_flavor(
     scheme_data: Dict[str, Any],
     and_one: bool = False
 ) -> Tuple[str, str, str]:
-    """Returns (buildup_1, buildup_2, final_commentary) tailored to the player, defensive scheme, and action."""
+    """Returns (buildup_1, buildup_2, final_commentary) tailored to the player, defensive scheme, and action with zero percentages and clear basketball rationale."""
     p_data = NBA_PLAYER_COMMENTARY.get(p_name)
     att_name = pl_att.get("name", p_name)
     def_name = pl_def.get("name", "Defender")
@@ -2646,7 +3536,6 @@ def get_player_possession_flavor(
         b1 = f"{att_emoji} **{att_name}** {buildup_pair[0]}"
         b2 = f"⏳ {buildup_pair[1]}"
     else:
-        # Fallbacks based on action_key
         if action_key == "three":
             b1 = f"{att_emoji} **{att_name}** sizes up {def_emoji} **{def_name}** and steps back behind the arc..."
             b2 = "⏳ Rises up over the contest with pure shooting arc..."
@@ -2663,7 +3552,7 @@ def get_player_possession_flavor(
             b1 = f"{att_emoji} **{att_name}** clears out the floor for isolation..."
             b2 = f"⏳ Hits {def_emoji} **{def_name}** with a hesitation pullback..."
 
-    # 2. Commentary line
+    # 2. Commentary line (Zero percentages, pure basketball reason)
     if success:
         if p_data and p_data.get("makes"):
             cmt = random.choice(p_data["makes"])
@@ -2676,7 +3565,10 @@ def get_player_possession_flavor(
         if and_one:
             cmt += " 🔥 **AND-ONE FOUL CALLED! (+1 Extra Point)**"
     else:
-        if p_data and p_data.get("misses"):
+        wrong_reason = scheme_data.get("wrong_call_reasons", {}).get(action_key)
+        if wrong_reason:
+            cmt = f"🛑 **STOPPED!** {wrong_reason}. *(Locked down by {def_emoji} **{def_name}**)*"
+        elif p_data and p_data.get("misses"):
             miss_base = random.choice(p_data["misses"])
             cmt = f"🛑 **STOPPED!** {miss_base} *(Contested by {def_emoji} **{def_name}**)*"
         else:
@@ -2700,13 +3592,13 @@ def get_nba_player_mvp_quote(player_name: str) -> str:
 def format_momentum_status(mom: int) -> str:
     """Formats momentum level into visual flames and text description."""
     if mom <= 0:
-        return "⚪ Neutral (0%)"
+        return "⚪ Neutral"
     elif mom == 1:
-        return "🔥 Heat Check (+6% Shot Boost)"
+        return "🔥 Heat Check"
     elif mom == 2:
-        return "🔥🔥 Boiling (+12% Shot Boost)"
+        return "🔥🔥 Boiling"
     else:
-        return "🔥🔥🔥 **ON FIRE (+18% Shot Boost)** 📢 *Crowd is Going Wild!*"
+        return "🔥🔥🔥 **ON FIRE**"
 
 
 def resolve_possession(
@@ -2718,7 +3610,8 @@ def resolve_possession(
     scheme_key: str = "drop_coverage",
     play_streak: int = 1,
     has_timeout_boost: bool = False,
-    is_clutch: bool = False
+    is_clutch: bool = False,
+    is_comeback: bool = False
 ) -> Dict[str, Any]:
     """Resolves an in-game coaching possession using tactical counter reads, player moveset archetypes, clutch genes, anti-spam adaptation, and momentum."""
     action = TACTICAL_OUTCOMES.get(action_key, TACTICAL_OUTCOMES["three"])
@@ -2733,10 +3626,10 @@ def resolve_possession(
     # 1. Scheme counters (Read & React)
     if scheme_key in action["good_against"]:
         tactical_modifier += scheme_data.get("counter_bonus", 0.35)
-        read_notes.append(f"🎯 **TACTICAL COUNTER! (+{int(scheme_data.get('counter_bonus', 0.35)*100)}% Boost)**\nYou exploited `{scheme_data['name']}`!")
+        read_notes.append(f"🎯 **TACTICAL COUNTER!** Exploited `{scheme_data['name']}`!")
     elif scheme_key in action["bad_against"]:
         tactical_modifier -= scheme_data.get("bad_penalty", 0.28)
-        read_notes.append(f"⚠️ **BAD READ / TRAP (-{int(scheme_data.get('bad_penalty', 0.28)*100)}% Penalty)**\nYou ran directly into `{scheme_data['name']}`!")
+        read_notes.append(f"⚠️ **BAD READ / TRAP!** Ran directly into `{scheme_data['name']}`!")
     else:
         read_notes.append(f"⚡ **Neutral Matchup** against `{scheme_data['name']}`.")
 
@@ -2746,10 +3639,10 @@ def resolve_possession(
     blocked_moves = pl_att.get("blocked", [])
     if action_key in favored_moves:
         archetype_bonus += 0.15
-        read_notes.append(f"⭐ **SIGNATURE PLAY (+15% Mastery)**: {pl_att.get('name', 'Player')} operates in their archetype sweet spot ({pl_att.get('archetype', 'Star')})!")
+        read_notes.append(f"⭐ **SIGNATURE PLAY**: {pl_att.get('name', 'Player')} operates in archetype comfort!")
     elif action_key in blocked_moves:
         archetype_bonus -= 0.35
-        read_notes.append(f"🛑 **OUT-OF-ARCHETYPE BRICK RISK (-35% Penalty)**: {pl_att.get('name', 'Player')} is forced into an unnatural play call!")
+        read_notes.append(f"🛑 **OUT-OF-ARCHETYPE BRICK RISK**: Forced into unnatural play call!")
 
     # 3. Clutch Gene
     clutch_bonus = 0.0
@@ -2757,31 +3650,36 @@ def resolve_possession(
         cl_val = pl_att.get("clutch", 85)
         if cl_val >= 95:
             clutch_bonus += 0.18
-            read_notes.append(f"🔥 **CLUTCH GENE (+18% Ice In Veins)**: {pl_att.get('name', 'Player')} has ice in their veins for the game-winner!")
+            read_notes.append(f"🔥 **CLUTCH GENE**: Ice in veins for the game-winner!")
         elif cl_val <= 82:
             clutch_bonus -= 0.12
-            read_notes.append(f"⚠️ **CLUTCH PRESSURE (-12% Penalty)**: High-stakes pressure shakes {pl_att.get('name', 'Player')}!")
+            read_notes.append(f"⚠️ **CLUTCH PRESSURE**: High stakes pressure shaking the release!")
 
-    # 4. Anti-spam consecutive play penalty
+    # 4. Comeback rally bonus
+    comeback_bonus = 0.15 if is_comeback else 0.0
+    if is_comeback:
+        read_notes.append("🔥 **COMEBACK RALLY**: Desperation momentum bonus active!")
+
+    # 5. Anti-spam consecutive play penalty
     streak_penalty = 0.0
     if play_streak == 2:
         streak_penalty = 0.15
-        read_notes.append("⚠️ **Predictable Offense (-15%)**: Opponent defense adjusted to repeated play!")
+        read_notes.append("⚠️ **Predictable Offense**: Opponent defense adjusted to repeated play!")
     elif play_streak >= 3:
         streak_penalty = 0.35
-        read_notes.append("🛑 **DEFENSIVE TRAP (-35%)**: Opponent jumped the route on consecutive play spam!")
+        read_notes.append("🛑 **DEFENSIVE TRAP**: Opponent jumped the route on consecutive spam!")
 
-    # 5. Timeout boost
+    # 6. Timeout boost
     timeout_bonus = 0.20 if has_timeout_boost else 0.0
     if has_timeout_boost:
-        read_notes.append("⏱️ **Coach ATO Set-Play Active (+20% Precision Boost)**")
+        read_notes.append("⏱️ **Coach ATO Set-Play Active**")
 
-    # 6. Momentum modifier (+6% per hot flame)
+    # 7. Momentum modifier
     momentum_mod = (momentum_att * 0.06) - (momentum_def * 0.04)
 
     # Base hit probability
     stat_diff = att_stat - def_stat
-    base_prob = 0.50 + (stat_diff * 0.008) + tactical_modifier + archetype_bonus + clutch_bonus - streak_penalty + timeout_bonus + momentum_mod
+    base_prob = 0.50 + (stat_diff * 0.008) + tactical_modifier + archetype_bonus + clutch_bonus + comeback_bonus - streak_penalty + timeout_bonus + momentum_mod
     base_prob = max(0.10, min(0.95, base_prob))
 
     success = random.random() < base_prob
@@ -2818,7 +3716,7 @@ def resolve_possession(
 
 
 class InteractiveTeamBattleView(discord.ui.View):
-    """Live turn-based interactive tactical card battle view with Read & React scout reads, tactical counters, dramatic ESPN play-by-play reveals, and sudden-death clutch mode."""
+    """Live turn-based interactive tactical card battle view with Read & React scout reads, dynamic button tags, 5-line mobile display, and Coaching DNA tracking."""
     def __init__(
         self,
         author: Union[discord.Member, discord.User],
@@ -2869,29 +3767,46 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.momentum_b = 0
         self.round_history = []
         
-        # Strategic tactical state
+        # Strategic tactical state & Coaching DNA logs
         self.last_play_a: Optional[str] = None
         self.play_streak_a: int = 0
         self.timeouts_left_a: int = 1
         self.has_timeout_boost_a: bool = False
+        self.timeouts_used_count: int = 0
+        self.tactics_counts = {"three": 0, "drive": 0, "pnr": 0, "defense": 0, "iso": 0}
+        self.tactics_log: List[Dict[str, Any]] = []
         self.is_clutch_mode = False
         self._is_resolving = False
+        
+        # Detect Sweety AI opponent personality (Aggressive Blitzer)
+        self.is_sweety_ai = getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id)
+        
+        # Pre-Match Synergy Analysis Line
+        self.synergy_analysis_line = get_matchup_synergy_analysis(picks_a, picks_b, author.display_name, opponent.display_name)
         
         # Generate dynamic defensive schemes for all 5 rounds
         scheme_keys = list(DEFENSIVE_SCHEMES.keys())
         self.round_schemes = []
         for pos in self.positions:
-            def_p = self.picks_b.get(pos, {})
-            if isinstance(def_p, dict) and def_p.get("defense", 80) >= 95:
-                if pos in ["PF", "C"]:
-                    chosen_s = random.choice(["drop_coverage", "isolation_lock"])
-                else:
-                    chosen_s = random.choice(["perimeter_press", "isolation_lock"])
+            if self.is_sweety_ai:
+                # Sweety AI is an Aggressive Blitzer: heavily weights zone_trap & perimeter_press
+                chosen_s = random.choices(
+                    ["zone_trap", "perimeter_press", "drop_coverage", "isolation_lock", "switch_mismatch"],
+                    weights=[35, 35, 10, 10, 10],
+                    k=1
+                )[0]
             else:
-                chosen_s = random.choice(scheme_keys)
+                def_p = self.picks_b.get(pos, {})
+                if isinstance(def_p, dict) and def_p.get("defense", 80) >= 95:
+                    if pos in ["PF", "C"]:
+                        chosen_s = random.choice(["drop_coverage", "isolation_lock"])
+                    else:
+                        chosen_s = random.choice(["perimeter_press", "isolation_lock"])
+                else:
+                    chosen_s = random.choice(scheme_keys)
             self.round_schemes.append(chosen_s)
 
-        self.last_commentary = f"🏀 **Tip-Off!** {author.display_name} ({eval_a.get('ovr', 90)} OVR) vs {opponent.display_name} ({eval_b.get('ovr', 90)} OVR).\n*First to 7 PTS wins each quarter! Read the opponent's defensive scout look below and execute your player's signature moves!*"
+        self.last_short_outcome = f"🏀 Tip-Off! {self.synergy_analysis_line}"
         self.player_points = {
             self.author.id: {},
             self.opponent.id: {},
@@ -2919,13 +3834,29 @@ class InteractiveTeamBattleView(discord.ui.View):
         pl_a = self.picks_a.get(cur_pos, {})
         favored_a = pl_a.get("favored", []) if isinstance(pl_a, dict) else []
         blocked_a = pl_a.get("blocked", []) if isinstance(pl_a, dict) else []
+        cur_scheme_key = self.round_schemes[cur_idx] if cur_idx < len(self.round_schemes) else "drop_coverage"
 
         def _btn_label(base_lbl: str, key: str) -> str:
-            if key in favored_a:
-                return f"{base_lbl} ⭐"
-            elif key in blocked_a:
-                return f"{base_lbl} ⚠️"
-            return base_lbl
+            act_data = TACTICAL_OUTCOMES.get(key, {})
+            is_good = cur_scheme_key in act_data.get("good_against", [])
+            is_bad = cur_scheme_key in act_data.get("bad_against", [])
+            is_fav = key in favored_a
+            is_blk = key in blocked_a
+            is_spam = (self.last_play_a == key and self.play_streak_a >= 2)
+
+            if is_spam:
+                return f"{base_lbl} ⚠️ Spam"
+
+            tags = ""
+            if is_good:
+                tags += "✅"
+            elif is_bad:
+                tags += "⚠️"
+            if is_fav:
+                tags += "🔥"
+            elif is_blk and not is_bad:
+                tags += "⚠️"
+            return f"{base_lbl} {tags}".strip() if tags else base_lbl
 
         # Row 0: Primary offensive play calls
         async def _cb_three(i: discord.Interaction): await self.handle_tactical_action(i, "three")
@@ -2984,15 +3915,11 @@ class InteractiveTeamBattleView(discord.ui.View):
                 return
 
             self.timeouts_left_a -= 1
+            self.timeouts_used_count += 1
             self.has_timeout_boost_a = True
             prev_opp_mom = self.momentum_b
             self.momentum_b = 0
-            self.last_commentary = (
-                f"⏱️ **COACH TIMEOUT CALLED BY {interaction.user.display_name}!**\n"
-                f"• *The arena goes dead silent. Ice. Ice. Ice.*\n"
-                f"• Iced opponent's heat momentum (`{prev_opp_mom} 🔥 ➔ 0 ⚪`)!\n"
-                f"• Drew up a high-percentage **ATO Set-Play (+20% Precision Boost)** for the next possession!"
-            )
+            self.last_short_outcome = f"⏱️ Timeout called! Iced momentum ({prev_opp_mom} 🔥 ➔ 0 ⚪) • ATO Set-Play Active!"
             self._build_controls()
             embed = self.make_battle_embed()
             if not interaction.response.is_done():
@@ -3058,30 +3985,92 @@ class InteractiveTeamBattleView(discord.ui.View):
             logger.error(f"[InteractiveTeamBattleView] draft_callback error: {e}", exc_info=True)
 
     def make_suspense_embed(self, suspense_body: str) -> discord.Embed:
-        """Renders live dramatic play-by-play reveal frame during the possession buildup."""
+        """Renders strict 4-line mobile layout during live dramatic reveal (0 fields, 0 percentages)."""
         cur_idx = min(self.current_round, len(self.positions) - 1)
         cur_pos = self.positions[cur_idx]
-        pos_title = self.pos_fullnames.get(cur_pos, cur_pos)
+        pl_a = self.picks_a.get(cur_pos, {})
+        pl_b = self.picks_b.get(cur_pos, {})
+        cur_scheme_key = self.round_schemes[cur_idx] if cur_idx < len(self.round_schemes) else "drop_coverage"
+        scheme_data = DEFENSIVE_SCHEMES.get(cur_scheme_key, DEFENSIVE_SCHEMES["drop_coverage"])
         
         status_color = discord.Color.from_rgb(220, 38, 38) if self.is_clutch_mode else discord.Color.blue()
-        embed_title = f"🚨 CLUTCH TIME: {self.author.display_name} vs {self.opponent.display_name}" if self.is_clutch_mode else f"⚔️ LIVE NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}"
+        embed_title = f"🚨 CLUTCH TIME: {self.author.display_name} vs {self.opponent.display_name}" if self.is_clutch_mode else f"⚔️ NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}"
 
-        q_bar_a = "🟩" * min(7, self.q_pts_a) + "⬜" * max(0, 7 - self.q_pts_a)
-        q_bar_b = "🟥" * min(7, self.q_pts_b) + "⬜" * max(0, 7 - self.q_pts_b)
+        name_a_disp = self.author.display_name[:12]
+        name_b_disp = self.opponent.display_name[:12]
+        pl_a_emoji = pl_a.get("emoji", "🏀")
+        pl_b_emoji = pl_b.get("emoji", "🏀")
+        p_a_name = pl_a.get("name", "Player A")
+        p_b_name = pl_b.get("name", "Player B")
 
-        name_a_disp = self.author.display_name[:14]
-        name_b_disp = self.opponent.display_name[:14]
+        # Strict 4-line mobile layout
         desc_lines = [
-            f"```",
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            f"🔵 {name_a_disp:<15}  🔴 {name_b_disp:>15}",
-            f"        {self.q_pts_a:^4}            —            {self.q_pts_b:^4}",
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            f"```",
-            f"⚡ **Quarter `{cur_idx + 1}/5`**: **{pos_title} ({cur_pos}) Duel**",
-            f"🟢 **{self.author.display_name}**: `{self.q_pts_a}/7 PTS` {q_bar_a}",
-            f"🔴 **{self.opponent.display_name}**: `{self.q_pts_b}/7 PTS` {q_bar_b}",
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            f"🏀 **Q{cur_idx + 1}/5 ({cur_pos})** • 🔵 **{name_a_disp}** `{self.q_pts_a} - {self.q_pts_b}` 🔴 **{name_b_disp}**",
+            f"⭐ {pl_a_emoji} **{p_a_name}** vs {pl_b_emoji} **{p_b_name}**",
+            f"{scheme_data.get('short_scout', '🛡️ Drop Coverage — Arc open, paint loaded')}",
+            f"{suspense_body}"
+        ]
+
+        embed = discord.Embed(
+            title=embed_title,
+            description="\n".join(desc_lines),
+            color=status_color
+        )
+        if hasattr(self.author, "display_avatar") and self.author.display_avatar:
+            embed.set_thumbnail(url=self.author.display_avatar.url)
+        embed.set_footer(text=f"Sweety Live Tactical NBA Engine • Q{cur_idx + 1} possession unfolding...")
+        return embed
+
+    def make_battle_embed(self) -> discord.Embed:
+        """Strict 4-line mobile layout possession display for 3-second readability (0 fields, 0 percentages)."""
+        if self.is_game_over and self.final_embed:
+            return self.final_embed
+
+        cur_idx = min(self.current_round, len(self.positions) - 1)
+        cur_pos = self.positions[cur_idx]
+        pl_a = self.picks_a.get(cur_pos, {})
+        pl_b = self.picks_b.get(cur_pos, {})
+        cur_scheme_key = self.round_schemes[cur_idx] if cur_idx < len(self.round_schemes) else "drop_coverage"
+        scheme_data = DEFENSIVE_SCHEMES.get(cur_scheme_key, DEFENSIVE_SCHEMES["drop_coverage"])
+
+        is_comeback_active = (self.duels_won_b >= 2 and self.duels_won_a == 0) or (self.q_pts_b - self.q_pts_a >= 4)
+        if self.is_clutch_mode:
+            status_color = discord.Color.from_rgb(220, 38, 38)
+            embed_title = f"🚨 CLUTCH TIME: {self.author.display_name} vs {self.opponent.display_name}"
+        elif is_comeback_active:
+            status_color = discord.Color.orange()
+            embed_title = f"🔥 COMEBACK RALLY: {self.author.display_name} vs {self.opponent.display_name}"
+        else:
+            status_color = discord.Color.gold() if self.duels_won_a >= self.duels_won_b else discord.Color.blue()
+            embed_title = f"⚔️ NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}"
+
+        mom_bar_a = "🔥" * max(0, self.momentum_a) or "⚪"
+        mom_bar_b = "🔥" * max(0, self.momentum_b) or "⚪"
+        name_a_disp = self.author.display_name[:12]
+        name_b_disp = self.opponent.display_name[:12]
+        pl_a_emoji = pl_a.get("emoji", "🏀")
+        pl_b_emoji = pl_b.get("emoji", "🏀")
+        p_a_name = pl_a.get("name", "Player A")
+        p_b_name = pl_b.get("name", "Player B")
+        pl_a_cost = pl_a.get("cost", 1)
+        pl_b_cost = pl_b.get("cost", 1)
+
+        # Context / Latest Outcome Line
+        if is_comeback_active:
+            context_line = "🔥 **COMEBACK MODE ACTIVATED** (Rally Bonus Active!)"
+        elif self.has_timeout_boost_a:
+            context_line = "⏱️ **COACH ATO BOOST**: High-percentage precision play active!"
+        elif self.play_streak_a >= 2:
+            context_line = f"⚠️ **Anticipation**: Defense adjusted to repeated {str(self.last_play_a).upper()}!"
+        else:
+            context_line = f"📢 {self.last_short_outcome}"
+
+        # Strict 4-line mobile layout before buttons
+        desc_lines = [
+            f"🏀 **Q{cur_idx + 1}/5 ({cur_pos})** • 🔵 **{name_a_disp}** `{self.q_pts_a} - {self.q_pts_b}` 🔴 **{name_b_disp}** • MOM: `[{mom_bar_a} | {mom_bar_b}]`",
+            f"⭐ {pl_a_emoji} **{p_a_name}** (`${pl_a_cost}`) vs {pl_b_emoji} **{p_b_name}** (`${pl_b_cost}`)",
+            f"{scheme_data.get('short_scout', '🛡️ Drop Coverage — Arc open, paint loaded')}",
+            f"{context_line}"
         ]
 
         embed = discord.Embed(
@@ -3092,122 +4081,67 @@ class InteractiveTeamBattleView(discord.ui.View):
         if hasattr(self.author, "display_avatar") and self.author.display_avatar:
             embed.set_thumbnail(url=self.author.display_avatar.url)
 
-        embed.add_field(name="🎙️ ESPN Live Play-by-Play", value=suspense_body, inline=False)
-        embed.set_footer(text="Sweety Live Tactical NBA Engine • Real-time broadcast reveal...")
-        return embed
-
-    def make_battle_embed(self) -> discord.Embed:
-        if self.is_game_over and self.final_embed:
-            return self.final_embed
-
-        cur_idx = min(self.current_round, len(self.positions) - 1)
-        cur_pos = self.positions[cur_idx]
-        pos_title = self.pos_fullnames.get(cur_pos, cur_pos)
-        pl_a = self.picks_a.get(cur_pos, {})
-        pl_b = self.picks_b.get(cur_pos, {})
-        cur_scheme_key = self.round_schemes[cur_idx] if cur_idx < len(self.round_schemes) else "drop_coverage"
-        scheme_data = DEFENSIVE_SCHEMES.get(cur_scheme_key, DEFENSIVE_SCHEMES["drop_coverage"])
-
-        if self.duels_won_a > self.duels_won_b:
-            status_text = f"🟢 **{self.author.display_name}** leads **`{self.duels_won_a} — {self.duels_won_b}`**"
-            status_color = discord.Color.gold()
-        elif self.duels_won_b > self.duels_won_a:
-            status_text = f"🔴 **{self.opponent.display_name}** leads **`{self.duels_won_b} — {self.duels_won_a}`**"
-            status_color = discord.Color.purple()
-        else:
-            status_text = f"⚖️ **Series Tied `{self.duels_won_a} — {self.duels_won_b}`**"
-            status_color = discord.Color.orange()
-
-        if self.is_clutch_mode:
-            status_color = discord.Color.from_rgb(220, 38, 38)
-
-        # Quarter Progress Bar
-        q_bar_a = "🟩" * min(7, self.q_pts_a) + "⬜" * max(0, 7 - self.q_pts_a)
-        q_bar_b = "🟥" * min(7, self.q_pts_b) + "⬜" * max(0, 7 - self.q_pts_b)
-
-        embed_title = f"🚨 CLUTCH TIME: {self.author.display_name} vs {self.opponent.display_name}" if self.is_clutch_mode else f"⚔️ LIVE NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}"
-        
-        name_a_disp = self.author.display_name[:14]
-        name_b_disp = self.opponent.display_name[:14]
-
-        desc_lines = []
-        if self.is_clutch_mode:
-            desc_lines.extend([
-                f"# 🚨🚨🚨 CLUTCH TIME: SUDDEN DEATH 🚨🚨🚨",
-                f"**Series Tied `{self.duels_won_a} — {self.duels_won_b}`! This is it. One possession. Winner takes everything.**",
-                f"💀 **{pl_a.get('name', 'Player')}** steps to the line. *(Clutch Rating: `{pl_a.get('clutch', 90)} 🔥`)*",
-                f"*The arena is dead silent. What's your call, Coach?*",
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            ])
-        else:
-            desc_lines.extend([
-                f"```",
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                f"🔵 {name_a_disp:<15}  🔴 {name_b_disp:>15}",
-                f"        {self.q_pts_a:^4}            —            {self.q_pts_b:^4}",
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                f"```",
-                f"### 🏀 Series Status: {status_text} *(Best of 5 Quarters)*",
-                f"**Quarter `{cur_idx + 1}/5`**: **{pos_title} ({cur_pos}) Duel**",
-                f"⚡ **Quarter Race (First to 7 PTS)**:\n> 🟢 **{self.author.display_name}**: `{self.q_pts_a}/7 PTS` {q_bar_a}\n> 🔴 **{self.opponent.display_name}**: `{self.q_pts_b}/7 PTS` {q_bar_b}",
-                f"🟢 **Momentum**: {format_momentum_status(self.momentum_a)}\n🔴 **Momentum**: {format_momentum_status(self.momentum_b)}",
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            ])
-
-        embed = discord.Embed(
-            title=embed_title,
-            description="\n".join(desc_lines),
-            color=status_color
-        )
-        if hasattr(self.author, "display_avatar") and self.author.display_avatar:
-            embed.set_thumbnail(url=self.author.display_avatar.url)
-
-        # Player kit info
-        favored_names = [TACTICAL_OUTCOMES[k]["name"] for k in pl_a.get("favored", []) if k in TACTICAL_OUTCOMES]
-        blocked_names = [TACTICAL_OUTCOMES[k]["name"] for k in pl_a.get("blocked", []) if k in TACTICAL_OUTCOMES]
-        fav_str = " • ".join(favored_names) if favored_names else "⭐ Balanced All-Around"
-        blk_str = f" | ⚠️ *Weakness*: {', '.join(blocked_names)}" if blocked_names else ""
-
-        mom_bar_a = "🔥" * max(0, self.momentum_a) or "⚪"
-        mom_bar_b = "🔥" * max(0, self.momentum_b) or "⚪"
-
-        p_a_name = pl_a.get('name', 'Player A')
-        p_b_name = pl_b.get('name', 'Player B')
-        rivalry_line = get_matchup_rivalry_line(p_a_name, p_b_name)
-
-        matchup_value = (
-            f"🟢 **{self.author.display_name}**: {pl_a.get('emoji', '🏀')} **{p_a_name}** (`${pl_a.get('cost', 1)}`) `[MOM: {mom_bar_a}]`\n"
-            f"> 🌟 **Archetype**: `{pl_a.get('archetype', 'Star')}`\n"
-            f"> ⭐ **Signature Moves**: {fav_str}{blk_str}\n"
-            f"🔴 **{self.opponent.display_name}**: {pl_b.get('emoji', '🏀')} **{p_b_name}** (`${pl_b.get('cost', 1)}`) `[MOM: {mom_bar_b}]`\n"
-            f"> 🛡️ **Defense Rating**: `{pl_b.get('defense', 85)} DEF` • *{pl_b.get('archetype', 'Archetype')}*"
-        )
-        if rivalry_line:
-            matchup_value += f"\n⚔️ **HISTORIC RIVALRY MATCHUP**: *{rivalry_line}*"
-        embed.add_field(name=f"⭐ Positional Matchup • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
-
-        # Visible Defensive Scout Read (Telegraph)
-        scout_value = (
-            f"🛡️ **Opponent Scheme**: **`{scheme_data['name']}`**\n"
-            f"*{scheme_data['desc']}*\n"
-            f"💡 **Scout Recommendation**: {scheme_data['scout_tip']}"
-        )
-        if self.play_streak_a >= 2:
-            scout_value += f"\n⚠️ **Defensive Anticipation**: You ran `{str(self.last_play_a).upper()}` last possession (-15% repeated play penalty)! Call a different counter."
-        if self.has_timeout_boost_a:
-            scout_value += "\n⏱️ **ATO Set-Play Boost**: +20% Precision Bonus active on your next call!"
-
-        embed.add_field(name="📋 Live Defensive Scout Read (Read & React)", value=scout_value, inline=False)
-        embed.add_field(name="📜 Latest Play Action", value=f">>> {self.last_commentary}", inline=False)
-
-        guide_text = (
-            "🎯 `3PT` (Beats Drop) • 💥 `Drive` (Beats Press) • 🧠 `PnR` (Beats Traps)\n"
-            "🔒 `Clamp` (Strips Iso) • ⚡ `Mamba Iso` (Beats Mismatches) • ⭐ = Player Signature"
-        )
-        embed.add_field(name="🎮 Choose Your Live Coach Decision Below", value=guide_text, inline=False)
-        embed.set_footer(text=f"Quarters Won: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • First to 7 PTS wins each quarter!")
+        embed.set_footer(text=f"Series: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • First to 7 PTS wins Q{cur_idx + 1}")
         embed.timestamp = discord.utils.utcnow()
         return embed
+
+    def generate_coaching_report(self) -> Tuple[str, str]:
+        """Generates a post-game coaching analysis report on a loss, highlighting specific tactical mistakes and a concrete adjustment."""
+        total_calls = len(self.tactics_log)
+        if total_calls == 0:
+            return "C", "• *No tactical decisions logged.*"
+            
+        counter_calls = sum(1 for t in self.tactics_log if t.get("counter"))
+        bad_calls = sum(1 for t in self.tactics_log if t.get("bad"))
+        
+        counter_rate = counter_calls / max(1, total_calls)
+        if counter_rate >= 0.70 and bad_calls == 0:
+            grade = "B+"
+        elif counter_rate >= 0.50 and bad_calls <= 1:
+            grade = "C+"
+        elif counter_rate >= 0.35:
+            grade = "C"
+        else:
+            grade = "D"
+            
+        mistakes = []
+        for t in self.tactics_log:
+            act_key = t.get("action", "")
+            act_name = TACTICAL_OUTCOMES.get(act_key, {}).get("name", act_key)
+            sch_key = t.get("scheme", "")
+            sch_name = DEFENSIVE_SCHEMES.get(sch_key, {}).get("name", sch_key)
+            
+            if t.get("bad"):
+                reason = DEFENSIVE_SCHEMES.get(sch_key, {}).get("wrong_call_reasons", {}).get(act_key, f"Challenged {sch_name}")
+                mistakes.append(f"Q{t.get('round', 0) + 1}: Called `{act_name}` into `{sch_name}` ({reason})")
+            elif t.get("streak", 1) >= 2:
+                mistakes.append(f"Q{t.get('round', 0) + 1}: Spammed `{act_name}` {t.get('streak')}x consecutively (defense jumped the route)")
+                
+            if len(mistakes) >= 2:
+                break
+                
+        if not mistakes:
+            mistakes.append("Forced contested shots against tight defense in key possessions")
+            mistakes.append("Could not find a sustained offensive rhythm against defensive rotations")
+            
+        scheme_counts = {}
+        for t in self.tactics_log:
+            sk = t.get("scheme", "")
+            scheme_counts[sk] = scheme_counts.get(sk, 0) + 1
+        most_common_scheme = max(scheme_counts, key=scheme_counts.get) if scheme_counts else "drop_coverage"
+        
+        recs = {
+            "drop_coverage": "Utilize **Step-Back 3PT** or **Pick & Roll** to exploit open perimeter space and punish sagging bigs.",
+            "perimeter_press": "Call **Power Drive** or **Mamba Iso** to blow past over-aggressive perimeter traps and attack the rim.",
+            "zone_trap": "Run **Pick & Roll** to split double-teams and dish to the open roll-man in the pocket.",
+            "isolation_lock": "Call a **Pick & Roll** screen instead of solo isolation against elite on-ball clamps.",
+            "switch_mismatch": "Attack immediately with **Mamba Iso** or **Power Drive** before the defense can recover."
+        }
+        tip = recs.get(most_common_scheme, "Read the defensive scout look carefully before selecting your play call.")
+        
+        mistake_lines = "\n".join([f"• 🛑 **Mistake**: {m}" for m in mistakes[:2]])
+        report_text = f"{mistake_lines}\n• 💡 **Key Adjustment**: {tip}"
+        return grade, report_text
 
     async def _process_game_over(self) -> discord.Embed:
         if self.duels_won_a > self.duels_won_b:
@@ -3265,8 +4199,8 @@ class InteractiveTeamBattleView(discord.ui.View):
         if pg_won and sg_won:
             new_achievements_winner.append("splash_dynasty")
 
-        stats_w = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "daily_wins": 0, "last_daily_win_date": "", "achievements": []}
-        stats_l = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "daily_wins": 0, "last_daily_win_date": "", "achievements": []}
+        stats_w = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "daily_wins": 0, "last_daily_win_date": "", "achievements": [], "coaching_dna": {}}
+        stats_l = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "daily_wins": 0, "last_daily_win_date": "", "achievements": [], "coaching_dna": {}}
         try:
             stats_w = await db.get_team_battle_stats(winner_member.id)
             stats_l = await db.get_team_battle_stats(loser_member.id)
@@ -3296,6 +4230,8 @@ class InteractiveTeamBattleView(discord.ui.View):
 
         newly_unlocked = [ach for ach in new_achievements_winner if ach not in stats_w.get("achievements", [])]
 
+        # Update database with coaching DNA & rivalry
+        rivalry_info = None
         try:
             await db.update_team_battle_record(
                 user_id=winner_member.id,
@@ -3304,7 +4240,9 @@ class InteractiveTeamBattleView(discord.ui.View):
                 duels_won=winner_duels,
                 points_scored=winner_pts,
                 new_achievements=new_achievements_winner,
-                is_daily_win=is_daily_awarded
+                is_daily_win=is_daily_awarded,
+                tactics_used=self.tactics_counts if winner_is_a else None,
+                timeouts_used=self.timeouts_used_count if winner_is_a else 0
             )
             await db.update_team_battle_record(
                 user_id=loser_member.id,
@@ -3313,10 +4251,15 @@ class InteractiveTeamBattleView(discord.ui.View):
                 duels_won=loser_duels,
                 points_scored=loser_pts,
                 new_achievements=new_achievements_loser,
-                is_daily_win=False
+                is_daily_win=False,
+                tactics_used=self.tactics_counts if not winner_is_a else None,
+                timeouts_used=self.timeouts_used_count if not winner_is_a else 0
             )
             updated_stats_a = await db.get_team_battle_stats(self.author.id)
             updated_stats_b = await db.get_team_battle_stats(self.opponent.id)
+
+            await db.update_nba_rivalry(winner_member.id, loser_member.id, is_tie=False)
+            rivalry_info = await db.get_nba_rivalry(self.author.id, self.opponent.id)
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] Error updating records: {e}")
             updated_stats_a = stats_w if winner_is_a else stats_l
@@ -3335,15 +4278,10 @@ class InteractiveTeamBattleView(discord.ui.View):
         tier_b = self.eval_b.get("tier", "Starting 5").split("•")[0].strip()
 
         embed = discord.Embed(
-            title="🏆 FINAL BUZZER • ESPN BROADCAST RECAP",
+            title="🏆 FINAL BUZZER • NBA DUEL RECAP",
             description=(
                 f"# 👑 `{winner_name}` WINS THE SERIES!\n\n"
-                f"```\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🔵 {winner_name}'s Squad  {final_score_w} — {final_score_l}  🔴 {loser_name}'s Squad\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"```\n"
-                f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Series Quarters: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
+                f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Series: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
                 f"• 🟢 **{self.author.display_name} ({self.eval_a.get('ovr', 90)} OVR)**: {tier_a} • `Record: {updated_stats_a.get('wins', 0)}W-{updated_stats_a.get('losses', 0)}L ({streak_a_fmt})`\n"
                 f"• 🔴 **{self.opponent.display_name} ({self.eval_b.get('ovr', 90)} OVR)**: {tier_b} • `Record: {updated_stats_b.get('wins', 0)}W-{updated_stats_b.get('losses', 0)}L ({streak_b_fmt})`\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -3353,29 +4291,18 @@ class InteractiveTeamBattleView(discord.ui.View):
         if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
             embed.set_thumbnail(url=winner_member.display_avatar.url)
 
-        # Quarter-by-Quarter Recap
-        box_lines = []
+        # Compact Quarter-by-Quarter Box Score Grid
+        q_grid_items = []
         for idx, r in enumerate(self.round_history):
             pos = r.get("pos", "??")
-            p_a_obj = r.get("pl_a", {})
-            p_b_obj = r.get("pl_b", {})
-            p_a = p_a_obj.get("name", "Player A") if isinstance(p_a_obj, dict) else str(p_a_obj)
-            p_b = p_b_obj.get("name", "Player B") if isinstance(p_b_obj, dict) else str(p_b_obj)
             pts_a = r.get("pts_a", 0)
             pts_b = r.get("pts_b", 0)
             a_won = r.get("a_won", False)
+            mark = "✅" if a_won else "❌"
+            q_grid_items.append(f"**Q{idx + 1} ({pos})** {mark} `{pts_a}-{pts_b}`")
             
-            if a_won:
-                winner_q_tag = f"✅ {self.author.display_name}"
-            else:
-                winner_q_tag = f"🔴 {self.opponent.display_name}"
-                
-            box_lines.append(f"**Q{idx + 1} {pos} Duel** ({p_a} vs {p_b}) ➔ {winner_q_tag} `({pts_a} - {pts_b})`")
-
-        if len(self.round_history) < 5 and (self.duels_won_a >= 3 or self.duels_won_b >= 3):
-            box_lines.append(f"**Q5** ➔ *Series Clinched in {len(self.round_history)} Quarters*")
-
-        embed.add_field(name="📊 Quarter-by-Quarter ESPN Box Score", value="\n".join(box_lines) if box_lines else "*No duels recorded*", inline=False)
+        q_grid_str = " • ".join(q_grid_items) if q_grid_items else "*No duels recorded*"
+        embed.add_field(name="📊 Quarter Box Score Grid", value=q_grid_str, inline=False)
 
         winning_picks = self.picks_a if winner_is_a else self.picks_b
         winning_user_id = winner_member.id
@@ -3424,12 +4351,47 @@ class InteractiveTeamBattleView(discord.ui.View):
         mvp_blk = random.randint(1, 4)
         mvp_quote = get_nba_player_mvp_quote(p_name)
 
+        # 2-Line MVP Trophy
         mvp_value = (
-            f"{p_emoji} **{p_name}** ({p_team}) — *{p_arch}*\n"
-            f"📊 **Final Statline**: **`{mvp_pts} PTS`** • **`{mvp_reb} REB`** • **`{mvp_ast} AST`** • **`{mvp_blk} BLK`**\n"
+            f"{p_emoji} **{p_name}** ({p_team}) — *{mvp_pts} PTS • {mvp_reb} REB • {mvp_ast} AST • {mvp_blk} BLK*\n"
             f"💬 *\"{mvp_quote}\"*"
         )
-        embed.add_field(name="🎖️ Player of the Match (MVP) Trophy", value=mvp_value, inline=False)
+        embed.add_field(name="🎖️ Player of the Match (MVP)", value=mvp_value, inline=False)
+
+        # Post-Game Coaching Report on Loss
+        if not winner_is_a and not getattr(self.author, "bot", False):
+            grade, rep_text = self.generate_coaching_report()
+            embed.add_field(
+                name=f"📋 GM Coaching Report • Grade: `{grade}`",
+                value=rep_text,
+                inline=False
+            )
+
+        # Head-to-Head Rivalry Field
+        if rivalry_info and (rivalry_info.get("wins_a", 0) + rivalry_info.get("wins_b", 0) + rivalry_info.get("ties", 0)) >= 3:
+            total_m = rivalry_info.get("wins_a", 0) + rivalry_info.get("wins_b", 0) + rivalry_info.get("ties", 0)
+            wa = rivalry_info.get("wins_a", 0)
+            wb = rivalry_info.get("wins_b", 0)
+            last_5 = rivalry_info.get("last_5", [])
+            last_5_icons = " ".join(["🟢" if x == "A" else "🔴" for x in last_5[-5:]]) if last_5 else "⚪"
+            
+            streak_warning = ""
+            if len(last_5) >= 3 and all(x == ("A" if not winner_is_a else "B") for x in last_5[-3:]):
+                streak_warning = f"\n⚠️ **Losing Streak**: *{loser_name} has dropped {min(5, len([x for x in reversed(last_5) if x == ('A' if not winner_is_a else 'B')]))} straight duels to {winner_name}!*"
+                
+            embed.add_field(
+                name=f"⚔️ Rivalry Series ({total_m} Matchups)",
+                value=f"• **Series Record**: **{self.author.display_name}** `{wa} — {wb}` **{self.opponent.display_name}**\n• **Last 5 Form**: {last_5_icons}{streak_warning}",
+                inline=False
+            )
+
+        # Sweety AI Post-Game Trash Talk
+        if self.is_sweety_ai:
+            if not winner_is_a:
+                sweety_end_talk = get_sweety_trash_talk("sweety_wins")
+            else:
+                sweety_end_talk = get_sweety_trash_talk("sweety_loses")
+            embed.add_field(name="🤖 Sweety AI Post-Game Press", value=sweety_end_talk, inline=False)
 
         if promoted_rank:
             embed.add_field(
@@ -3461,20 +4423,19 @@ class InteractiveTeamBattleView(discord.ui.View):
         try:
             chan = getattr(self, "channel", None) or (self.message.channel if self.message else None)
             if chan and hasattr(chan, "send"):
+                ticker_desc = (
+                    f"👑 **`{winner_name}`** (`{winner_pts} PTS`) defeats **`{loser_name}`** (`{loser_pts} PTS`) in **{len(self.round_history)} Quarters**!\n\n"
+                    f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Series: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
+                    f"• 👑 **Champion**: **{winner_name}** (`{winner_eval.get('ovr', 90)} OVR`) • `Record: {updated_stats_w.get('wins', 0)}W-{updated_stats_w.get('losses', 0)}L` • {updated_rank_w['title']}\n"
+                    f"• 📊 **Box Score**: {q_grid_str}\n"
+                    f"• 🎖️ **Series MVP**: {p_emoji} **{p_name}** (`{mvp_pts} PTS` • `{mvp_reb} REB` • `{mvp_ast} AST` • `{mvp_blk} BLK`)"
+                )
+                if rivalry_info and (rivalry_info.get("wins_a", 0) + rivalry_info.get("wins_b", 0) + rivalry_info.get("ties", 0)) >= 3:
+                    ticker_desc += f"\n• ⚔️ **Rivalry Series**: `{self.author.display_name} ({rivalry_info.get('wins_a', 0)}) — {self.opponent.display_name} ({rivalry_info.get('wins_b', 0)})`"
+
                 ticker_embed = discord.Embed(
-                    title="📢 🏀 BREAKING: NBA FINALS DUEL FINAL SCORE",
-                    description=(
-                        f"👑 **`{winner_name}`** (`{winner_pts} PTS`) defeats **`{loser_name}`** (`{loser_pts} PTS`) in **{len(self.round_history)} Quarters**!\n\n"
-                        f"```\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"🔵 {winner_name[:15]:<15}  {final_score_w} — {final_score_l}  🔴 {loser_name[:15]:>15}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"```\n"
-                        f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Series Quarters: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
-                        f"• 👑 **Champion**: **{winner_name}** (`{winner_eval.get('ovr', 90)} OVR`) • `Record: {updated_stats_w.get('wins', 0)}W-{updated_stats_w.get('losses', 0)}L` • {updated_rank_w['title']}\n"
-                        f"• 🎖️ **Series MVP**: {p_emoji} **{p_name}** (`{mvp_pts} PTS` • `{mvp_reb} REB` • `{mvp_ast} AST` • `{mvp_blk} BLK`)\n"
-                        f"💬 *\"{mvp_quote}\"*"
-                    ),
+                    title="📢 🏀 BREAKING: NBA DUEL FINAL SCORE",
+                    description=ticker_desc,
                     color=discord.Color.gold()
                 )
                 if promoted_rank:
@@ -3531,12 +4492,18 @@ class InteractiveTeamBattleView(discord.ui.View):
             pl_b = self.picks_b.get(cur_pos, {})
             cur_scheme_key = self.round_schemes[cur_idx] if cur_idx < len(self.round_schemes) else "drop_coverage"
 
+            # Track coaching DNA
+            self.tactics_counts[action_key] = self.tactics_counts.get(action_key, 0) + 1
+
             # Update play streak
             if self.last_play_a == action_key:
                 self.play_streak_a += 1
             else:
                 self.last_play_a = action_key
                 self.play_streak_a = 1
+
+            # Check Comeback Mode
+            is_comeback_active = (self.duels_won_b >= 2 and self.duels_won_a == 0) or (self.q_pts_b - self.q_pts_a >= 4)
 
             # 1. Resolve Challenger Attack Possession
             res_a = resolve_possession(
@@ -3548,14 +4515,26 @@ class InteractiveTeamBattleView(discord.ui.View):
                 scheme_key=cur_scheme_key,
                 play_streak=self.play_streak_a,
                 has_timeout_boost=self.has_timeout_boost_a,
-                is_clutch=self.is_clutch_mode
+                is_clutch=self.is_clutch_mode,
+                is_comeback=is_comeback_active
             )
             self.has_timeout_boost_a = False
+
+            # Log tactical call
+            self.tactics_log.append({
+                "round": cur_idx,
+                "action": action_key,
+                "scheme": cur_scheme_key,
+                "success": res_a["success"],
+                "counter": res_a["tactical_counter"],
+                "bad": res_a["bad_call"],
+                "streak": self.play_streak_a
+            })
 
             # 2. Dramatic Suspense Reveal Step 1: Initial Buildup (1.2s delay)
             act_name = TACTICAL_OUTCOMES.get(action_key, {}).get("name", "Offensive Play")
             suspense_text_1 = (
-                f"🎯 **You Called**: `{act_name}`\n\n"
+                f"🎯 **Called `{act_name}`**\n"
                 f"> ⏳ {res_a['buildup_1']}"
             )
             temp_embed_1 = self.make_suspense_embed(suspense_text_1)
@@ -3568,7 +4547,7 @@ class InteractiveTeamBattleView(discord.ui.View):
 
             # 3. Dramatic Suspense Reveal Step 2: Contest (1.2s delay)
             suspense_text_2 = (
-                f"🎯 **You Called**: `{act_name}`\n\n"
+                f"🎯 **Called `{act_name}`**\n"
                 f"> ⏳ {res_a['buildup_1']}\n"
                 f"> ⏳ {res_a['buildup_2']}"
             )
@@ -3616,7 +4595,8 @@ class InteractiveTeamBattleView(discord.ui.View):
                     scheme_key=opp_def_scheme,
                     play_streak=1,
                     has_timeout_boost=False,
-                    is_clutch=self.is_clutch_mode
+                    is_clutch=self.is_clutch_mode,
+                    is_comeback=False
                 )
                 self.q_pts_b += res_b["pts"]
                 self.total_pts_b += res_b["pts"]
@@ -3632,6 +4612,18 @@ class InteractiveTeamBattleView(discord.ui.View):
                     self.momentum_b = min(3, self.momentum_b + 1)
                 else:
                     self.momentum_b = max(0, self.momentum_b - 1)
+
+            # Sweety AI situational trash talk reaction
+            sweety_talk_line = ""
+            if self.is_sweety_ai:
+                if res_b["success"] and res_b["pts"] > 0:
+                    sweety_talk_line = f"\n{get_sweety_trash_talk('sweety_score')}"
+                elif not res_a["success"]:
+                    sweety_talk_line = f"\n{get_sweety_trash_talk('sweety_stop')}"
+                elif res_a["success"] and is_comeback_active:
+                    sweety_talk_line = f"\n{get_sweety_trash_talk('player_comeback')}"
+                elif res_a["success"]:
+                    sweety_talk_line = f"\n{get_sweety_trash_talk('player_score')}"
 
             # Check if Quarter is won (First to 7 PTS)
             quarter_concluded = (self.q_pts_a >= self.target_q_pts) or (self.q_pts_b >= self.target_q_pts)
@@ -3679,28 +4671,23 @@ class InteractiveTeamBattleView(discord.ui.View):
                         next_pa_name = next_pa.get('name', 'Player A')
                         next_pb_name = next_pb.get('name', 'Player B')
                         riv_line = get_matchup_rivalry_line(next_pa_name, next_pb_name)
-                        riv_extra = f"\n⚔️ **HISTORIC RIVALRY ON DECK**: *{riv_line}*" if riv_line else f"\n👀 **Upcoming Matchup**: {next_pa.get('emoji', '🏀')} **{next_pa_name}** vs {next_pb.get('emoji', '🏀')} **{next_pb_name}**!"
+                        riv_extra = f" • *{riv_line}*" if riv_line else ""
 
-                        self.last_commentary = (
-                            f"🏁 **QUARTER {cur_idx + 1} ({pos_title}) CLINCHED BY {winner_q_name}!** *(Final: {self.round_history[-1]['pts_a']} — {self.round_history[-1]['pts_b']})*\n"
-                            f"• 🟢 **{self.author.display_name}**: {res_a['commentary']}\n"
-                            f"• 🔴 **{self.opponent.display_name}**: {res_b['commentary'] if res_b.get('commentary') else 'Turnover / Stop'}\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"📢 **QUARTER BREAK PREVIEW ➔ Q{next_idx + 1} ({next_pos_title})**: {riv_extra}"
+                        self.last_short_outcome = (
+                            f"🏁 **Q{cur_idx + 1} ({pos_title}) won by {winner_q_name}!** *(Final: {self.round_history[-1]['pts_a']}-{self.round_history[-1]['pts_b']})*\n"
+                            f"👀 **Next Up ➔ Q{next_idx + 1} ({next_pos_title})**: {next_pa.get('emoji', '🏀')} **{next_pa_name}** vs {next_pb.get('emoji', '🏀')} **{next_pb_name}**{riv_extra}{sweety_talk_line}"
                         )
                     else:
-                        self.last_commentary = (
-                            f"🏁 **QUARTER {cur_idx + 1} ({pos_title}) CLINCHED BY {winner_q_name}!** *(Final: {self.round_history[-1]['pts_a']} — {self.round_history[-1]['pts_b']})*\n"
-                            f"• 🟢 **{self.author.display_name}**: {res_a['commentary']}\n"
-                            f"• 🔴 **{self.opponent.display_name}**: {res_b['commentary'] if res_b.get('commentary') else 'Turnover / Stop'}"
+                        self.last_short_outcome = (
+                            f"🏁 **Q{cur_idx + 1} ({pos_title}) won by {winner_q_name}!** *(Final: {self.round_history[-1]['pts_a']}-{self.round_history[-1]['pts_b']})*{sweety_talk_line}"
                         )
 
                     self._build_controls()
                     embed = self.make_battle_embed()
             else:
                 # Quarter continues
-                opp_cmt = f"\n• 🔴 **{self.opponent.display_name}**: {res_b['commentary']}" if res_b.get("commentary") else ""
-                self.last_commentary = f"{res_a['read_note']}\n• 🟢 **{self.author.display_name}**: {res_a['commentary']}{opp_cmt}"
+                opp_cmt = f" • 🔴 {self.opponent.display_name}: {res_b['commentary']}" if res_b.get("commentary") else ""
+                self.last_short_outcome = f"{res_a['commentary']}{opp_cmt}{sweety_talk_line}"
                 self._build_controls()
                 embed = self.make_battle_embed()
 
@@ -3734,13 +4721,25 @@ class InteractiveTeamBattleView(discord.ui.View):
                 while self.q_pts_a < self.target_q_pts and self.q_pts_b < self.target_q_pts:
                     choice_a = random.choice(pl_a.get("favored", tactics_list))
                     choice_b = random.choice(pl_b.get("favored", tactics_list))
+                    self.tactics_counts[choice_a] = self.tactics_counts.get(choice_a, 0) + 1
 
-                    res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b, cur_scheme_key, 1, self.has_timeout_boost_a, is_clutch=self.is_clutch_mode)
+                    is_comeback_active = (self.duels_won_b >= 2 and self.duels_won_a == 0) or (self.q_pts_b - self.q_pts_a >= 4)
+                    res_a = resolve_possession(choice_a, pl_a, pl_b, self.momentum_a, self.momentum_b, cur_scheme_key, 1, self.has_timeout_boost_a, is_clutch=self.is_clutch_mode, is_comeback=is_comeback_active)
                     self.has_timeout_boost_a = False
                     self.q_pts_a += res_a["pts"]
                     self.total_pts_a += res_a["pts"]
 
-                    res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False, is_clutch=self.is_clutch_mode)
+                    self.tactics_log.append({
+                        "round": self.current_round,
+                        "action": choice_a,
+                        "scheme": cur_scheme_key,
+                        "success": res_a["success"],
+                        "counter": res_a["tactical_counter"],
+                        "bad": res_a["bad_call"],
+                        "streak": 1
+                    })
+
+                    res_b = resolve_possession(choice_b, pl_b, pl_a, self.momentum_b, self.momentum_a, "drop_coverage", 1, False, is_clutch=self.is_clutch_mode, is_comeback=False)
                     self.q_pts_b += res_b["pts"]
                     self.total_pts_b += res_b["pts"]
 
@@ -3876,12 +4875,19 @@ class TeamBattleChallengeView(discord.ui.View):
         self.message = message
 
     def make_challenge_embed(self) -> discord.Embed:
+        picks_a = extract_picks_from_row(self.row_a)
+        picks_b = extract_picks_from_row(self.row_b)
+        syn_a = classify_team_synergy(picks_a)
+        syn_b = classify_team_synergy(picks_b)
+        matchup_line = get_matchup_synergy_analysis(picks_a, picks_b, self.author.display_name, self.opponent.display_name)
+
         embed = discord.Embed(
             title="⚔️ NBA DREAM TEAM BATTLE CHALLENGE",
             description=(
                 f"🏀 {self.opponent.mention}, **{self.author.display_name}** has challenged your $15 Starting 5 to a head-to-head NBA battle!\n\n"
-                f"• 🟢 **{self.author.display_name}'s Squad**: `{self.eval_a.get('ovr', 90)} OVR` • {self.eval_a.get('tier', 'Starting 5').split('•')[0].strip()} (`${self.eval_a.get('total_cost', 15)}/$15`)\n"
-                f"• 🔴 **{self.opponent.display_name}'s Squad**: `{self.eval_b.get('ovr', 90)} OVR` • {self.eval_b.get('tier', 'Starting 5').split('•')[0].strip()} (`${self.eval_b.get('total_cost', 15)}/$15`)\n\n"
+                f"• 🟢 **{self.author.display_name}'s Squad**: `{self.eval_a.get('ovr', 90)} OVR` • {syn_a['icon']} **{syn_a['name']}** (`${self.eval_a.get('total_cost', 15)}/$15`)\n"
+                f"• 🔴 **{self.opponent.display_name}'s Squad**: `{self.eval_b.get('ovr', 90)} OVR` • {syn_b['icon']} **{syn_b['name']}** (`${self.eval_b.get('total_cost', 15)}/$15`)\n"
+                f"• {matchup_line}\n\n"
                 f"🏆 **Format**: 5 Positional Quarters (PG ➔ SG ➔ SF ➔ PF ➔ C) • **First to 7 PTS Wins Each Quarter!**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"📋 **Basketball Tactical Rules & Counter Reads**:\n"
@@ -4769,6 +5775,25 @@ async def build_gm_stats_embed(user: Union[discord.Member, discord.User], row: O
             f"• **Total Points Scored**: `{stats.get('total_points', 0):,} PTS`\n"
             f"• **Positional Duels Won**: `{stats.get('total_duels_won', 0)} Quarters`\n"
             f"• **Daily Boss Wins**: `🏅 {stats.get('daily_wins', 0)} Daily Ws` *(Last Win: {stats.get('last_daily_win_date') or 'Never'})*"
+        ),
+        inline=False
+    )
+
+    # Coaching DNA & Tactical Playstyle
+    raw_dna = stats.get("coaching_dna", {})
+    if isinstance(raw_dna, str):
+        try:
+            raw_dna = json.loads(raw_dna)
+        except Exception:
+            raw_dna = {}
+    dna_profile = get_coaching_dna_profile(raw_dna if isinstance(raw_dna, dict) else {})
+    embed.add_field(
+        name=f"🧠 Coaching DNA • {dna_profile['style_title']}",
+        value=(
+            f"• **Philosophy**: **{dna_profile['style_title']}** (*{dna_profile['style_desc']}*)\n"
+            f"• **Tactical Tendencies**: 🎯 `3PT {dna_profile['pct_3']}%` • 💥 `Drive {dna_profile['pct_drv']}%` • 🧠 `PnR {dna_profile['pct_pnr']}%` • 🔒 `Clamp {dna_profile['pct_def']}%` • ⚡ `Iso {dna_profile['pct_iso']}%`\n"
+            f"• **Opponent Scout Read**: *{dna_profile['tendency']}*\n"
+            f"• **Coach Timeouts Called**: `{dna_profile['timeouts']} ATO Sets` (`{dna_profile['total_calls']} Total Plays`)"
         ),
         inline=False
     )
