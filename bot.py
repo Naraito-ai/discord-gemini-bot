@@ -3715,6 +3715,83 @@ def resolve_possession(
     }
 
 
+def format_possession_outcome_2lines(
+    res_a: Dict[str, Any],
+    pl_a: Dict[str, Any],
+    action_key: str,
+    res_b: Dict[str, Any],
+    pl_b: Dict[str, Any],
+    opp_name: str,
+    scheme_key: str = "drop_coverage"
+) -> str:
+    """Formats live possession result strictly into max 2 lines:
+    Line 1: Offensive result (emoji + what happened + points in under 10 words).
+    Line 2: Defensive result (emoji + stopped or scored + one word reason).
+    No italics, no parentheses, no 'Locked down by', no Sweety trash talk.
+    """
+    p_name_a = pl_a.get("name", "Player A")
+    opp_disp = opp_name[:12]
+    pts_a = res_a.get("pts", 0)
+    success_a = res_a.get("success", False)
+
+    # Line 1: Offensive result (<10 words)
+    if action_key == "three":
+        if success_a:
+            line_1 = f"✅ {p_name_a} drains step-back 3-pointer! +{pts_a} PTS"
+        else:
+            line_1 = f"❌ {p_name_a} contested 3-pointer clangs off iron. +0 PTS"
+    elif action_key == "drive":
+        if success_a:
+            if pts_a >= 3:
+                line_1 = f"✅ {p_name_a} AND-1 slam through contact! +{pts_a} PTS"
+            else:
+                line_1 = f"✅ {p_name_a} powers to rim for layup! +{pts_a} PTS"
+        else:
+            line_1 = f"❌ {p_name_a} drive denied in paint. +0 PTS"
+    elif action_key == "pnr":
+        if success_a:
+            line_1 = f"✅ {p_name_a} reads pick-and-roll screen for jumper! +{pts_a} PTS"
+        else:
+            line_1 = f"❌ {p_name_a} pick-and-roll pass broken up. +0 PTS"
+    elif action_key == "defense":
+        if success_a:
+            line_1 = f"✅ {p_name_a} clamp forces turnover fastbreak score! +{pts_a} PTS"
+        else:
+            line_1 = f"❌ {p_name_a} defensive gamble fails on perimeter. +0 PTS"
+    elif action_key == "iso":
+        if success_a:
+            line_1 = f"✅ {p_name_a} shakes defender with mamba pull-up! +{pts_a} PTS"
+        else:
+            line_1 = f"❌ {p_name_a} isolation locked down at buzzer. +0 PTS"
+    else:
+        act_name = TACTICAL_OUTCOMES.get(action_key, {}).get("name", "Play")
+        if success_a:
+            line_1 = f"✅ {p_name_a} executes {act_name} successfully! +{pts_a} PTS"
+        else:
+            line_1 = f"❌ {p_name_a} stopped on {act_name}. +0 PTS"
+
+    # Line 2: Defensive result (<10 words)
+    pts_b = res_b.get("pts", 0)
+    success_b = res_b.get("success", False)
+    if success_b and pts_b > 0:
+        if pts_b >= 3:
+            line_2 = f"✅ {opp_disp} scores from deep. +{pts_b} PTS"
+        else:
+            line_2 = f"✅ {opp_disp} scores in paint. +{pts_b} PTS"
+    else:
+        scheme_reasons = {
+            "drop_coverage": "Contested",
+            "perimeter_press": "Trapped",
+            "zone_trap": "Turnover",
+            "isolation_lock": "Clamped",
+            "switch_mismatch": "Recovered"
+        }
+        reason = scheme_reasons.get(scheme_key, "Contested")
+        line_2 = f"❌ {opp_disp} stopped. Reason: {reason}."
+
+    return f"{line_1}\n{line_2}"
+
+
 class InteractiveTeamBattleView(discord.ui.View):
     """Live turn-based interactive tactical card battle view with Read & React scout reads, dynamic button tags, 5-line mobile display, and Coaching DNA tracking."""
     def __init__(
@@ -3904,14 +3981,16 @@ class InteractiveTeamBattleView(discord.ui.View):
 
     async def handle_timeout_action(self, interaction: discord.Interaction):
         try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
             if interaction.channel:
                 self.channel = interaction.channel
             if interaction.user.id not in [self.author.id, self.opponent.id]:
-                await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
+                await interaction.followup.send("❌ This is not your game!", ephemeral=True)
                 return
 
             if self.timeouts_left_a <= 0:
-                await interaction.response.send_message("❌ You have already used your 1 Coach Timeout for this game!", ephemeral=True)
+                await interaction.followup.send("❌ You have already used your 1 Coach Timeout for this game!", ephemeral=True)
                 return
 
             self.timeouts_left_a -= 1
@@ -3919,25 +3998,28 @@ class InteractiveTeamBattleView(discord.ui.View):
             self.has_timeout_boost_a = True
             prev_opp_mom = self.momentum_b
             self.momentum_b = 0
-            self.last_short_outcome = f"⏱️ Timeout called! Iced momentum ({prev_opp_mom} 🔥 ➔ 0 ⚪) • ATO Set-Play Active!"
+            self.last_short_outcome = (
+                f"⏱️ Coach Timeout called! Iced momentum ({prev_opp_mom} 🔥 ➔ 0 ⚪)\n"
+                f"📋 ATO Set-Play Active: High percentage boost next play!"
+            )
             self._build_controls()
             embed = self.make_battle_embed()
-            if not interaction.response.is_done():
-                await interaction.response.edit_message(embed=embed, view=self)
-            else:
-                await interaction.edit_original_response(embed=embed, view=self)
+            await interaction.edit_original_response(embed=embed, view=self)
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] handle_timeout_action error: {e}", exc_info=True)
             try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(f"⚠️ Timeout error: `{e}`", ephemeral=True)
+                await interaction.followup.send(f"⚠️ Timeout error: `{e}`", ephemeral=True)
             except Exception:
                 pass
 
     async def rematch_callback(self, interaction: discord.Interaction):
         try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+            if interaction.channel:
+                self.channel = interaction.channel
             if interaction.user.id not in [self.author.id, self.opponent.id]:
-                await interaction.response.send_message("❌ Only the match participants can trigger a rematch!", ephemeral=True)
+                await interaction.followup.send("❌ Only the match participants can trigger a rematch!", ephemeral=True)
                 return
 
             row_a = await db.get_dream_team(self.author.id) or self.row_a
@@ -3953,23 +4035,15 @@ class InteractiveTeamBattleView(discord.ui.View):
             fresh_view = InteractiveTeamBattleView(self.author, self.opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
             embed = fresh_view.make_battle_embed()
             msg_content = f"🔄 **Rematch Started by {interaction.user.mention}! Choose your play for Quarter 1:**"
-            if not interaction.response.is_done():
-                await interaction.response.edit_message(
-                    content=msg_content,
-                    embed=embed,
-                    view=fresh_view
-                )
-            else:
-                await interaction.edit_original_response(
-                    content=msg_content,
-                    embed=embed,
-                    view=fresh_view
-                )
+            await interaction.edit_original_response(
+                content=msg_content,
+                embed=embed,
+                view=fresh_view
+            )
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] rematch_callback error: {e}", exc_info=True)
             try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(f"⚠️ Rematch error: `{e}`", ephemeral=True)
+                await interaction.followup.send(f"⚠️ Rematch error: `{e}`", ephemeral=True)
             except Exception:
                 pass
 
@@ -3996,6 +4070,8 @@ class InteractiveTeamBattleView(discord.ui.View):
         status_color = discord.Color.from_rgb(220, 38, 38) if self.is_clutch_mode else discord.Color.blue()
         embed_title = f"🚨 CLUTCH TIME: {self.author.display_name} vs {self.opponent.display_name}" if self.is_clutch_mode else f"⚔️ NBA DUEL: {self.author.display_name} vs {self.opponent.display_name}"
 
+        mom_bar_a = "🔥" * max(0, self.momentum_a) or "⚪"
+        mom_bar_b = "🔥" * max(0, self.momentum_b) or "⚪"
         name_a_disp = self.author.display_name[:12]
         name_b_disp = self.opponent.display_name[:12]
         pl_a_emoji = pl_a.get("emoji", "🏀")
@@ -4003,9 +4079,9 @@ class InteractiveTeamBattleView(discord.ui.View):
         p_a_name = pl_a.get("name", "Player A")
         p_b_name = pl_b.get("name", "Player B")
 
-        # Strict 4-line mobile layout
+        # Strict 4-line mobile layout with inline momentum
         desc_lines = [
-            f"🏀 **Q{cur_idx + 1}/5 ({cur_pos})** • 🔵 **{name_a_disp}** `{self.q_pts_a} - {self.q_pts_b}` 🔴 **{name_b_disp}**",
+            f"🏀 **Q{cur_idx + 1}/5 ({cur_pos})** • 🔵 **{name_a_disp}** `{self.q_pts_a} - {self.q_pts_b}` 🔴 **{name_b_disp}** • {mom_bar_a} vs {mom_bar_b}",
             f"⭐ {pl_a_emoji} **{p_a_name}** vs {pl_b_emoji} **{p_b_name}**",
             f"{scheme_data.get('short_scout', '🛡️ Drop Coverage — Arc open, paint loaded')}",
             f"{suspense_body}"
@@ -4018,7 +4094,6 @@ class InteractiveTeamBattleView(discord.ui.View):
         )
         if hasattr(self.author, "display_avatar") and self.author.display_avatar:
             embed.set_thumbnail(url=self.author.display_avatar.url)
-        embed.set_footer(text=f"Sweety Live Tactical NBA Engine • Q{cur_idx + 1} possession unfolding...")
         return embed
 
     def make_battle_embed(self) -> discord.Embed:
@@ -4063,11 +4138,11 @@ class InteractiveTeamBattleView(discord.ui.View):
         elif self.play_streak_a >= 2:
             context_line = f"⚠️ **Anticipation**: Defense adjusted to repeated {str(self.last_play_a).upper()}!"
         else:
-            context_line = f"📢 {self.last_short_outcome}"
+            context_line = f"{self.last_short_outcome}"
 
         # Strict 4-line mobile layout before buttons
         desc_lines = [
-            f"🏀 **Q{cur_idx + 1}/5 ({cur_pos})** • 🔵 **{name_a_disp}** `{self.q_pts_a} - {self.q_pts_b}` 🔴 **{name_b_disp}** • MOM: `[{mom_bar_a} | {mom_bar_b}]`",
+            f"🏀 **Q{cur_idx + 1}/5 ({cur_pos})** • 🔵 **{name_a_disp}** `{self.q_pts_a} - {self.q_pts_b}` 🔴 **{name_b_disp}** • {mom_bar_a} vs {mom_bar_b}",
             f"⭐ {pl_a_emoji} **{p_a_name}** (`${pl_a_cost}`) vs {pl_b_emoji} **{p_b_name}** (`${pl_b_cost}`)",
             f"{scheme_data.get('short_scout', '🛡️ Drop Coverage — Arc open, paint loaded')}",
             f"{context_line}"
@@ -4081,7 +4156,6 @@ class InteractiveTeamBattleView(discord.ui.View):
         if hasattr(self.author, "display_avatar") and self.author.display_avatar:
             embed.set_thumbnail(url=self.author.display_avatar.url)
 
-        embed.set_footer(text=f"Series: {self.author.display_name} ({self.duels_won_a}) - {self.opponent.display_name} ({self.duels_won_b}) • First to 7 PTS wins Q{cur_idx + 1}")
         embed.timestamp = discord.utils.utcnow()
         return embed
 
@@ -4463,27 +4537,25 @@ class InteractiveTeamBattleView(discord.ui.View):
 
     async def handle_tactical_action(self, interaction: discord.Interaction, action_key: str):
         try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+
             if interaction.channel:
                 self.channel = interaction.channel
             if interaction.user.id not in [self.author.id, self.opponent.id]:
-                await interaction.response.send_message("❌ This is not your game! Start your own with `/teambattle @user`.", ephemeral=True)
+                await interaction.followup.send("❌ This is not your game! Start your own with `/teambattle @user`.", ephemeral=True)
                 return
 
             if getattr(self, "_is_resolving", False):
-                await interaction.response.send_message("⏳ A possession is currently unfolding live on the hardwood! Wait for the whistle!", ephemeral=True)
+                await interaction.followup.send("⏳ A possession is currently unfolding live on the hardwood! Wait for the whistle!", ephemeral=True)
                 return
 
             if self.is_game_over:
                 embed = self.final_embed if self.final_embed else (await self._process_game_over() if self.current_round >= 5 else self.make_battle_embed())
-                if not interaction.response.is_done():
-                    await interaction.response.edit_message(embed=embed, view=self)
-                else:
-                    await interaction.edit_original_response(embed=embed, view=self)
+                await interaction.edit_original_response(embed=embed, view=self)
                 return
 
             self._is_resolving = True
-            if not interaction.response.is_done():
-                await interaction.response.defer()
 
             cur_idx = min(self.current_round, len(self.positions) - 1)
             cur_pos = self.positions[cur_idx]
@@ -4613,17 +4685,17 @@ class InteractiveTeamBattleView(discord.ui.View):
                 else:
                     self.momentum_b = max(0, self.momentum_b - 1)
 
-            # Sweety AI situational trash talk reaction
+            # Sweety AI situational trash talk reaction (SENT VIA FOLLOWUP, NOT IN EMBED)
             sweety_talk_line = ""
             if self.is_sweety_ai:
                 if res_b["success"] and res_b["pts"] > 0:
-                    sweety_talk_line = f"\n{get_sweety_trash_talk('sweety_score')}"
+                    sweety_talk_line = get_sweety_trash_talk("sweety_score")
                 elif not res_a["success"]:
-                    sweety_talk_line = f"\n{get_sweety_trash_talk('sweety_stop')}"
+                    sweety_talk_line = get_sweety_trash_talk("sweety_stop")
                 elif res_a["success"] and is_comeback_active:
-                    sweety_talk_line = f"\n{get_sweety_trash_talk('player_comeback')}"
+                    sweety_talk_line = get_sweety_trash_talk("player_comeback")
                 elif res_a["success"]:
-                    sweety_talk_line = f"\n{get_sweety_trash_talk('player_score')}"
+                    sweety_talk_line = get_sweety_trash_talk("player_score")
 
             # Check if Quarter is won (First to 7 PTS)
             quarter_concluded = (self.q_pts_a >= self.target_q_pts) or (self.q_pts_b >= self.target_q_pts)
@@ -4670,33 +4742,45 @@ class InteractiveTeamBattleView(discord.ui.View):
                         next_pb = self.picks_b.get(next_pos, {})
                         next_pa_name = next_pa.get('name', 'Player A')
                         next_pb_name = next_pb.get('name', 'Player B')
-                        riv_line = get_matchup_rivalry_line(next_pa_name, next_pb_name)
-                        riv_extra = f" • *{riv_line}*" if riv_line else ""
 
                         self.last_short_outcome = (
-                            f"🏁 **Q{cur_idx + 1} ({pos_title}) won by {winner_q_name}!** *(Final: {self.round_history[-1]['pts_a']}-{self.round_history[-1]['pts_b']})*\n"
-                            f"👀 **Next Up ➔ Q{next_idx + 1} ({next_pos_title})**: {next_pa.get('emoji', '🏀')} **{next_pa_name}** vs {next_pb.get('emoji', '🏀')} **{next_pb_name}**{riv_extra}{sweety_talk_line}"
+                            f"🏁 Q{cur_idx + 1} ({pos_title}) won by {winner_q_name}! ({self.round_history[-1]['pts_a']}-{self.round_history[-1]['pts_b']})\n"
+                            f"👀 Next: Q{next_idx + 1} ({next_pos_title}) • {next_pa.get('emoji', '🏀')} {next_pa_name} vs {next_pb.get('emoji', '🏀')} {next_pb_name}"
                         )
                     else:
                         self.last_short_outcome = (
-                            f"🏁 **Q{cur_idx + 1} ({pos_title}) won by {winner_q_name}!** *(Final: {self.round_history[-1]['pts_a']}-{self.round_history[-1]['pts_b']})*{sweety_talk_line}"
+                            f"🏁 Q{cur_idx + 1} ({pos_title}) won by {winner_q_name}! ({self.round_history[-1]['pts_a']}-{self.round_history[-1]['pts_b']})"
                         )
 
                     self._build_controls()
                     embed = self.make_battle_embed()
             else:
-                # Quarter continues
-                opp_cmt = f" • 🔴 {self.opponent.display_name}: {res_b['commentary']}" if res_b.get("commentary") else ""
-                self.last_short_outcome = f"{res_a['commentary']}{opp_cmt}{sweety_talk_line}"
+                # Quarter continues: strictly 2 lines (Line 1 Offense, Line 2 Defense)
+                self.last_short_outcome = format_possession_outcome_2lines(
+                    res_a=res_a,
+                    pl_a=pl_a,
+                    action_key=action_key,
+                    res_b=res_b,
+                    pl_b=pl_b,
+                    opp_name=self.opponent.display_name,
+                    scheme_key=cur_scheme_key
+                )
                 self._build_controls()
                 embed = self.make_battle_embed()
 
             await interaction.edit_original_response(embed=embed, view=self)
+
+            # Send Sweety trash talk as a separate follow-up message (NOT inside the embed)
+            if self.is_sweety_ai and sweety_talk_line and not self.is_game_over:
+                try:
+                    await interaction.followup.send(sweety_talk_line)
+                except Exception as st_err:
+                    logger.debug(f"Sweety followup trash talk send error: {st_err}")
+
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] handle_tactical_action error: {e}", exc_info=True)
             try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(f"⚠️ Tactical decision error: `{e}`. You can try clicking again.", ephemeral=True)
+                await interaction.followup.send(f"⚠️ Tactical decision error: `{e}`. You can try clicking again.", ephemeral=True)
             except Exception:
                 pass
         finally:
@@ -4704,10 +4788,12 @@ class InteractiveTeamBattleView(discord.ui.View):
 
     async def handle_simulate_remainder(self, interaction: discord.Interaction):
         try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
             if interaction.channel:
                 self.channel = interaction.channel
             if interaction.user.id not in [self.author.id, self.opponent.id]:
-                await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
+                await interaction.followup.send("❌ This is not your game!", ephemeral=True)
                 return
 
             tactics_list = ["three", "drive", "pnr", "defense", "iso"]
@@ -4775,15 +4861,11 @@ class InteractiveTeamBattleView(discord.ui.View):
             self.is_game_over = True
             self._build_controls()
             embed = await self._process_game_over()
-            if not interaction.response.is_done():
-                await interaction.response.edit_message(embed=embed, view=self)
-            else:
-                await interaction.edit_original_response(embed=embed, view=self)
+            await interaction.edit_original_response(embed=embed, view=self)
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] handle_simulate_remainder error: {e}", exc_info=True)
             try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(f"⚠️ Sim error: `{e}`", ephemeral=True)
+                await interaction.followup.send(f"⚠️ Sim error: `{e}`", ephemeral=True)
             except Exception:
                 pass
 
