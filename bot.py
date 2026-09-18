@@ -1906,6 +1906,142 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
     }
 
 
+# ── Historic Head-to-Head NBA Rivalries (20 Pairs) ─────────────────────────
+
+NBA_RIVALRIES = {
+    frozenset(["Michael Jordan", "Kobe Bryant"]): "Two assassins with identical killer instincts. Only one walks out with the bucket.",
+    frozenset(["Shaquille O'Neal", "Hakeem Olajuwon"]): "The Diesel vs The Dream. Clash of titanic low-post titans!",
+    frozenset(["Stephen Curry", "Klay Thompson"]): "Splash Brothers on opposite sides of the hardwood tonight!",
+    frozenset(["LeBron James", "Kevin Durant"]): "The King vs The Slim Reaper. Pure heavyweight cinema on the wing.",
+    frozenset(["LeBron James", "Kawhi Leonard"]): "The King meets The Klaw. Every single possession is contested war.",
+    frozenset(["Tim Duncan", "Dirk Nowitzki"]): "The Big Fundamental vs The Flamingo Fadeaway. Texas legends collide!",
+    frozenset(["Magic Johnson", "Larry Bird"]): "Showtime vs Boston Pride. The rivalry that built the modern NBA!",
+    frozenset(["Stephen Curry", "Kyrie Irving"]): "Finals Rematch! Unrivaled handles vs the greatest shooter in history.",
+    frozenset(["Giannis Antetokounmpo", "Anthony Davis"]): "Greek Freak vs The Brow! Two alien rim-running monsters collide.",
+    frozenset(["Shaquille O'Neal", "Victor Wembanyama"]): "325-lb Diesel Power meets the 7'4 Modern Alien Anchor!",
+    frozenset(["Kobe Bryant", "Dwyane Wade"]): "The Black Mamba vs The Flash. Pure elite shooting guard war.",
+    frozenset(["Chris Paul", "Stephen Curry"]): "Point God chess vs Deep-Range chaos. A decade-long rivalry!",
+    frozenset(["Jimmy Butler", "LeBron James"]): "Playoff Jimmy goes toe-to-toe with King James in a grueling dogfight!",
+    frozenset(["Michael Jordan", "Klay Thompson"]): "The GOAT attacks the ultimate 3-and-D perimeter clamp!",
+    frozenset(["Magic Johnson", "Chris Paul"]): "Showtime flair vs Surgical Point God orchestration!",
+    frozenset(["Nikola Jokić", "Shaquille O'Neal"]): "Sombor Magic Touch vs Low-Post Bully Diesel Force!",
+    frozenset(["Larry Bird", "Kevin Durant"]): "Cold-blooded trash talk vs unblockable 7-foot silk shooting!",
+    frozenset(["Victor Wembanyama", "Hakeem Olajuwon"]): "8-foot wingspan Alien vs The Master of the Dream Shake!",
+    frozenset(["Derrick White", "Alex Caruso"]): "The Buffalo vs The Carushow — Ultimate Hustle War!",
+    frozenset(["Naz Reid", "Dirk Nowitzki"]): "Cult Hero Naz Reid vs The European Trailblazer!"
+}
+
+def get_matchup_rivalry_line(player_a: Optional[str], player_b: Optional[str]) -> Optional[str]:
+    """Checks if two players have a historic rivalry narrative line."""
+    if not player_a or not player_b:
+        return None
+    return NBA_RIVALRIES.get(frozenset([player_a.strip(), player_b.strip()]))
+
+
+# ── General Manager (GM) Rank Ladder & Progression ──────────────────────────
+
+GM_RANKS = [
+    {"name": "Rookie GM", "icon": "🥉", "min_wins": 0, "max_wins": 2, "next": "Starter GM", "next_wins": 3},
+    {"name": "Starter GM", "icon": "🥈", "min_wins": 3, "max_wins": 6, "next": "Role Player GM", "next_wins": 7},
+    {"name": "Role Player GM", "icon": "🥇", "min_wins": 7, "max_wins": 14, "next": "All-Star GM", "next_wins": 15},
+    {"name": "All-Star GM", "icon": "⭐", "min_wins": 15, "max_wins": 24, "next": "MVP GM", "next_wins": 25},
+    {"name": "MVP GM", "icon": "👑", "min_wins": 25, "max_wins": 49, "next": "Hall of Famer GM", "next_wins": 50},
+    {"name": "Hall of Famer GM", "icon": "🏛️", "min_wins": 50, "max_wins": 999999, "next": "MAX RANK", "next_wins": 50}
+]
+
+def get_gm_rank(wins: int) -> Dict[str, Any]:
+    """Calculates GM rank title, tier icon, visual progress bar and wins needed for promotion."""
+    for rank in GM_RANKS:
+        if rank["min_wins"] <= wins <= rank["max_wins"]:
+            if rank["next_wins"] > rank["min_wins"]:
+                span = rank["next_wins"] - rank["min_wins"]
+                progress = min(span, max(0, wins - rank["min_wins"]))
+                pct = int((progress / span) * 100)
+                filled = int((progress / span) * 8)
+                bar = "🟩" * filled + "⬜" * (8 - filled)
+            else:
+                pct = 100
+                bar = "🟩" * 8
+            return {
+                "name": rank["name"],
+                "icon": rank["icon"],
+                "title": f"{rank['icon']} {rank['name']}",
+                "next": rank["next"],
+                "next_wins": rank["next_wins"],
+                "needed": max(0, rank["next_wins"] - wins),
+                "bar": bar,
+                "pct": pct
+            }
+    return {"name": "Hall of Famer GM", "icon": "🏛️", "title": "🏛️ Hall of Famer GM", "next": "MAX", "next_wins": 50, "needed": 0, "bar": "🟩" * 8, "pct": 100}
+
+
+# ── Daily Challenge NBA Boss Presets & Generator ───────────────────────────
+
+DAILY_BOSS_PRESETS = [
+    {
+        "title": "90s Physicality & Showtime",
+        "desc": "Old-school hard-nosed defense paired with explosive transition firepower.",
+        "picks": {"PG": "Magic Johnson", "SG": "Michael Jordan", "SF": "Alex Caruso", "PF": "Naz Reid", "C": "Hakeem Olajuwon"}
+    },
+    {
+        "title": "Splash & Clamp Dynasty",
+        "desc": "Unrivaled perimeter shooting flanked by elite wing stoppers.",
+        "picks": {"PG": "Stephen Curry", "SG": "Klay Thompson", "SF": "Kawhi Leonard", "PF": "Anthony Davis", "C": "Nikola Jokić"}
+    },
+    {
+        "title": "Modern Positionless Juggernaut",
+        "desc": "Total versatility with 7-foot shot creation and lock-down point-of-attack guards.",
+        "picks": {"PG": "Jrue Holiday", "SG": "Derrick White", "SF": "Kevin Durant", "PF": "Dirk Nowitzki", "C": "Shaquille O'Neal"}
+    },
+    {
+        "title": "All-Around King's Court",
+        "desc": "LeBron James surrounded by elite rim protectors and dead-eye snipers.",
+        "picks": {"PG": "Chris Paul", "SG": "Kobe Bryant", "SF": "LeBron James", "PF": "Naz Reid", "C": "Victor Wembanyama"}
+    },
+    {
+        "title": "Twin Towers & Mamba Grit",
+        "desc": "Suffocating interior defense with unguardable isolation shotmaking.",
+        "picks": {"PG": "Kyrie Irving", "SG": "Kobe Bryant", "SF": "Jimmy Butler", "PF": "Tim Duncan", "C": "Giannis Antetokounmpo"}
+    },
+    {
+        "title": "Larry's Clutch Collective",
+        "desc": "Ultimate basketball IQ, clutch gene shotmakers, and ruthless competitive fire.",
+        "picks": {"PG": "Chris Paul", "SG": "Dwyane Wade", "SF": "Jimmy Butler", "PF": "Larry Bird", "C": "Nikola Jokić"}
+    },
+    {
+        "title": "Alien Defense & Flash Explosion",
+        "desc": "Lightning fastbreak transition combined with historic shot-blocking length.",
+        "picks": {"PG": "Stephen Curry", "SG": "Dwyane Wade", "SF": "Alex Caruso", "PF": "Tim Duncan", "C": "Victor Wembanyama"}
+    }
+]
+
+def get_daily_challenge_lineup(target_date: Optional[str] = None) -> Dict[str, Any]:
+    """Returns today's deterministic $15 Daily Challenge Boss lineup."""
+    if not target_date:
+        target_date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    
+    d_obj = datetime.datetime.strptime(target_date, "%Y-%m-%d")
+    idx = d_obj.toordinal() % len(DAILY_BOSS_PRESETS)
+    preset = DAILY_BOSS_PRESETS[idx]
+    
+    resolved_picks = {}
+    for pos, p_name in preset["picks"].items():
+        found = find_nba_player(pos, p_name)
+        if found:
+            resolved_picks[pos] = found
+        else:
+            resolved_picks[pos] = NBA_DREAM_PLAYERS[pos][0]
+            
+    eval_boss = evaluate_dream_team(resolved_picks)
+    return {
+        "date": target_date,
+        "title": preset["title"],
+        "desc": preset["desc"],
+        "picks": resolved_picks,
+        "eval": eval_boss
+    }
+
+
 # ── Live Interactive Tactical Battle Engine (Live Decision Buttons) ────────
 
 DEFENSIVE_SCHEMES: Dict[str, Dict[str, Any]] = {
@@ -2693,7 +2829,8 @@ class InteractiveTeamBattleView(discord.ui.View):
         eval_b: Dict[str, Any],
         row_a: Any = None,
         row_b: Any = None,
-        message: Optional[discord.Message] = None
+        message: Optional[discord.Message] = None,
+        is_daily_challenge: bool = False
     ):
         super().__init__(timeout=600)
         self.author = author
@@ -2705,6 +2842,8 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.row_a = row_a
         self.row_b = row_b
         self.message = message
+        self.is_daily_challenge = is_daily_challenge
+        self.channel = getattr(message, "channel", None) if message else None
         
         self.positions = ["PG", "SG", "SF", "PF", "C"]
         self.pos_fullnames = {
@@ -2834,6 +2973,8 @@ class InteractiveTeamBattleView(discord.ui.View):
 
     async def handle_timeout_action(self, interaction: discord.Interaction):
         try:
+            if interaction.channel:
+                self.channel = interaction.channel
             if interaction.user.id not in [self.author.id, self.opponent.id]:
                 await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
                 return
@@ -3030,13 +3171,19 @@ class InteractiveTeamBattleView(discord.ui.View):
         mom_bar_a = "🔥" * max(0, self.momentum_a) or "⚪"
         mom_bar_b = "🔥" * max(0, self.momentum_b) or "⚪"
 
+        p_a_name = pl_a.get('name', 'Player A')
+        p_b_name = pl_b.get('name', 'Player B')
+        rivalry_line = get_matchup_rivalry_line(p_a_name, p_b_name)
+
         matchup_value = (
-            f"🟢 **{self.author.display_name}**: {pl_a.get('emoji', '🏀')} **{pl_a.get('name', 'Player A')}** (`${pl_a.get('cost', 1)}`) `[MOM: {mom_bar_a}]`\n"
+            f"🟢 **{self.author.display_name}**: {pl_a.get('emoji', '🏀')} **{p_a_name}** (`${pl_a.get('cost', 1)}`) `[MOM: {mom_bar_a}]`\n"
             f"> 🌟 **Archetype**: `{pl_a.get('archetype', 'Star')}`\n"
             f"> ⭐ **Signature Moves**: {fav_str}{blk_str}\n"
-            f"🔴 **{self.opponent.display_name}**: {pl_b.get('emoji', '🏀')} **{pl_b.get('name', 'Player B')}** (`${pl_b.get('cost', 1)}`) `[MOM: {mom_bar_b}]`\n"
+            f"🔴 **{self.opponent.display_name}**: {pl_b.get('emoji', '🏀')} **{p_b_name}** (`${pl_b.get('cost', 1)}`) `[MOM: {mom_bar_b}]`\n"
             f"> 🛡️ **Defense Rating**: `{pl_b.get('defense', 85)} DEF` • *{pl_b.get('archetype', 'Archetype')}*"
         )
+        if rivalry_line:
+            matchup_value += f"\n⚔️ **HISTORIC RIVALRY MATCHUP**: *{rivalry_line}*"
         embed.add_field(name=f"⭐ Positional Matchup • {pos_title} ({cur_pos})", value=matchup_value, inline=False)
 
         # Visible Defensive Scout Read (Telegraph)
@@ -3118,13 +3265,22 @@ class InteractiveTeamBattleView(discord.ui.View):
         if pg_won and sg_won:
             new_achievements_winner.append("splash_dynasty")
 
-        stats_w = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "achievements": []}
-        stats_l = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "achievements": []}
+        stats_w = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "daily_wins": 0, "last_daily_win_date": "", "achievements": []}
+        stats_l = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "total_duels_won": 0, "total_points": 0, "daily_wins": 0, "last_daily_win_date": "", "achievements": []}
         try:
             stats_w = await db.get_team_battle_stats(winner_member.id)
             stats_l = await db.get_team_battle_stats(loser_member.id)
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] Error fetching stats: {e}")
+
+        prev_rank_w = get_gm_rank(stats_w.get("wins", 0))
+
+        today_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+        is_daily_awarded = False
+        if getattr(self, "is_daily_challenge", False) and winner_is_a:
+            last_d_win = stats_w.get("last_daily_win_date", "")
+            if last_d_win != today_str:
+                is_daily_awarded = True
 
         if (stats_w.get("wins", 0) + 1) >= 10:
             new_achievements_winner.append("hof_gm")
@@ -3147,7 +3303,8 @@ class InteractiveTeamBattleView(discord.ui.View):
                 is_tie=False,
                 duels_won=winner_duels,
                 points_scored=winner_pts,
-                new_achievements=new_achievements_winner
+                new_achievements=new_achievements_winner,
+                is_daily_win=is_daily_awarded
             )
             await db.update_team_battle_record(
                 user_id=loser_member.id,
@@ -3155,7 +3312,8 @@ class InteractiveTeamBattleView(discord.ui.View):
                 is_tie=False,
                 duels_won=loser_duels,
                 points_scored=loser_pts,
-                new_achievements=new_achievements_loser
+                new_achievements=new_achievements_loser,
+                is_daily_win=False
             )
             updated_stats_a = await db.get_team_battle_stats(self.author.id)
             updated_stats_b = await db.get_team_battle_stats(self.opponent.id)
@@ -3163,6 +3321,10 @@ class InteractiveTeamBattleView(discord.ui.View):
             logger.error(f"[InteractiveTeamBattleView] Error updating records: {e}")
             updated_stats_a = stats_w if winner_is_a else stats_l
             updated_stats_b = stats_l if winner_is_a else stats_w
+
+        updated_stats_w = updated_stats_a if winner_is_a else updated_stats_b
+        updated_rank_w = get_gm_rank(updated_stats_w.get("wins", 0))
+        promoted_rank = updated_rank_w if updated_rank_w["name"] != prev_rank_w["name"] else None
 
         streak_a_val = updated_stats_a.get("streak", 0)
         streak_b_val = updated_stats_b.get("streak", 0)
@@ -3269,6 +3431,20 @@ class InteractiveTeamBattleView(discord.ui.View):
         )
         embed.add_field(name="🎖️ Player of the Match (MVP) Trophy", value=mvp_value, inline=False)
 
+        if promoted_rank:
+            embed.add_field(
+                name="🚀 GM PROMOTION ALERT!",
+                value=f"👑 **{winner_member.display_name}** has advanced to **{promoted_rank['title']}**! ({promoted_rank['bar']})",
+                inline=False
+            )
+
+        if is_daily_awarded:
+            embed.add_field(
+                name="🏅 DAILY CHALLENGE CONQUERED!",
+                value=f"👑 **{winner_member.display_name}** defeated today's Daily Boss! (+1 Daily W 🏅 • Total: `{updated_stats_w.get('daily_wins', 0)}`)",
+                inline=False
+            )
+
         if newly_unlocked:
             ach_texts = [f"{NBA_ACHIEVEMENTS[a]['emoji']} **{NBA_ACHIEVEMENTS[a]['title']}**" for a in newly_unlocked if a in NBA_ACHIEVEMENTS]
             embed.add_field(
@@ -3280,10 +3456,54 @@ class InteractiveTeamBattleView(discord.ui.View):
         embed.set_footer(text="Sweety Live Tactical NBA Engine • Real coaching decisions beat pure OVR!")
         embed.timestamp = discord.utils.utcnow()
         self.final_embed = embed
+
+        # Broadcast Public Sports Ticker to the match channel
+        try:
+            chan = getattr(self, "channel", None) or (self.message.channel if self.message else None)
+            if chan and hasattr(chan, "send"):
+                ticker_embed = discord.Embed(
+                    title="📢 🏀 BREAKING: NBA FINALS DUEL FINAL SCORE",
+                    description=(
+                        f"👑 **`{winner_name}`** (`{winner_pts} PTS`) defeats **`{loser_name}`** (`{loser_pts} PTS`) in **{len(self.round_history)} Quarters**!\n\n"
+                        f"```\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"🔵 {winner_name[:15]:<15}  {final_score_w} — {final_score_l}  🔴 {loser_name[:15]:>15}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"```\n"
+                        f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Series Quarters: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
+                        f"• 👑 **Champion**: **{winner_name}** (`{winner_eval.get('ovr', 90)} OVR`) • `Record: {updated_stats_w.get('wins', 0)}W-{updated_stats_w.get('losses', 0)}L` • {updated_rank_w['title']}\n"
+                        f"• 🎖️ **Series MVP**: {p_emoji} **{p_name}** (`{mvp_pts} PTS` • `{mvp_reb} REB` • `{mvp_ast} AST` • `{mvp_blk} BLK`)\n"
+                        f"💬 *\"{mvp_quote}\"*"
+                    ),
+                    color=discord.Color.gold()
+                )
+                if promoted_rank:
+                    ticker_embed.add_field(
+                        name="🚀 GM PROMOTION ALERT!",
+                        value=f"👑 **{winner_member.display_name}** has leveled up to **{promoted_rank['title']}**! ({promoted_rank['bar']})",
+                        inline=False
+                    )
+                if is_daily_awarded:
+                    ticker_embed.add_field(
+                        name="🏅 DAILY CHALLENGE CONQUERED!",
+                        value=f"👑 **{winner_member.display_name}** claimed today's Daily Boss bounty! (Total Daily Ws: `{updated_stats_w.get('daily_wins', 0)}`)",
+                        inline=False
+                    )
+                if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
+                    ticker_embed.set_thumbnail(url=winner_member.display_avatar.url)
+
+                ticker_embed.set_footer(text="Sweety Live Tactical NBA Engine • Challenge members with /teambattle or queue with /teamqueue")
+                ticker_embed.timestamp = discord.utils.utcnow()
+                await chan.send(embed=ticker_embed)
+        except Exception as broadcast_err:
+            logger.warning(f"[InteractiveTeamBattleView] Auto-broadcast ticker failed: {broadcast_err}")
+
         return embed
 
     async def handle_tactical_action(self, interaction: discord.Interaction, action_key: str):
         try:
+            if interaction.channel:
+                self.channel = interaction.channel
             if interaction.user.id not in [self.author.id, self.opponent.id]:
                 await interaction.response.send_message("❌ This is not your game! Start your own with `/teambattle @user`.", ephemeral=True)
                 return
@@ -3436,12 +3656,6 @@ class InteractiveTeamBattleView(discord.ui.View):
                     "commentary": f"🏆 **{winner_q_name} takes Quarter {cur_idx + 1} ({self.q_pts_a} — {self.q_pts_b})!**"
                 })
 
-                self.last_commentary = (
-                    f"🏁 **QUARTER {cur_idx + 1} ({pos_title}) CLINCHED BY {winner_q_name}!** *(Final: {self.q_pts_a} — {self.q_pts_b})*\n"
-                    f"• 🟢 **{self.author.display_name}**: {res_a['commentary']}\n"
-                    f"• 🔴 **{self.opponent.display_name}**: {res_b['commentary'] if res_b.get('commentary') else 'Turnover / Stop'}"
-                )
-
                 self.current_round += 1
                 self.q_pts_a = 0
                 self.q_pts_b = 0
@@ -3455,6 +3669,32 @@ class InteractiveTeamBattleView(discord.ui.View):
                 else:
                     if (self.duels_won_a == 2 and self.duels_won_b == 2) or self.current_round == 4:
                         self.is_clutch_mode = True
+
+                    next_idx = self.current_round
+                    if next_idx < len(self.positions):
+                        next_pos = self.positions[next_idx]
+                        next_pos_title = self.pos_fullnames.get(next_pos, next_pos)
+                        next_pa = self.picks_a.get(next_pos, {})
+                        next_pb = self.picks_b.get(next_pos, {})
+                        next_pa_name = next_pa.get('name', 'Player A')
+                        next_pb_name = next_pb.get('name', 'Player B')
+                        riv_line = get_matchup_rivalry_line(next_pa_name, next_pb_name)
+                        riv_extra = f"\n⚔️ **HISTORIC RIVALRY ON DECK**: *{riv_line}*" if riv_line else f"\n👀 **Upcoming Matchup**: {next_pa.get('emoji', '🏀')} **{next_pa_name}** vs {next_pb.get('emoji', '🏀')} **{next_pb_name}**!"
+
+                        self.last_commentary = (
+                            f"🏁 **QUARTER {cur_idx + 1} ({pos_title}) CLINCHED BY {winner_q_name}!** *(Final: {self.round_history[-1]['pts_a']} — {self.round_history[-1]['pts_b']})*\n"
+                            f"• 🟢 **{self.author.display_name}**: {res_a['commentary']}\n"
+                            f"• 🔴 **{self.opponent.display_name}**: {res_b['commentary'] if res_b.get('commentary') else 'Turnover / Stop'}\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"📢 **QUARTER BREAK PREVIEW ➔ Q{next_idx + 1} ({next_pos_title})**: {riv_extra}"
+                        )
+                    else:
+                        self.last_commentary = (
+                            f"🏁 **QUARTER {cur_idx + 1} ({pos_title}) CLINCHED BY {winner_q_name}!** *(Final: {self.round_history[-1]['pts_a']} — {self.round_history[-1]['pts_b']})*\n"
+                            f"• 🟢 **{self.author.display_name}**: {res_a['commentary']}\n"
+                            f"• 🔴 **{self.opponent.display_name}**: {res_b['commentary'] if res_b.get('commentary') else 'Turnover / Stop'}"
+                        )
+
                     self._build_controls()
                     embed = self.make_battle_embed()
             else:
@@ -3477,6 +3717,8 @@ class InteractiveTeamBattleView(discord.ui.View):
 
     async def handle_simulate_remainder(self, interaction: discord.Interaction):
         try:
+            if interaction.channel:
+                self.channel = interaction.channel
             if interaction.user.id not in [self.author.id, self.opponent.id]:
                 await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
                 return
@@ -4492,6 +4734,212 @@ def build_teamleaderboard_embed(rows: List[Any]) -> discord.Embed:
     return embed
 
 
+async def build_gm_stats_embed(user: Union[discord.Member, discord.User], row: Optional[Dict[str, Any]], stats: Dict[str, Any]) -> discord.Embed:
+    """Builds a comprehensive GM Profile & Career Record embed with GM rank ladder, progress bar, badges, and active squad summary."""
+    wins = stats.get("wins", 0)
+    losses = stats.get("losses", 0)
+    ties = stats.get("ties", 0)
+    total_games = wins + losses + ties
+    win_rate = (wins / max(1, total_games)) * 100.0 if total_games > 0 else 0.0
+    streak_val = stats.get("streak", 0)
+    best_streak = stats.get("best_streak", 0)
+    streak_fmt = f"🔥 {streak_val}W" if streak_val > 0 else (f"❄️ {abs(streak_val)}L" if streak_val < 0 else "⚪ 0")
+    best_streak_fmt = f"🔥 {best_streak}W" if best_streak > 0 else "⚪ 0"
+    
+    gm_rank = get_gm_rank(wins)
+    
+    embed = discord.Embed(
+        title=f"🏀 GM CAREER PROFILE • {user.display_name}",
+        description=(
+            f"### {gm_rank['title']}\n"
+            f"**Rank Progress**: `{gm_rank['bar']}` **{gm_rank['pct']}%**\n"
+            f"> *{gm_rank['needed']} more win{'s' if gm_rank['needed'] != 1 else ''} needed to reach* **{gm_rank['next']}**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=discord.Color.gold()
+    )
+    if hasattr(user, "display_avatar") and user.display_avatar:
+        embed.set_thumbnail(url=user.display_avatar.url)
+        
+    embed.add_field(
+        name="📊 Career Battle Record",
+        value=(
+            f"• **Record**: **`{wins}W — {losses}L`** (`{win_rate:.1f}% Win Rate`)\n"
+            f"• **Active Streak**: `{streak_fmt}` • **Best Streak**: `{best_streak_fmt}`\n"
+            f"• **Total Points Scored**: `{stats.get('total_points', 0):,} PTS`\n"
+            f"• **Positional Duels Won**: `{stats.get('total_duels_won', 0)} Quarters`\n"
+            f"• **Daily Boss Wins**: `🏅 {stats.get('daily_wins', 0)} Daily Ws` *(Last Win: {stats.get('last_daily_win_date') or 'Never'})*"
+        ),
+        inline=False
+    )
+    
+    # Active Squad Info
+    if row:
+        picks = extract_picks_from_row(row)
+        evaluation = evaluate_dream_team(picks)
+        squad_lines = []
+        for pos in ["PG", "SG", "SF", "PF", "C"]:
+            p = picks.get(pos, {})
+            squad_lines.append(f"• **{pos}**: {p.get('emoji', '🏀')} **{p.get('name', 'Player')}** (`${p.get('cost', 1)}`) — *{p.get('archetype', 'Star')}*")
+        embed.add_field(
+            name=f"🏀 Active $15 Roster • `{evaluation['ovr']} OVR` ({evaluation['tier'].split('•')[0].strip()})",
+            value="\n".join(squad_lines),
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="🏀 Active $15 Roster",
+            value="*No squad drafted yet. Draft your starting 5 with `/buildteam`!*",
+            inline=False
+        )
+        
+    # Badges
+    unlocked = stats.get("achievements", [])
+    if unlocked:
+        badge_lines = []
+        for ach_id in unlocked:
+            if ach_id in NBA_ACHIEVEMENTS:
+                meta = NBA_ACHIEVEMENTS[ach_id]
+                badge_lines.append(f"{meta['emoji']} **{meta['title']}** — *{meta['desc']}*")
+        embed.add_field(name=f"🏅 GM Badges & Accolades ({len(unlocked)} Unlocked)", value="\n".join(badge_lines), inline=False)
+    else:
+        embed.add_field(name="🏅 GM Badges & Accolades", value="*No badges unlocked yet. Battle opponents with `/teambattle` to earn honors!*", inline=False)
+        
+    embed.set_footer(text="Sweety Live Tactical NBA Engine • Build squads with /buildteam | Challenge with /teambattle")
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def build_gm_leaderboard_embed(rows: List[Dict[str, Any]]) -> discord.Embed:
+    """Builds the General Manager Leaderboard ranked by career wins and streaks."""
+    if not rows:
+        embed = discord.Embed(
+            title="🏆 NBA General Manager Hall of Fame Leaderboard",
+            description="No battle records found yet! Battle another member or `@Sweety` with `/teambattle` to enter the rankings.",
+            color=discord.Color.blue()
+        )
+        embed.timestamp = discord.utils.utcnow()
+        return embed
+
+    embed = discord.Embed(
+        title="🏆 NBA General Manager Hall of Fame Leaderboard",
+        description="Top server General Managers ranked by career wins, win streaks, and rank tiers:\n",
+        color=discord.Color.gold()
+    )
+
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    for idx, r in enumerate(rows):
+        uid = r["user_id"] if isinstance(r, dict) else r[0]
+        wins = int(r["wins"] if isinstance(r, dict) else r[1])
+        losses = int(r["losses"] if isinstance(r, dict) else r[2])
+        streak = int(r["streak"] if isinstance(r, dict) else r[4])
+        pts = int(r["total_points"] if isinstance(r, dict) else r[7])
+        daily_w = int(r.get("daily_wins", 0) if isinstance(r, dict) else (r[8] if len(r) > 8 else 0))
+        
+        streak_str = f"🔥 {streak}W" if streak > 0 else (f"❄️ {abs(streak)}L" if streak < 0 else "⚪ 0")
+        gm_rank = get_gm_rank(wins)
+        medal = medals[idx] if idx < len(medals) else f"#{idx+1}"
+        
+        daily_str = f" • 🏅 `{daily_w} Daily Ws`" if daily_w > 0 else ""
+        embed.add_field(
+            name=f"{medal} <@{uid}> — {gm_rank['title']}",
+            value=f"• **Record**: **`{wins}W — {losses}L`** ({streak_str}) • **`{pts:,} PTS`**{daily_str}",
+            inline=False
+        )
+
+    embed.set_footer(text="Climb the GM ranks by battling members with /teambattle or /teamqueue!")
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def build_dailynba_embed(user: Union[discord.Member, discord.User], boss_data: Dict[str, Any], user_stats: Dict[str, Any]) -> discord.Embed:
+    """Builds the daily boss announcement & challenge status embed."""
+    today_str = boss_data["date"]
+    last_win_date = user_stats.get("last_daily_win_date", "")
+    has_won = (last_win_date == today_str)
+    daily_wins = user_stats.get("daily_wins", 0)
+
+    eval_boss = boss_data["eval"]
+    picks = boss_data["picks"]
+    
+    status_tag = f"✅ **COMPLETED TODAY** *(Total Daily Wins: `{daily_wins} 🏅`)*" if has_won else f"⚔️ **AVAILABLE NOW** *(First win today awards +1 Daily W 🏅)*"
+    color = discord.Color.green() if has_won else discord.Color.gold()
+
+    embed = discord.Embed(
+        title=f"🏀 DAILY NBA BOSS CHALLENGE • {today_str}",
+        description=(
+            f"# 👑 {boss_data['title']}\n"
+            f"*{boss_data['desc']}*\n\n"
+            f"• **Boss Roster Rating**: `{eval_boss['ovr']} OVR` ({eval_boss['tier'].split('•')[0].strip()})\n"
+            f"• **Daily Status**: {status_tag}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=color
+    )
+    
+    lineup_lines = []
+    for pos in ["PG", "SG", "SF", "PF", "C"]:
+        p = picks.get(pos, {})
+        lineup_lines.append(f"• **{pos}**: {p.get('emoji', '🏀')} **{p.get('name', 'Player')}** (`${p.get('cost', 1)}`) — *{p.get('archetype', 'Star')}*")
+        
+    embed.add_field(name="📋 Today's Boss 5-Man Lineup ($15 Cap)", value="\n".join(lineup_lines), inline=False)
+    embed.add_field(name="🔥 Boss Strengths", value="\n".join(eval_boss.get("strengths", ["Balanced"])), inline=False)
+    
+    embed.set_footer(text="New daily boss arrives every night at 00:00 UTC! Click Challenge Daily Boss below.")
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+class DailyNbaBossView(discord.ui.View):
+    """View with a 1-click button to challenge today's Daily NBA Boss."""
+    def __init__(self, user: Union[discord.Member, discord.User], boss_data: Dict[str, Any], user_row: Any, user_has_won_today: bool):
+        super().__init__(timeout=180)
+        self.user = user
+        self.boss_data = boss_data
+        self.user_row = user_row
+        self.user_has_won_today = user_has_won_today
+
+        btn_label = "Battle Daily Boss (Practice)" if user_has_won_today else "⚔️ Challenge Daily Boss"
+        btn_style = discord.ButtonStyle.secondary if user_has_won_today else discord.ButtonStyle.success
+        btn_challenge = discord.ui.Button(label=btn_label, style=btn_style, emoji="🏀", custom_id="btn_daily_challenge_start")
+        btn_challenge.callback = self.challenge_callback
+        self.add_item(btn_challenge)
+
+    async def challenge_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("❌ Start your own daily challenge with `/dailynba`!", ephemeral=True)
+            return
+
+        if not self.user_row:
+            await interaction.response.send_message("❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` to draft your squad first.", ephemeral=True)
+            return
+
+        picks_user = extract_picks_from_row(self.user_row)
+        eval_user = evaluate_dream_team(picks_user)
+        picks_boss = self.boss_data["picks"]
+        eval_boss = self.boss_data["eval"]
+
+        bot_user = interaction.client.user if interaction.client and interaction.client.user else interaction.user
+        live_view = InteractiveTeamBattleView(
+            author=interaction.user,
+            opponent=bot_user,
+            picks_a=picks_user,
+            picks_b=picks_boss,
+            eval_a=eval_user,
+            eval_b=eval_boss,
+            row_a=self.user_row,
+            row_b=None,
+            is_daily_challenge=True
+        )
+        live_embed = live_view.make_battle_embed()
+        self.stop()
+        await interaction.response.send_message(
+            content=f"⚔️ **DAILY CHALLENGE ACCEPTED!** {interaction.user.mention} is taking on today's Boss squad: **{self.boss_data['title']}**! Choose your play call for Quarter 1 (PG Duel):",
+            embed=live_embed,
+            view=live_view
+        )
+
+
 # ── NBA Dream Team Matchmaking Queue System ──────────────────────────────────
 BATTLE_MATCHMAKING_QUEUE: Dict[int, Dict[int, Dict[str, Any]]] = {}
 
@@ -4663,17 +5111,28 @@ class HubDraftButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Draft $15 Squad", style=discord.ButtonStyle.success, emoji="🏀", custom_id="hub_draft_btn")
+    @discord.ui.button(label="Draft $15 Squad", style=discord.ButtonStyle.success, emoji="🏀", custom_id="hub_draft_btn", row=0)
     async def draft_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         view = BuildTeamView(author_id=interaction.user.id)
         embed = view.make_draft_embed()
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    @discord.ui.button(label="Find Match (Queue)", style=discord.ButtonStyle.primary, emoji="⚔️", custom_id="hub_find_match_btn")
+    @discord.ui.button(label="Find Match (Queue)", style=discord.ButtonStyle.primary, emoji="⚔️", custom_id="hub_find_match_btn", row=0)
     async def find_match_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await handle_team_queue(interaction=interaction)
 
-    @discord.ui.button(label="My Team Card", style=discord.ButtonStyle.secondary, emoji="📋", custom_id="hub_myteam_btn")
+    @discord.ui.button(label="Daily Boss", style=discord.ButtonStyle.danger, emoji="👑", custom_id="hub_daily_boss_btn", row=0)
+    async def daily_boss_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        boss_data = get_daily_challenge_lineup()
+        row = await db.get_dream_team(interaction.user.id)
+        stats = await db.get_team_battle_stats(interaction.user.id)
+        last_win_date = stats.get("last_daily_win_date", "")
+        has_won = (last_win_date == boss_data["date"])
+        embed = build_dailynba_embed(interaction.user, boss_data, stats)
+        view = DailyNbaBossView(interaction.user, boss_data, row, has_won)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="My Team Card", style=discord.ButtonStyle.secondary, emoji="📋", custom_id="hub_myteam_btn", row=1)
     async def myteam_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         row = await db.get_dream_team(interaction.user.id)
         if not row:
@@ -4685,10 +5144,17 @@ class HubDraftButtonView(discord.ui.View):
         card_embed, card_file = await build_myteam_embed(interaction.user, row)
         await interaction.response.send_message(embed=card_embed, file=card_file, ephemeral=True)
 
-    @discord.ui.button(label="GM Leaderboard", style=discord.ButtonStyle.secondary, emoji="🏆", custom_id="hub_gm_lb_btn")
+    @discord.ui.button(label="GM Profile & Rank", style=discord.ButtonStyle.secondary, emoji="📊", custom_id="hub_gm_profile_btn", row=1)
+    async def gm_profile_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        row = await db.get_dream_team(interaction.user.id)
+        stats = await db.get_team_battle_stats(interaction.user.id)
+        embed = await build_gm_stats_embed(interaction.user, row, stats)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="GM Leaderboard", style=discord.ButtonStyle.secondary, emoji="🏆", custom_id="hub_gm_lb_btn", row=1)
     async def leaderboard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = await db.get_top_dream_teams(10)
-        lb_embed = build_teamleaderboard_embed(rows)
+        rows = await db.get_top_battle_records(10)
+        lb_embed = build_gm_leaderboard_embed(rows)
         await interaction.response.send_message(embed=lb_embed, ephemeral=True)
 
 
@@ -4732,7 +5198,7 @@ async def setup_nba_dreamteam_channel(guild: discord.Guild, target_category_name
             break
 
     if not existing_channel:
-        topic_str = "🏀 Build your $15 All-Time NBA Starting 5, challenge friends to 7-Game Finals series, and climb the GM leaderboard! Use /buildteam or click below."
+        topic_str = "🏀 Build your $15 All-Time NBA Starting 5, challenge friends to 5-round tactical card duels, and climb the GM leaderboard! Use /buildteam or click below."
         existing_channel = await guild.create_text_channel(
             name=channel_name,
             category=target_category,
@@ -4748,9 +5214,8 @@ async def setup_nba_dreamteam_channel(guild: discord.Guild, target_category_name
     hub_embed = discord.Embed(
         title="🏀 2K Mobile Hub • $15 All-Time NBA Dream Team Arena",
         description=(
-            "Welcome to the **NBA Dream Team & Finals Battleground**!\n\n"
-            "Test your General Manager IQ by building the ultimate 5-man starting lineup under a **strict $15 salary cap**, "
-            "then challenge server members to simulated **7-game NBA Finals series** with full game logs and Finals MVP trophies!\n"
+            "# 🏆 WELCOME TO THE NBA GENERAL MANAGER ARENA!\n\n"
+            "Build your ultimate 5-man dream team under a **strict $15 salary cap**, read and counter opponent defensive schemes in **live turn-based tactical card battles**, and climb the **GM Rank Ladder** from Rookie to Hall of Famer!\n"
         ),
         color=discord.Color.gold()
     )
@@ -4759,12 +5224,40 @@ async def setup_nba_dreamteam_channel(guild: discord.Guild, target_category_name
         name="🎮 GM Commands",
         value=(
             "• `/buildteam` or `!buildteam` — Open interactive draft room\n"
-            "• `/myteam [@user]` or `!myteam` — View squad card, career record & GM badges\n"
+            "• `/myteam [@user]` or `!myteam` — View squad card & player photos\n"
+            "• `/teamstats [@user]` or `!teamstats` — View GM career record, rank bar & badges\n"
             "• `/teamqueue` or `!teamqueue` — Join live matchmaking queue\n"
-            "• `/teambattle <@user>` or `!teambattle` — Challenge member to 5-round card battle\n"
-            "• `/teamleaderboard` or `!teamlb` — View server top GM leaderboard"
+            "• `/teambattle <@user>` or `!teambattle` — Challenge member to live tactical card battle\n"
+            "• `/dailynba` or `!dailynba` — Face today's $15 Daily Boss squad\n"
+            "• `/teamtop` or `!teamtop` — View General Manager Hall of Fame leaderboard"
         ),
         inline=False
+    )
+
+    hub_embed.add_field(
+        name="🪜 GM Rank Progression Ladder",
+        value=(
+            "• 🥉 **Rookie GM** (`0-2 Wins`)\n"
+            "• 🥈 **Starter GM** (`3-6 Wins`)\n"
+            "• 🥇 **Role Player GM** (`7-14 Wins`)\n"
+            "• ⭐ **All-Star GM** (`15-24 Wins`)\n"
+            "• 👑 **MVP GM** (`25-49 Wins`)\n"
+            "• 🏛️ **Hall of Famer GM** (`50+ Wins`)"
+        ),
+        inline=True
+    )
+
+    hub_embed.add_field(
+        name="🎯 Live Coaching Tactics (Read & React)",
+        value=(
+            "• 🎯 `Step-Back 3PT` ➔ Punishes **Drop Coverage**\n"
+            "• 💥 `Power Drive` ➔ Punishes **Perimeter Press**\n"
+            "• 🧠 `Pick & Roll` ➔ Punishes **Blitz Traps & Drops**\n"
+            "• 🔒 `Lockdown Clamp` ➔ Strips **Isolation Plays**\n"
+            "• ⚡ `Mamba Iso` ➔ Exploits **Mismatches & Press**\n"
+            "• ⭐ *Player Signature Moves get +15% Mastery Boost!*"
+        ),
+        inline=True
     )
     
     hub_embed.add_field(
@@ -4779,7 +5272,7 @@ async def setup_nba_dreamteam_channel(guild: discord.Guild, target_category_name
         inline=False
     )
     
-    hub_embed.set_footer(text="Click 'Draft $15 Dream Team' below to launch your private draft room anytime!")
+    hub_embed.set_footer(text="Click the interactive GM buttons below to draft, battle, or check stats anytime!")
     hub_embed.timestamp = discord.utils.utcnow()
 
     view = HubDraftButtonView()
@@ -6358,6 +6851,50 @@ async def setupnbachannel_slash_cmd(interaction: discord.Interaction, category_n
         await interaction.followup.send(f"❌ Failed to create NBA Dream Team channel: {e}", ephemeral=True)
 
 
+@bot.tree.command(name="teamstats", description="🏀 View a member's NBA GM profile, rank ladder, career record, and badges")
+@app_commands.describe(user="The member whose GM profile you want to view (defaults to yourself)")
+@app_commands.guild_only()
+async def teamstats_slash_cmd(interaction: discord.Interaction, user: Optional[discord.Member] = None):
+    target = user or interaction.user
+    if getattr(target, "bot", False) or (bot.user and target.id == bot.user.id):
+        row = await ensure_sweety_ai_team(guild_id=interaction.guild.id if interaction.guild else None, target_id=target.id)
+    else:
+        row = await db.get_dream_team(target.id)
+    stats = await db.get_team_battle_stats(target.id)
+    embed = await build_gm_stats_embed(target, row, stats)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="teamtop", description="🏆 View the top General Manager leaderboard ranked by career wins and rank tiers")
+@app_commands.describe(limit="Number of top GMs to display (5 to 25, default 10)")
+@app_commands.choices(limit=[
+    app_commands.Choice(name="Top 5", value=5),
+    app_commands.Choice(name="Top 10", value=10),
+    app_commands.Choice(name="Top 15", value=15),
+    app_commands.Choice(name="Top 20", value=20),
+    app_commands.Choice(name="Top 25", value=25),
+])
+@app_commands.guild_only()
+async def teamtop_slash_cmd(interaction: discord.Interaction, limit: Optional[int] = 10):
+    lim = max(1, min(limit or 10, 25))
+    rows = await db.get_top_battle_records(lim)
+    embed = build_gm_leaderboard_embed(rows)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="dailynba", description="🏀 Face today's $15 Daily Boss team to earn daily GM wins")
+@app_commands.guild_only()
+async def dailynba_slash_cmd(interaction: discord.Interaction):
+    boss_data = get_daily_challenge_lineup()
+    row = await db.get_dream_team(interaction.user.id)
+    stats = await db.get_team_battle_stats(interaction.user.id)
+    last_win_date = stats.get("last_daily_win_date", "")
+    has_won = (last_win_date == boss_data["date"])
+    embed = build_dailynba_embed(interaction.user, boss_data, stats)
+    view = DailyNbaBossView(interaction.user, boss_data, row, has_won)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
 @bot.tree.command(name="createchannel", description="Create a new text or voice channel inside a specific category")
 @app_commands.describe(
     name="Name of the new channel (e.g. '🏀・dream-team-builder')",
@@ -7864,6 +8401,44 @@ async def setupnbachannel_prefix_cmd(ctx: commands.Context, *, category_name: Op
     except Exception as e:
         logger.error(f"Error in !setupnbachannel: {e}", exc_info=True)
         await ctx.send(f"❌ Failed to create NBA Dream Team channel: {e}")
+
+
+@bot.command(name="teamstats", aliases=["gmstats", "mycareer", "nba_stats"])
+@commands.guild_only()
+async def teamstats_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """View a member's NBA GM profile, rank ladder, career record, and badges: !teamstats [@user]"""
+    target = member or ctx.author
+    if getattr(target, "bot", False) or (bot.user and target.id == bot.user.id):
+        row = await ensure_sweety_ai_team(guild_id=ctx.guild.id if ctx.guild else None, target_id=target.id)
+    else:
+        row = await db.get_dream_team(target.id)
+    stats = await db.get_team_battle_stats(target.id)
+    embed = await build_gm_stats_embed(target, row, stats)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="teamtop", aliases=["gmtop", "topgms", "gmlb"])
+@commands.guild_only()
+async def teamtop_prefix_cmd(ctx: commands.Context, limit: Optional[int] = 10):
+    """View the top General Manager leaderboard ranked by career wins and rank tiers: !teamtop [limit]"""
+    lim = max(1, min(limit or 10, 25))
+    rows = await db.get_top_battle_records(lim)
+    embed = build_gm_leaderboard_embed(rows)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="dailynba", aliases=["dailyboss", "nbadaily", "dailygame"])
+@commands.guild_only()
+async def dailynba_prefix_cmd(ctx: commands.Context):
+    """Face today's $15 Daily Boss team to earn daily GM wins: !dailynba"""
+    boss_data = get_daily_challenge_lineup()
+    row = await db.get_dream_team(ctx.author.id)
+    stats = await db.get_team_battle_stats(ctx.author.id)
+    last_win_date = stats.get("last_daily_win_date", "")
+    has_won = (last_win_date == boss_data["date"])
+    embed = build_dailynba_embed(ctx.author, boss_data, stats)
+    view = DailyNbaBossView(ctx.author, boss_data, row, has_won)
+    await ctx.send(embed=embed, view=view)
 
 
 @bot.command(name="createchannel", aliases=["addchannel", "makechannel"])
