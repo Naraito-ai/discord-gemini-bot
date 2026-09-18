@@ -5826,6 +5826,312 @@ async def build_myteam_embed(target: Union[discord.Member, discord.User], row: A
         return fallback_embed, None
 
 
+def generate_versus_matchup_image(
+    user_a_name: str,
+    user_b_name: str,
+    picks_a: Dict[str, Dict[str, Any]],
+    picks_b: Dict[str, Dict[str, Any]],
+    eval_a: Dict[str, Any],
+    eval_b: Dict[str, Any],
+    stats_a: Optional[Dict[str, Any]] = None,
+    stats_b: Optional[Dict[str, Any]] = None
+) -> io.BytesIO:
+    """Generates a high-definition 1600x960 2K Head-to-Head Faceoff matchup graphic showing both Starting 5s, positional edges, and scouting telemetry."""
+    W, H = 1600, 960
+    canvas = Image.new("RGBA", (W, H), (8, 12, 22, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    # 1. Split-Arena Background with Diagonal Energy
+    for y in range(H):
+        t = y / H
+        r = int(9 * (1 - t) + 16 * t)
+        g = int(12 * (1 - t) + 22 * t)
+        b = int(22 * (1 - t) + 40 * t)
+        draw.line([(0, y), (W, y)], fill=(r, g, b, 255))
+
+    # Corner dynamic gradient glows
+    glow_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    g_draw = ImageDraw.Draw(glow_layer)
+    g_draw.ellipse([-100, -100, 750, 750], fill=(239, 68, 68, 28))
+    g_draw.ellipse([W - 750, -100, W + 100, 750], fill=(59, 130, 246, 32))
+    g_draw.ellipse([W//2 - 350, 100, W//2 + 350, 800], fill=(245, 158, 11, 18))
+    canvas = Image.alpha_composite(canvas, glow_layer)
+    draw = ImageDraw.Draw(canvas)
+
+    # 2. Top Header HUD
+    box_a_w = W//2 - 130
+    draw.rounded_rectangle([(35, 20), (35 + box_a_w, 125)], radius=16, fill=(15, 20, 32, 245), outline=(239, 68, 68, 220), width=2)
+    draw.line([(55, 20), (35 + box_a_w - 20, 20)], fill=(239, 68, 68, 255), width=2)
+
+    box_b_x = W//2 + 95
+    box_b_w = (W - 35) - box_b_x
+    draw.rounded_rectangle([(box_b_x, 20), (W - 35, 125)], radius=16, fill=(15, 20, 32, 245), outline=(59, 130, 246, 220), width=2)
+    draw.line([(box_b_x + 20, 20), (W - 55, 20)], fill=(59, 130, 246, 255), width=2)
+
+    f_sub = _get_nba_card_font(12, bold=True)
+    f_tname = _get_nba_card_font(25, bold=True)
+    f_ovr_lbl = _get_nba_card_font(18, bold=True)
+    f_meta = _get_nba_card_font(13, bold=False)
+
+    # Left Team Info (Team A)
+    draw.text((55, 30), "HOME SQUAD | RED CORNER", fill=(248, 113, 113, 255), font=f_sub)
+    draw.text((55, 48), f"{user_a_name.upper()[:16]}'S SQUAD", fill=(255, 255, 255, 255), font=f_tname)
+    
+    _draw_star_polygon(draw, (65, 92), 9, (255, 184, 0, 255))
+    ovr_a = eval_a.get("ovr", 90.0)
+    tier_a = eval_a.get("tier", "S Tier").split("•")[0].strip()
+    draw.text((80, 82), f"{ovr_a} OVR | {tier_a.upper()}", fill=(255, 184, 0, 255), font=f_ovr_lbl)
+    
+    rec_a = "RECORD: 0W - 0L"
+    if stats_a:
+        st_a = stats_a.get('streak', 0)
+        st_lbl = f"{st_a}W STREAK" if st_a > 0 else (f"{abs(st_a)}L COLD" if st_a < 0 else "EVEN")
+        rec_a = f"RECORD: {stats_a.get('wins', 0)}W - {stats_a.get('losses', 0)}L ({st_lbl})"
+    draw.text((55, 104), f"${eval_a.get('total_cost', 15)}/15 CAP | {rec_a}", fill=(148, 163, 184, 255), font=f_meta)
+
+    # Right Team Info (Team B - Right Aligned)
+    b_right_margin = W - 55
+    b_text_header = "AWAY SQUAD | BLUE CORNER"
+    b_team_title = f"{user_b_name.upper()[:16]}'S SQUAD"
+    ovr_b = eval_b.get("ovr", 90.0)
+    tier_b = eval_b.get("tier", "S Tier").split("•")[0].strip()
+    b_ovr_text = f"{ovr_b} OVR | {tier_b.upper()}"
+    
+    rec_b = "RECORD: 0W - 0L"
+    if stats_b:
+        st_b = stats_b.get('streak', 0)
+        st_lbl_b = f"{st_b}W STREAK" if st_b > 0 else (f"{abs(st_b)}L COLD" if st_b < 0 else "EVEN")
+        rec_b = f"RECORD: {stats_b.get('wins', 0)}W - {stats_b.get('losses', 0)}L ({st_lbl_b})"
+    b_meta_text = f"${eval_b.get('total_cost', 15)}/15 CAP | {rec_b}"
+
+    def draw_right_text(text: str, y: int, color: Tuple[int, int, int, int], font: ImageFont.ImageFont):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text((b_right_margin - tw, y), text, fill=color, font=font)
+        return tw
+
+    draw_right_text(b_text_header, 30, (96, 165, 250, 255), f_sub)
+    draw_right_text(b_team_title, 48, (255, 255, 255, 255), f_tname)
+    ovr_w = draw_right_text(b_ovr_text, 82, (56, 189, 248, 255), f_ovr_lbl)
+    _draw_star_polygon(draw, (b_right_margin - ovr_w - 15, 92), 9, (56, 189, 248, 255))
+    draw_right_text(b_meta_text, 104, (148, 163, 184, 255), f_meta)
+
+    # Center VS Crest
+    draw.rounded_rectangle([(W//2 - 80, 15), (W//2 + 80, 130)], radius=20, fill=(10, 14, 24, 255), outline=(255, 184, 0, 255), width=3)
+    f_vs_sub = _get_nba_card_font(10, bold=True)
+    f_vs_main = _get_nba_card_font(42, bold=True)
+    draw.text((W//2 - 40, 26), "2K FINALS", fill=(255, 184, 0, 255), font=f_vs_sub)
+    draw.text((W//2 - 32, 42), "VS", fill=(255, 255, 255, 255), font=f_vs_main)
+    draw.text((W//2 - 48, 98), "MATCHUP", fill=(148, 163, 184, 255), font=f_vs_sub)
+
+    # 3. Center Section: 5 Positional Faceoff Matchup Rows
+    positions = ["PG", "SG", "SF", "PF", "C"]
+    row_y_start = 145
+    row_h = 104
+    row_gap = 14
+
+    f_pname = _get_nba_card_font(18, bold=True)
+    f_parch = _get_nba_card_font(12, bold=False)
+    f_povr = _get_nba_card_font(22, bold=True)
+    f_pos_tag = _get_nba_card_font(16, bold=True)
+    f_edge = _get_nba_card_font(12, bold=True)
+
+    def calc_player_ovr(pl: Dict[str, Any]) -> int:
+        cost = pl.get("cost", 1)
+        vals = [pl.get("pts_3", 80), pl.get("defense", 80), pl.get("inside", 80), pl.get("clutch", 80)]
+        base = int(sum(vals) / len(vals))
+        if cost == 5: return max(98, min(99, base + 5))
+        elif cost == 4: return max(94, min(97, base + 3))
+        elif cost == 3: return max(90, min(93, base + 1))
+        elif cost == 2: return max(86, min(89, base))
+        return max(80, min(85, base))
+
+    for idx, pos in enumerate(positions):
+        ry = row_y_start + idx * (row_h + row_gap)
+        p_a = picks_a.get(pos, {"name": "Empty", "cost": 1, "team": "NBA", "archetype": "Guard"})
+        p_b = picks_b.get(pos, {"name": "Empty", "cost": 1, "team": "NBA", "archetype": "Guard"})
+
+        povr_a = calc_player_ovr(p_a)
+        povr_b = calc_player_ovr(p_b)
+
+        # Left Plate (Team A)
+        draw.rounded_rectangle([(35, ry), (W//2 - 75, ry + row_h)], radius=12, fill=(14, 19, 30, 245), outline=(38, 50, 72, 255), width=2)
+        # Right Plate (Team B)
+        draw.rounded_rectangle([(W//2 + 75, ry), (W - 35, ry + row_h)], radius=12, fill=(14, 19, 30, 245), outline=(38, 50, 72, 255), width=2)
+
+        # Center Duel Pill
+        draw.rounded_rectangle([(W//2 - 65, ry + 12), (W//2 + 65, ry + row_h - 12)], radius=10, fill=(18, 24, 38, 255), outline=(255, 184, 0, 220), width=2)
+        draw.text((W//2 - 16, ry + 22), pos, fill=(255, 255, 255, 255), font=f_pos_tag)
+
+        # Duel Edge Indicator
+        diff = povr_a - povr_b
+        if diff > 0:
+            draw.text((W//2 - 46, ry + 54), f"◄ +{diff} ADV", fill=(34, 197, 94, 255), font=f_edge)
+        elif diff < 0:
+            draw.text((W//2 - 6, ry + 54), f"ADV +{abs(diff)} ►", fill=(56, 189, 248, 255), font=f_edge)
+        else:
+            draw.text((W//2 - 24, ry + 54), "- EVEN -", fill=(255, 184, 0, 255), font=f_edge)
+
+        # Team A Player Details (Left)
+        hs_a = get_nba_player_headshot(p_a.get("name", ""))
+        if hs_a:
+            try:
+                target_w = 105
+                target_h = int(target_w * (hs_a.height / hs_a.width))
+                hs_res = hs_a.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                canvas.paste(hs_res, (40, ry + row_h - target_h), hs_res)
+                draw = ImageDraw.Draw(canvas)
+            except Exception:
+                pass
+        else:
+            draw.rounded_rectangle([(42, ry + 15), (130, ry + row_h - 15)], radius=8, fill=(25, 34, 52, 255))
+            inits_a = "".join([p[0] for p in p_a.get("name", "").split(" ") if p])[:2]
+            draw.text((68, ry + 35), inits_a, fill=(248, 113, 113, 255), font=f_pname)
+
+        draw.text((155, ry + 16), p_a.get("name", "Player").upper(), fill=(255, 255, 255, 255), font=f_pname)
+        draw.text((155, ry + 42), f"${p_a.get('cost', 1)} | {p_a.get('team', 'NBA')} | {p_a.get('archetype', 'Player')}", fill=(148, 163, 184, 255), font=f_parch)
+        
+        stat_summary_a = f"3PT {p_a.get('pts_3', 80)}  |  DEF {p_a.get('defense', 80)}  |  INS {p_a.get('inside', 80)}  |  CLU {p_a.get('clutch', 80)}"
+        draw.text((155, ry + 68), stat_summary_a, fill=(203, 213, 225, 255), font=f_parch)
+
+        # Player A OVR Badge
+        draw.rounded_rectangle([(W//2 - 165, ry + 20), (W//2 - 90, ry + 84)], radius=8, fill=(22, 28, 44, 255), outline=(239, 68, 68, 255), width=2)
+        draw.text((W//2 - 148, ry + 26), "OVR", fill=(148, 163, 184, 255), font=_get_nba_card_font(10, bold=True))
+        draw.text((W//2 - 152, ry + 42), str(povr_a), fill=(248, 113, 113, 255), font=f_povr)
+
+        # Team B Player Details (Right)
+        draw.rounded_rectangle([(W//2 + 90, ry + 20), (W//2 + 165, ry + 84)], radius=8, fill=(22, 28, 44, 255), outline=(59, 130, 246, 255), width=2)
+        draw.text((W//2 + 107, ry + 26), "OVR", fill=(148, 163, 184, 255), font=_get_nba_card_font(10, bold=True))
+        draw.text((W//2 + 103, ry + 42), str(povr_b), fill=(96, 165, 250, 255), font=f_povr)
+
+        draw.text((W//2 + 180, ry + 16), p_b.get("name", "Player").upper(), fill=(255, 255, 255, 255), font=f_pname)
+        draw.text((W//2 + 180, ry + 42), f"${p_b.get('cost', 1)} | {p_b.get('team', 'NBA')} | {p_b.get('archetype', 'Player')}", fill=(148, 163, 184, 255), font=f_parch)
+        
+        stat_summary_b = f"3PT {p_b.get('pts_3', 80)}  |  DEF {p_b.get('defense', 80)}  |  INS {p_b.get('inside', 80)}  |  CLU {p_b.get('clutch', 80)}"
+        draw.text((W//2 + 180, ry + 68), stat_summary_b, fill=(203, 213, 225, 255), font=f_parch)
+
+        hs_b = get_nba_player_headshot(p_b.get("name", ""))
+        if hs_b:
+            try:
+                target_w = 105
+                target_h = int(target_w * (hs_b.height / hs_b.width))
+                hs_res_b = hs_b.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                canvas.paste(hs_res_b, (W - 145, ry + row_h - target_h), hs_res_b)
+                draw = ImageDraw.Draw(canvas)
+            except Exception:
+                pass
+        else:
+            draw.rounded_rectangle([(W - 145, ry + 15), (W - 57, ry + row_h - 15)], radius=8, fill=(25, 34, 52, 255))
+            inits_b = "".join([p[0] for p in p_b.get("name", "").split(" ") if p])[:2]
+            draw.text((W - 120, ry + 35), inits_b, fill=(96, 165, 250, 255), font=f_pname)
+
+    # 4. Bottom Team Attribute Comparison Telemetry HUD
+    hud_y = row_y_start + 5 * (row_h + row_gap) + 5
+    hud_h = 160
+    draw.rounded_rectangle([(35, hud_y), (W - 35, hud_y + hud_h)], radius=14, fill=(13, 18, 30, 245), outline=(38, 50, 72, 255), width=2)
+    draw.line([(55, hud_y), (W - 55, hud_y)], fill=(255, 184, 0, 180), width=2)
+
+    f_hud_hdr = _get_nba_card_font(13, bold=True)
+    f_stat_lbl = _get_nba_card_font(12, bold=True)
+    f_stat_num_a = _get_nba_card_font(13, bold=True)
+    f_stat_num_b = _get_nba_card_font(13, bold=True)
+
+    draw.text((55, hud_y + 10), "TEAM ATTRIBUTE COMPARISON | SCOUTING HEAD-TO-HEAD", fill=(255, 184, 0, 255), font=f_hud_hdr)
+
+    metrics = [
+        ("3PT SPACING", eval_a.get("avg_3pt", 85), eval_b.get("avg_3pt", 85)),
+        ("DEFENSE CLAMP", eval_a.get("avg_def", 85), eval_b.get("avg_def", 85)),
+        ("PLAYMAKING IQ", eval_a.get("avg_ply", 85), eval_b.get("avg_ply", 85)),
+        ("INSIDE FINISH", eval_a.get("avg_ins", 85), eval_b.get("avg_ins", 85)),
+        ("CLUTCH GENE", eval_a.get("avg_clu", 85), eval_b.get("avg_clu", 85)),
+    ]
+
+    col_w = (W - 120) // len(metrics)
+    for m_idx, (m_lbl, val_a, val_b) in enumerate(metrics):
+        mx = 55 + m_idx * col_w
+        my = hud_y + 38
+        
+        draw.text((mx + 10, my), m_lbl, fill=(148, 163, 184, 255), font=f_stat_lbl)
+
+        col_a = (34, 197, 94, 255) if val_a > val_b else ((248, 113, 113, 255) if val_a < val_b else (255, 184, 0, 255))
+        col_b = (34, 197, 94, 255) if val_b > val_a else ((96, 165, 250, 255) if val_b < val_a else (255, 184, 0, 255))
+
+        draw.text((mx + 10, my + 24), f"{val_a}", fill=col_a, font=f_stat_num_a)
+        draw.text((mx + col_w - 55, my + 24), f"{val_b}", fill=col_b, font=f_stat_num_b)
+
+        bar_x = mx + 50
+        bar_w = col_w - 110
+        bar_y = my + 26
+        draw.rounded_rectangle([(bar_x, bar_y), (bar_x + bar_w, bar_y + 14)], radius=5, fill=(24, 34, 52, 255))
+
+        mid_x = bar_x + bar_w // 2
+        draw.line([(mid_x, bar_y - 2), (mid_x, bar_y + 16)], fill=(255, 255, 255, 120), width=2)
+
+        pct_a = min(1.0, max(0.0, (val_a - 60) / 40.0))
+        len_a = int((bar_w // 2) * pct_a)
+        if len_a > 0:
+            draw.rounded_rectangle([(mid_x - len_a, bar_y), (mid_x, bar_y + 14)], radius=4, fill=(239, 68, 68, 255))
+
+        pct_b = min(1.0, max(0.0, (val_b - 60) / 40.0))
+        len_b = int((bar_w // 2) * pct_b)
+        if len_b > 0:
+            draw.rounded_rectangle([(mid_x, bar_y), (mid_x + len_b, bar_y + 14)], radius=4, fill=(59, 130, 246, 255))
+
+        if m_idx < len(metrics) - 1:
+            draw.line([(mx + col_w - 10, hud_y + 35), (mx + col_w - 10, hud_y + hud_h - 20)], fill=(38, 50, 72, 255), width=1)
+
+    buf = io.BytesIO()
+    canvas.convert("RGB").save(buf, format="PNG", quality=95)
+    buf.seek(0)
+    return buf
+
+
+async def build_battlecard_embed(
+    user_a: Union[discord.Member, discord.User],
+    user_b: Union[discord.Member, discord.User],
+    row_a: Any,
+    row_b: Any
+) -> tuple[Optional[discord.Embed], Optional[discord.File]]:
+    """Builds the 2K Head-to-Head Versus Matchup image comparison for two $15 Dream Teams."""
+    picks_a = extract_picks_from_row(row_a)
+    picks_b = extract_picks_from_row(row_b)
+    eval_a = evaluate_dream_team(picks_a)
+    eval_b = evaluate_dream_team(picks_b)
+
+    stats_a = None
+    stats_b = None
+    try:
+        stats_a = await db.get_team_battle_stats(user_a.id)
+    except Exception:
+        pass
+    try:
+        stats_b = await db.get_team_battle_stats(user_b.id)
+    except Exception:
+        pass
+
+    try:
+        buf = generate_versus_matchup_image(
+            user_a.display_name,
+            user_b.display_name,
+            picks_a,
+            picks_b,
+            eval_a,
+            eval_b,
+            stats_a,
+            stats_b
+        )
+        versus_file = discord.File(buf, filename="versus_matchup.png")
+        return None, versus_file
+    except Exception as e:
+        logger.error(f"Error generating versus matchup image: {e}", exc_info=True)
+        fallback_embed = discord.Embed(
+            title=f"⚔️ {user_a.display_name} vs {user_b.display_name} Matchup Scouting",
+            description=f"**{user_a.display_name}**: `{eval_a['ovr']} OVR` ({eval_a['tier']})\n**{user_b.display_name}**: `{eval_b['ovr']} OVR` ({eval_b['tier']})",
+            color=discord.Color.gold()
+        )
+        return fallback_embed, None
+
+
 async def build_teambattle_embed(author: Union[discord.Member, discord.User], opponent: Union[discord.Member, discord.User], row_a: Any, row_b: Any) -> discord.Embed:
     """Simulates a Footdex-style positional head-to-head card battle, updates career records & streaks in DB, and awards GM achievements."""
     picks_a = extract_picks_from_row(row_a)
@@ -8055,6 +8361,40 @@ async def teamqueue_slash_cmd(interaction: discord.Interaction):
     await handle_team_queue(interaction=interaction)
 
 
+@bot.tree.command(name="battlecard", description="⚔️ Generate a high-definition 2K Head-to-Head Versus Matchup card against another member or @Sweety")
+@app_commands.describe(opponent="The member whose dream team you want to scout / face off against (or @Sweety)")
+@app_commands.guild_only()
+async def battlecard_slash_cmd(interaction: discord.Interaction, opponent: discord.Member):
+    await interaction.response.defer()
+    target_a = interaction.user
+    target_b = opponent
+    if target_a.id == target_b.id:
+        await interaction.followup.send("❌ You cannot generate a versus card against yourself! Pick another member or `@Sweety`.", ephemeral=True)
+        return
+
+    row_a = await db.get_dream_team(target_a.id)
+    if not row_a:
+        await interaction.followup.send("❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` to draft your squad first.", ephemeral=True)
+        return
+
+    if getattr(target_b, "bot", False) or (bot.user and target_b.id == bot.user.id):
+        row_b = await ensure_sweety_ai_team(guild_id=interaction.guild.id if interaction.guild else None, target_id=target_b.id)
+    else:
+        row_b = await db.get_dream_team(target_b.id)
+
+    if not row_b:
+        await interaction.followup.send(f"❌ **{target_b.display_name}** hasn't built a $15 Dream Team yet! Tell them to run `/buildteam`.", ephemeral=True)
+        return
+
+    card_embed, card_file = await build_battlecard_embed(target_a, target_b, row_a, row_b)
+    if card_embed and card_file:
+        await interaction.followup.send(embed=card_embed, file=card_file)
+    elif card_file:
+        await interaction.followup.send(file=card_file)
+    elif card_embed:
+        await interaction.followup.send(embed=card_embed)
+
+
 @bot.tree.command(name="teambattle", description="⚔️ Challenge another member's $15 Dream Team to a tactical live NBA card battle!")
 @app_commands.describe(opponent="The member whose dream team you want to challenge")
 @app_commands.guild_only()
@@ -8074,13 +8414,34 @@ async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: disco
         picks_b = extract_picks_from_row(row_b)
         eval_a = evaluate_dream_team(picks_a)
         eval_b = evaluate_dream_team(picks_b)
+        
         live_view = InteractiveTeamBattleView(interaction.user, opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
         embed = live_view.make_battle_embed()
-        await interaction.response.send_message(
-            content=f"🤖 **Challenge Accepted by {opponent.mention}! AI Coach Sweety has entered the court! Choose your live play call for Quarter 1 (PG Duel):**",
-            embed=embed,
-            view=live_view
-        )
+
+        # Attach 2K pre-game faceoff versus graphic
+        versus_file = None
+        try:
+            stats_a = await db.get_team_battle_stats(interaction.user.id)
+            stats_b = await db.get_team_battle_stats(opponent.id)
+            versus_buf = generate_versus_matchup_image(interaction.user.display_name, opponent.display_name, picks_a, picks_b, eval_a, eval_b, stats_a, stats_b)
+            versus_file = discord.File(versus_buf, filename="versus_matchup.png")
+            embed.set_image(url="attachment://versus_matchup.png")
+        except Exception as e:
+            logger.debug(f"Could not attach versus image: {e}")
+
+        if versus_file:
+            await interaction.response.send_message(
+                content=f"🤖 **Challenge Accepted by {opponent.mention}! AI Coach Sweety has entered the court! Choose your live play call for Quarter 1 (PG Duel):**",
+                embed=embed,
+                file=versus_file,
+                view=live_view
+            )
+        else:
+            await interaction.response.send_message(
+                content=f"🤖 **Challenge Accepted by {opponent.mention}! AI Coach Sweety has entered the court! Choose your live play call for Quarter 1 (PG Duel):**",
+                embed=embed,
+                view=live_view
+            )
         return
 
     row_b = await db.get_dream_team(opponent.id)
@@ -8095,11 +8456,31 @@ async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: disco
 
     challenge_view = TeamBattleChallengeView(interaction.user, opponent, row_a, row_b, eval_a, eval_b)
     challenge_embed = challenge_view.make_challenge_embed()
-    await interaction.response.send_message(
-        content=f"⚔️ {opponent.mention}, you have received an NBA Dream Team battle challenge from {interaction.user.mention}!",
-        embed=challenge_embed,
-        view=challenge_view
-    )
+    
+    # Attach 2K versus faceoff graphic to challenge embed
+    versus_file = None
+    try:
+        stats_a = await db.get_team_battle_stats(interaction.user.id)
+        stats_b = await db.get_team_battle_stats(opponent.id)
+        versus_buf = generate_versus_matchup_image(interaction.user.display_name, opponent.display_name, picks_a, picks_b, eval_a, eval_b, stats_a, stats_b)
+        versus_file = discord.File(versus_buf, filename="versus_matchup.png")
+        challenge_embed.set_image(url="attachment://versus_matchup.png")
+    except Exception as e:
+        logger.debug(f"Could not attach versus image to challenge: {e}")
+
+    if versus_file:
+        await interaction.response.send_message(
+            content=f"⚔️ {opponent.mention}, you have received an NBA Dream Team battle challenge from {interaction.user.mention}!",
+            embed=challenge_embed,
+            file=versus_file,
+            view=challenge_view
+        )
+    else:
+        await interaction.response.send_message(
+            content=f"⚔️ {opponent.mention}, you have received an NBA Dream Team battle challenge from {interaction.user.mention}!",
+            embed=challenge_embed,
+            view=challenge_view
+        )
     try:
         challenge_view.message = await interaction.original_response()
     except Exception:
@@ -9616,6 +9997,39 @@ async def teamqueue_prefix_cmd(ctx: commands.Context):
     await handle_team_queue(ctx=ctx)
 
 
+@bot.command(name="battlecard", aliases=["versus", "matchup", "faceoff", "scout"])
+@commands.guild_only()
+async def battlecard_prefix_cmd(ctx: commands.Context, opponent: discord.Member):
+    """Generate a high-definition 2K Head-to-Head Versus Matchup card against another member: !battlecard @user"""
+    target_a = ctx.author
+    target_b = opponent
+    if target_a.id == target_b.id:
+        await ctx.send("❌ You cannot generate a versus card against yourself! Pick another member or `@Sweety`.")
+        return
+
+    row_a = await db.get_dream_team(target_a.id)
+    if not row_a:
+        await ctx.send(f"❌ {ctx.author.mention} **You haven't built a $15 Dream Team yet!**\nUse `!buildteam` to draft your squad first.")
+        return
+
+    if getattr(target_b, "bot", False) or (bot.user and target_b.id == bot.user.id):
+        row_b = await ensure_sweety_ai_team(guild_id=ctx.guild.id if ctx.guild else None, target_id=target_b.id)
+    else:
+        row_b = await db.get_dream_team(target_b.id)
+
+    if not row_b:
+        await ctx.send(f"❌ **{target_b.display_name}** hasn't built a $15 Dream Team yet! Tell them to run `!buildteam`.")
+        return
+
+    card_embed, card_file = await build_battlecard_embed(target_a, target_b, row_a, row_b)
+    if card_embed and card_file:
+        await ctx.send(embed=card_embed, file=card_file)
+    elif card_file:
+        await ctx.send(file=card_file)
+    elif card_embed:
+        await ctx.send(embed=card_embed)
+
+
 @bot.command(name="teambattle", aliases=["finals", "nbabattle", "squadbattle"])
 @commands.guild_only()
 async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member):
@@ -9635,13 +10049,34 @@ async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member)
         picks_b = extract_picks_from_row(row_b)
         eval_a = evaluate_dream_team(picks_a)
         eval_b = evaluate_dream_team(picks_b)
+        
         live_view = InteractiveTeamBattleView(ctx.author, opponent, picks_a, picks_b, eval_a, eval_b, row_a, row_b)
         embed = live_view.make_battle_embed()
-        await ctx.send(
-            content=f"🤖 **Challenge Accepted by {opponent.mention}! AI Coach Sweety has entered the court! Choose your live play call for Quarter 1 (PG Duel):**",
-            embed=embed,
-            view=live_view
-        )
+
+        # Attach 2K pre-game faceoff versus graphic
+        versus_file = None
+        try:
+            stats_a = await db.get_team_battle_stats(ctx.author.id)
+            stats_b = await db.get_team_battle_stats(opponent.id)
+            versus_buf = generate_versus_matchup_image(ctx.author.display_name, opponent.display_name, picks_a, picks_b, eval_a, eval_b, stats_a, stats_b)
+            versus_file = discord.File(versus_buf, filename="versus_matchup.png")
+            embed.set_image(url="attachment://versus_matchup.png")
+        except Exception as e:
+            logger.debug(f"Could not attach versus image in prefix battle: {e}")
+
+        if versus_file:
+            await ctx.send(
+                content=f"🤖 **Challenge Accepted by {opponent.mention}! AI Coach Sweety has entered the court! Choose your live play call for Quarter 1 (PG Duel):**",
+                embed=embed,
+                file=versus_file,
+                view=live_view
+            )
+        else:
+            await ctx.send(
+                content=f"🤖 **Challenge Accepted by {opponent.mention}! AI Coach Sweety has entered the court! Choose your live play call for Quarter 1 (PG Duel):**",
+                embed=embed,
+                view=live_view
+            )
         return
 
     row_b = await db.get_dream_team(opponent.id)
@@ -9656,11 +10091,31 @@ async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member)
 
     challenge_view = TeamBattleChallengeView(ctx.author, opponent, row_a, row_b, eval_a, eval_b)
     challenge_embed = challenge_view.make_challenge_embed()
-    msg = await ctx.send(
-        content=f"⚔️ {opponent.mention}, you have received an NBA Dream Team battle challenge from {ctx.author.mention}!",
-        embed=challenge_embed,
-        view=challenge_view
-    )
+    
+    # Attach 2K versus faceoff graphic to challenge embed
+    versus_file = None
+    try:
+        stats_a = await db.get_team_battle_stats(ctx.author.id)
+        stats_b = await db.get_team_battle_stats(opponent.id)
+        versus_buf = generate_versus_matchup_image(ctx.author.display_name, opponent.display_name, picks_a, picks_b, eval_a, eval_b, stats_a, stats_b)
+        versus_file = discord.File(versus_buf, filename="versus_matchup.png")
+        challenge_embed.set_image(url="attachment://versus_matchup.png")
+    except Exception as e:
+        logger.debug(f"Could not attach versus image to challenge embed: {e}")
+
+    if versus_file:
+        msg = await ctx.send(
+            content=f"⚔️ {opponent.mention}, you have received an NBA Dream Team battle challenge from {ctx.author.mention}!",
+            embed=challenge_embed,
+            file=versus_file,
+            view=challenge_view
+        )
+    else:
+        msg = await ctx.send(
+            content=f"⚔️ {opponent.mention}, you have received an NBA Dream Team battle challenge from {ctx.author.mention}!",
+            embed=challenge_embed,
+            view=challenge_view
+        )
     challenge_view.message = msg
 
 
