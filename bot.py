@@ -5479,179 +5479,349 @@ def get_nba_player_headshot(player_name: str) -> Optional[Image.Image]:
         return None
 
 
-def generate_dream_team_card(user_name: str, picks: Dict[str, Dict[str, Any]], evaluation: Dict[str, Any]) -> io.BytesIO:
-    """Generates a high-definition 1100x620 hardwood card graphic displaying the 5 starting player photo headshots, attributes, and tier badges."""
-    width, height = 1100, 620
-    canvas = Image.new("RGBA", (width, height), color=(15, 23, 42, 255))  # Slate dark 900
+def _draw_star_polygon(draw: ImageDraw.Draw, center: Tuple[int, int], size: int, color: Tuple[int, int, int, int]):
+    """Draws a crisp gold star polygon on PIL canvas."""
+    cx, cy = center
+    points = []
+    for i in range(10):
+        r = size if i % 2 == 0 else size / 2.2
+        angle = i * math.pi / 5 - math.pi / 2
+        points.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+    draw.polygon(points, fill=color)
+
+
+def generate_dream_team_card(
+    user_name: str,
+    picks: Dict[str, Dict[str, Any]],
+    evaluation: Dict[str, Any],
+    stats: Optional[Dict[str, Any]] = None
+) -> io.BytesIO:
+    """Generates a high-definition 1600x960 NBA 2K MyTEAM lineup graphic showcasing the 5 starting player photo headshots, ratings, salary cap, and team telemetry."""
+    W, H = 1600, 960
+    # Create base dark stadium canvas
+    canvas = Image.new("RGBA", (W, H), (8, 12, 22, 255))
     draw = ImageDraw.Draw(canvas)
 
-    tier_color_rgb = (234, 179, 8, 255) if "S+" in evaluation.get("tier", "") else (59, 130, 246, 255)
-    draw.rectangle([(0, 0), (width, 85)], fill=(30, 41, 59, 255))
-    draw.line([(0, 83), (width, 83)], fill=tier_color_rgb, width=3)
+    # 1. Realistic Stadium & Court Background
+    for y in range(H):
+        t = y / H
+        r = int(7 * (1 - t) + 14 * t)
+        g = int(10 * (1 - t) + 20 * t)
+        b = int(18 * (1 - t) + 38 * t)
+        draw.line([(0, y), (W, y)], fill=(r, g, b, 255))
 
-    font_title = _get_nba_card_font(28, bold=True)
-    font_bold = _get_nba_card_font(16, bold=True)
-    font_sm = _get_nba_card_font(12, bold=False)
-    font_pos = _get_nba_card_font(15, bold=True)
+    # Subtle hardwood angled floor grid in lower half
+    floor_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    fl_draw = ImageDraw.Draw(floor_layer)
+    for x_line in range(-200, W + 400, 70):
+        fl_draw.line([(x_line, H - 280), (x_line - 160, H)], fill=(255, 255, 255, 5), width=1)
+        fl_draw.line([(x_line, H - 280), (x_line + 160, H)], fill=(255, 255, 255, 5), width=1)
 
-    draw.text((35, 25), f"{user_name[:22]}'s $15 Starting 5", fill=(255, 255, 255, 255), font=font_title)
+    fl_draw.ellipse([W//2 - 450, H - 320, W//2 + 450, H + 320], outline=(59, 130, 246, 20), width=2)
+    fl_draw.ellipse([W//2 - 140, H - 230, W//2 + 140, H + 100], outline=(255, 184, 0, 25), width=2)
+    fl_draw.line([(W//2, H - 280), (W//2, H)], fill=(255, 255, 255, 15), width=2)
 
-    ovr_str = f"{evaluation.get('ovr', 90.0)} OVR • {evaluation.get('tier', 'S Tier').split('•')[0].strip()}"
-    draw.rounded_rectangle([(width - 330, 18), (width - 35, 66)], radius=12, fill=(15, 23, 42, 255), outline=tier_color_rgb, width=2)
-    draw.text((width - 312, 30), ovr_str, fill=tier_color_rgb, font=font_bold)
+    canvas = Image.alpha_composite(canvas, floor_layer)
+    draw = ImageDraw.Draw(canvas)
 
+    # 2. Top Header HUD Banner
+    draw.rounded_rectangle([(35, 20), (W - 35, 135)], radius=18, fill=(13, 18, 30, 245), outline=(38, 50, 72, 255), width=2)
+    draw.line([(55, 20), (W - 55, 20)], fill=(255, 184, 0, 200), width=2)
+
+    f_tag = _get_nba_card_font(12, bold=True)
+    f_team_name = _get_nba_card_font(34, bold=True)
+    f_meta = _get_nba_card_font(14, bold=False)
+
+    draw.text((65, 32), "NBA 2K MYTEAM  |  STARTING 5 ROSTER", fill=(255, 184, 0, 255), font=f_tag)
+    draw.text((65, 52), f"{user_name.upper()}'S SQUAD", fill=(255, 255, 255, 255), font=f_team_name)
+
+    rec_text = "FRANCHISE ROSTER  •  ALL-TIME CHAMPIONSHIP LINEUP"
+    if stats:
+        w = stats.get("wins", 0)
+        l = stats.get("losses", 0)
+        st = stats.get("streak", 0)
+        st_label = f"HOT STREAK: {st}W" if st > 0 else (f"COLD: {abs(st)}L" if st < 0 else "EVEN")
+        rec_text = f"CAREER RECORD: {w}W - {l}L  •  {st_label}  •  BEST: {stats.get('best_streak', 0)}W"
+    draw.text((65, 98), rec_text, fill=(148, 163, 184, 255), font=f_meta)
+
+    # Right: OVR Badge & Salary Gauge
+    ovr_val = evaluation.get("ovr", 90.0)
+    tier_raw = evaluation.get("tier", "S Tier").split("•")[0].strip()
+    total_cost = evaluation.get("total_cost", 15)
+
+    ovr_box_w = 280
+    ovr_box_x = W - 55 - ovr_box_w
+
+    draw.rounded_rectangle([(ovr_box_x, 32), (W - 55, 85)], radius=12, fill=(8, 12, 22, 255), outline=(255, 184, 0, 255), width=2)
+    _draw_star_polygon(draw, (ovr_box_x + 28, 58), 14, (255, 184, 0, 255))
+
+    f_ovr_big = _get_nba_card_font(28, bold=True)
+    f_tier_lbl = _get_nba_card_font(13, bold=True)
+    draw.text((ovr_box_x + 50, 42), f"{ovr_val}", fill=(255, 255, 255, 255), font=f_ovr_big)
+    draw.text((ovr_box_x + 130, 49), tier_raw.upper(), fill=(255, 184, 0, 255), font=f_tier_lbl)
+
+    f_sal_txt = _get_nba_card_font(13, bold=True)
+    draw.text((ovr_box_x, 98), f"SALARY: ${total_cost} / $15", fill=(203, 213, 225, 255), font=f_sal_txt)
+
+    bar_sal_x = ovr_box_x + 130
+    bar_sal_w = (W - 55) - bar_sal_x
+    draw.rounded_rectangle([(bar_sal_x, 101), (W - 55, 113)], radius=4, fill=(24, 34, 52, 255))
+    sal_fill = int(min(1.0, total_cost / 15.0) * bar_sal_w)
+    sal_col = (34, 197, 94, 255) if total_cost == 15 else (255, 184, 0, 255)
+    draw.rounded_rectangle([(bar_sal_x, 101), (bar_sal_x + sal_fill, 113)], radius=4, fill=sal_col)
+
+    # 3. 5 Large Realistic Player Cards (PG | SG | SF | PF | C)
     positions = ["PG", "SG", "SF", "PF", "C"]
-    card_w = 195
-    card_h = 425
-    start_x = 35
-    gap = 20
-    y_pos = 115
+    card_w = 280
+    card_h = 630
+    start_x = 50
+    gap = 25
+    y_card = 165
 
-    tier_cost_colors = {
-        5: (239, 68, 68, 255),   # $5 Red
-        4: (168, 85, 247, 255),  # $4 Purple
-        3: (59, 130, 246, 255),  # $3 Blue
-        2: (34, 197, 94, 255),   # $2 Green
-        1: (203, 213, 225, 255)  # $1 Silver
+    tier_styling = {
+        5: {
+            "name": "DARK MATTER",
+            "border": (255, 45, 85, 255),
+            "accent": (255, 184, 0, 255),
+            "bg_glow": (255, 45, 85, 55),
+            "header_fill": (45, 15, 25, 255)
+        },
+        4: {
+            "name": "GALAXY OPAL",
+            "border": (168, 85, 247, 255),
+            "accent": (232, 121, 249, 255),
+            "bg_glow": (168, 85, 247, 50),
+            "header_fill": (35, 18, 48, 255)
+        },
+        3: {
+            "name": "DIAMOND",
+            "border": (59, 130, 246, 255),
+            "accent": (56, 189, 248, 255),
+            "bg_glow": (59, 130, 246, 45),
+            "header_fill": (15, 28, 48, 255)
+        },
+        2: {
+            "name": "AMETHYST",
+            "border": (34, 197, 94, 255),
+            "accent": (74, 222, 128, 255),
+            "bg_glow": (34, 197, 94, 45),
+            "header_fill": (15, 38, 25, 255)
+        },
+        1: {
+            "name": "RUBY / GOLD",
+            "border": (148, 163, 184, 255),
+            "accent": (226, 232, 240, 255),
+            "bg_glow": (148, 163, 184, 40),
+            "header_fill": (25, 32, 44, 255)
+        }
     }
 
+    f_pos = _get_nba_card_font(18, bold=True)
+    f_cost = _get_nba_card_font(18, bold=True)
+    f_ovr_tag = _get_nba_card_font(10, bold=True)
+    f_p_ovr_num = _get_nba_card_font(34, bold=True)
+    f_fn = _get_nba_card_font(12, bold=True)
+    f_team_arch = _get_nba_card_font(12, bold=False)
+    f_stat_name = _get_nba_card_font(13, bold=True)
+    f_stat_num = _get_nba_card_font(14, bold=True)
+    f_tier_ribbon = _get_nba_card_font(11, bold=True)
+
     for idx, pos in enumerate(positions):
-        x = start_x + idx * (card_w + gap)
-        pl = picks.get(pos, {"name": "Empty", "cost": 1, "team": "NBA", "archetype": "Player", "pts_3": 80, "defense": 80, "inside": 80, "clutch": 80})
+        cx = start_x + idx * (card_w + gap)
+        cy = y_card
+        pl = picks.get(pos, {"name": "Empty", "cost": 1, "team": "NBA", "archetype": "Star", "pts_3": 80, "defense": 80, "inside": 80, "clutch": 80})
         cost = pl.get("cost", 1)
-        cost_color = tier_cost_colors.get(cost, (203, 213, 225, 255))
+        ts = tier_styling.get(cost, tier_styling[1])
+        b_col = ts["border"]
+        a_col = ts["accent"]
 
-        # Outer card box
-        draw.rounded_rectangle([(x, y_pos), (x + card_w, y_pos + card_h)], radius=16, fill=(30, 41, 59, 255), outline=cost_color, width=2)
+        p_stats_vals = [pl.get("pts_3", 80), pl.get("defense", 80), pl.get("inside", 80), pl.get("clutch", 80)]
+        calc_ovr = int(sum(p_stats_vals) / len(p_stats_vals))
+        if cost == 5: p_ovr = max(98, min(99, calc_ovr + 5))
+        elif cost == 4: p_ovr = max(94, min(97, calc_ovr + 3))
+        elif cost == 3: p_ovr = max(90, min(93, calc_ovr + 1))
+        elif cost == 2: p_ovr = max(86, min(89, calc_ovr))
+        else: p_ovr = max(80, min(85, calc_ovr))
 
-        # Header tag (Position & Cost)
-        draw.rounded_rectangle([(x + 10, y_pos + 10), (x + card_w - 10, y_pos + 44)], radius=8, fill=(15, 23, 42, 255))
-        draw.text((x + 20, y_pos + 18), pos, fill=(255, 255, 255, 255), font=font_pos)
-        draw.text((x + card_w - 48, y_pos + 18), f"${cost}", fill=cost_color, font=font_pos)
+        # 3.1 Card Outer Glow & Shadow
+        card_fx = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        cfx_draw = ImageDraw.Draw(card_fx)
+        cfx_draw.rounded_rectangle([(cx - 10, cy - 10), (cx + card_w + 10, cy + card_h + 10)], radius=24, fill=ts["bg_glow"])
+        canvas = Image.alpha_composite(canvas, card_fx)
+        draw = ImageDraw.Draw(canvas)
 
-        # Real player photo cutout from NBA CDN
+        # 3.2 Card Body Background (Dark Obsidian Plate)
+        draw.rounded_rectangle([(cx, cy), (cx + card_w, cy + card_h)], radius=18, fill=(12, 17, 28, 255), outline=b_col, width=3)
+        draw.rounded_rectangle([(cx + 5, cy + 5), (cx + card_w - 5, cy + card_h - 5)], radius=14, outline=(255, 255, 255, 25), width=1)
+
+        # 3.3 Card Top Header: Position Badge, Cost Badge, and OVR Number
+        draw.rounded_rectangle([(cx + 12, cy + 12), (cx + 65, cy + 48)], radius=8, fill=(20, 28, 44, 255), outline=b_col, width=2)
+        draw.text((cx + 23, cy + 19), pos, fill=(255, 255, 255, 255), font=f_pos)
+
+        draw.rounded_rectangle([(cx + 74, cy + 12), (cx + 126, cy + 48)], radius=8, fill=(20, 28, 44, 255), outline=a_col, width=2)
+        draw.text((cx + 84, cy + 19), f"${cost}", fill=a_col, font=f_cost)
+
+        draw.text((cx + card_w - 68, cy + 12), "OVR", fill=(148, 163, 184, 255), font=f_ovr_tag)
+        draw.text((cx + card_w - 68, cy + 20), str(p_ovr), fill=b_col, font=f_p_ovr_num)
+
+        # 3.4 Backdrop aura glow behind player photo
+        aura_img = Image.new("RGBA", (card_w, 280), (0, 0, 0, 0))
+        aura_draw = ImageDraw.Draw(aura_img)
+        aura_draw.ellipse([15, 20, card_w - 15, 270], fill=ts["bg_glow"])
+        canvas.paste(aura_img, (cx, cy + 45), aura_img)
+        draw = ImageDraw.Draw(canvas)
+
+        # 3.5 Large Cutout Player Artwork (Dominant Element!)
         p_name = pl.get("name", "Player")
         headshot = get_nba_player_headshot(p_name)
         if headshot:
             try:
-                hs_w = card_w - 16
-                hs_h = int(hs_w * (headshot.height / headshot.width))
-                hs_resized = headshot.resize((hs_w, hs_h), Image.Resampling.LANCZOS)
-                canvas.alpha_composite(hs_resized, (x + 8, y_pos + 48))
+                target_w = card_w - 10
+                target_h = int(target_w * (headshot.height / headshot.width))
+                hs_res = headshot.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                
+                fade_mask = Image.new("L", hs_res.size, 255)
+                f_mask_draw = ImageDraw.Draw(fade_mask)
+                fade_start_y = int(target_h * 0.72)
+                for my in range(fade_start_y, target_h):
+                    alpha_factor = int(255 * (1.0 - (my - fade_start_y) / (target_h - fade_start_y)))
+                    f_mask_draw.line([(0, my), (target_w, my)], fill=alpha_factor)
+                
+                hs_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+                r_c, g_c, b_c, a_c = hs_res.split()
+                merged_alpha = Image.composite(a_c, Image.new("L", a_c.size, 0), fade_mask)
+                hs_res.putalpha(merged_alpha)
+
+                hs_layer.paste(hs_res, (cx + 5, cy + 48))
+                canvas = Image.alpha_composite(canvas, hs_layer)
+                draw = ImageDraw.Draw(canvas)
             except Exception as hs_err:
                 logger.debug(f"Error pasting headshot for {p_name}: {hs_err}")
+        else:
+            ph = Image.new("RGBA", (card_w - 30, 260), (20, 28, 44, 200))
+            ph_draw = ImageDraw.Draw(ph)
+            f_ph = _get_nba_card_font(36, bold=True)
+            initials = "".join([p[0] for p in p_name.split(" ") if p])[:2]
+            ph_draw.text(((card_w - 30)//2 - 25, 90), initials, fill=b_col, font=f_ph)
+            canvas.paste(ph, (cx + 15, cy + 55), ph)
+            draw = ImageDraw.Draw(canvas)
 
-        # Bottom info card box overlay
-        info_y = y_pos + 235
-        draw.rounded_rectangle([(x + 8, info_y), (x + card_w - 8, y_pos + card_h - 10)], radius=10, fill=(15, 23, 42, 240))
+        # 3.6 Player Nameplate Banner (Lower-middle)
+        np_y = cy + 325
+        draw.rounded_rectangle([(cx + 10, np_y), (cx + card_w - 10, np_y + 78)], radius=12, fill=(8, 12, 20, 250), outline=b_col, width=2)
         
         name_parts = p_name.split(" ")
         first_name = name_parts[0] if len(name_parts) > 1 else ""
-        last_name = name_parts[-1]
-        draw.text((x + 14, info_y + 8), f"{first_name} {last_name}", fill=(255, 255, 255, 255), font=font_bold)
-        draw.text((x + 14, info_y + 30), f"{pl.get('team', 'NBA')} • {pl.get('archetype', 'Star')[:15]}", fill=(148, 163, 184, 255), font=font_sm)
+        last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else name_parts[0]
 
-        # Attribute mini progress bars
-        stats = [
-            ("3PT", pl.get("pts_3", 80), (59, 130, 246, 255)),
-            ("DEF", pl.get("defense", 80), (34, 197, 94, 255)),
-            ("INS", pl.get("inside", 80), (239, 68, 68, 255)),
-            ("CLU", pl.get("clutch", 80), (234, 179, 8, 255))
+        f_ln_size = 21 if len(last_name) <= 10 else (17 if len(last_name) <= 14 else 15)
+        f_ln_dyn = _get_nba_card_font(f_ln_size, bold=True)
+
+        draw.text((cx + 18, np_y + 8), first_name.upper(), fill=(148, 163, 184, 255), font=f_fn)
+        draw.text((cx + 18, np_y + 24), last_name.upper(), fill=(255, 255, 255, 255), font=f_ln_dyn)
+        
+        arch_display = pl.get('archetype', 'Star')[:18].upper()
+        draw.text((cx + 18, np_y + 53), f"{pl.get('team', 'NBA')}  •  {arch_display}", fill=a_col, font=f_team_arch)
+
+        # 3.7 Player Attribute Stat Progress Bars (Bottom card container)
+        stat_box_y = np_y + 88
+        draw.rounded_rectangle([(cx + 10, stat_box_y), (cx + card_w - 10, cy + card_h - 32)], radius=10, fill=(6, 9, 16, 240), outline=(30, 41, 59, 255), width=1)
+        
+        stats_data = [
+            ("3PT", pl.get("pts_3", 80), (56, 189, 248, 255)),   # Cyan 3pt
+            ("DEF", pl.get("defense", 80), (74, 222, 128, 255)), # Green defense
+            ("INS", pl.get("inside", 80), (248, 113, 113, 255)), # Red inside
+            ("CLU", pl.get("clutch", 80), (251, 191, 36, 255))   # Gold clutch
         ]
-        s_y = info_y + 55
-        for s_label, s_val, s_col in stats:
-            draw.text((x + 14, s_y), s_label, fill=(148, 163, 184, 255), font=font_sm)
-            draw.text((x + 48, s_y), str(s_val), fill=(255, 255, 255, 255), font=font_sm)
-            draw.rounded_rectangle([(x + 75, s_y + 2), (x + card_w - 16, s_y + 9)], radius=3, fill=(51, 65, 85, 255))
-            fill_w = int(((s_val - 60) / 40) * (card_w - 95))
-            fill_w = max(4, min(card_w - 95, fill_w))
-            draw.rounded_rectangle([(x + 75, s_y + 2), (x + 75 + fill_w, s_y + 9)], radius=3, fill=s_col)
-            s_y += 26
 
-    # Bottom summary bar
-    draw.rounded_rectangle([(35, height - 62), (width - 35, height - 16)], radius=10, fill=(30, 41, 59, 255))
-    summary_text = (
-        f"🎯 3PT: {evaluation.get('avg_3pt', 85)}  |  🔒 DEF: {evaluation.get('avg_def', 85)}  |  "
-        f"🧠 IQ: {evaluation.get('avg_ply', 85)}  |  💥 INS: {evaluation.get('avg_ins', 85)}  |  "
-        f"👑 CLU: {evaluation.get('avg_clu', 85)}  |  💰 Salary: ${evaluation.get('total_cost', 15)}/$15"
-    )
-    draw.text((50, height - 47), summary_text, fill=(241, 245, 249, 255), font=font_bold)
+        sy = stat_box_y + 9
+        for s_tag, s_score, s_color in stats_data:
+            draw.text((cx + 20, sy), s_tag, fill=(148, 163, 184, 255), font=f_stat_name)
+            draw.text((cx + 58, sy), str(s_score), fill=(255, 255, 255, 255), font=f_stat_num)
+
+            bx1 = cx + 92
+            bx2 = cx + card_w - 22
+            bw = bx2 - bx1
+            draw.rounded_rectangle([(bx1, sy + 3), (bx2, sy + 11)], radius=4, fill=(20, 28, 44, 255))
+
+            pct = max(0.10, min(1.0, (s_score - 55) / 44.0))
+            fw = int(pct * bw)
+            draw.rounded_rectangle([(bx1, sy + 3), (bx1 + fw, sy + 11)], radius=4, fill=s_color)
+
+            sy += 23
+
+        # 3.8 Card Tier Badge Ribbon at very bottom of card
+        draw.rounded_rectangle([(cx + 25, cy + card_h - 26), (cx + card_w - 25, cy + card_h - 6)], radius=6, fill=(15, 22, 36, 255), outline=b_col, width=1)
+        draw.text((cx + 40, cy + card_h - 23), ts["name"], fill=a_col, font=f_tier_ribbon)
+
+    # 4. Bottom Team Telemetry HUD Strip
+    hud_y = y_card + card_h + 18
+    draw.rounded_rectangle([(35, hud_y), (W - 35, hud_y + 64)], radius=14, fill=(13, 18, 30, 245), outline=(38, 50, 72, 255), width=2)
+    draw.line([(55, hud_y), (W - 55, hud_y)], fill=(59, 130, 246, 180), width=2)
+
+    f_hud_lbl = _get_nba_card_font(13, bold=True)
+    f_hud_val = _get_nba_card_font(15, bold=True)
+    
+    hud_metrics = [
+        ("3PT SPACING", f"{evaluation.get('avg_3pt', 85)}", (56, 189, 248, 255)),
+        ("DEFENSE CLAMP", f"{evaluation.get('avg_def', 85)}", (74, 222, 128, 255)),
+        ("PLAYMAKING IQ", f"{evaluation.get('avg_ply', 85)}", (192, 132, 252, 255)),
+        ("INSIDE FINISHING", f"{evaluation.get('avg_ins', 85)}", (248, 113, 113, 255)),
+        ("CLUTCH GENE", f"{evaluation.get('avg_clu', 85)}", (251, 191, 36, 255))
+    ]
+
+    metric_w = (W - 100) // len(hud_metrics)
+    for m_idx, (m_title, m_val, m_c) in enumerate(hud_metrics):
+        mx = 60 + m_idx * metric_w
+        draw.text((mx, hud_y + 14), m_title, fill=(148, 163, 184, 255), font=f_hud_lbl)
+        draw.text((mx, hud_y + 34), m_val, fill=m_c, font=f_hud_val)
+        if m_idx < len(hud_metrics) - 1:
+            draw.line([(mx + metric_w - 20, hud_y + 15), (mx + metric_w - 20, hud_y + 50)], fill=(38, 50, 72, 255), width=1)
 
     buf = io.BytesIO()
-    canvas.convert("RGB").save(buf, format="PNG")
+    canvas.convert("RGB").save(buf, format="PNG", quality=95)
     buf.seek(0)
     return buf
 
 
-async def build_myteam_embed(target: Union[discord.Member, discord.User], row: Any) -> tuple[discord.Embed, discord.File]:
-    """Builds a comprehensive card embed and visual PIL starting-5 graphic showcasing a member's $15 Dream Team squad, ratings, career record, and GM badges."""
+async def build_myteam_embed(target: Union[discord.Member, discord.User], row: Any) -> tuple[Optional[discord.Embed], Optional[discord.File]]:
+    """Builds the modern NBA 2K MyTEAM high-resolution Starting 5 image graphic showcasing a member's lineup, attributes, OVR and tier."""
     picks = extract_picks_from_row(row)
     evaluation = evaluate_dream_team(picks)
     total_cost = evaluation["total_cost"]
 
     # Fetch career battle record and achievements
-    stats = await db.get_team_battle_stats(target.id)
-    wins = stats["wins"]
-    losses = stats["losses"]
-    total_games = wins + losses + stats["ties"]
-    win_rate = (wins / total_games * 100.0) if total_games > 0 else 0.0
-    streak = stats["streak"]
-    streak_fmt = f"🔥 {streak}W Streak" if streak > 0 else (f"❄️ {abs(streak)}L Cold" if streak < 0 else "⚪ Even")
+    stats = {"wins": 0, "losses": 0, "ties": 0, "streak": 0, "best_streak": 0, "achievements": []}
+    try:
+        stats = await db.get_team_battle_stats(target.id)
+    except Exception as e:
+        logger.debug(f"Error fetching stats for myteam graphic: {e}")
 
-    card_embed = discord.Embed(
-        title=f"🏆 {target.display_name}'s $15 All-Time Dream Team",
-        description=(
-            f"**Rating**: `{evaluation['ovr']} OVR` • **{evaluation['tier']}**\n"
-            f"**Salary Cap**: `${total_cost} / $15`\n"
-            f"**Career Record**: 📊 **`{wins}W — {losses}L`** (`{win_rate:.1f}% WR`) • **{streak_fmt}** *(Best: 🔥 {stats['best_streak']}W)*"
-        ),
-        color=evaluation["color"]
-    )
-    if hasattr(target, "display_avatar") and target.display_avatar:
-        card_embed.set_thumbnail(url=target.display_avatar.url)
+    try:
+        img_buf = generate_dream_team_card(target.display_name, picks, evaluation, stats)
+        card_file = discord.File(img_buf, filename="my_dream_team.png")
+        # Return None for embed so Discord presents purely the video-game image
+        return None, card_file
+    except Exception as img_err:
+        logger.error(f"Error generating dream team card image: {img_err}", exc_info=True)
+        # Fallback to text embed if image rendering fails
+        wins = stats.get("wins", 0)
+        losses = stats.get("losses", 0)
+        total_games = wins + losses + stats.get("ties", 0)
+        win_rate = (wins / total_games * 100.0) if total_games > 0 else 0.0
+        streak = stats.get("streak", 0)
+        streak_fmt = f"🔥 {streak}W Streak" if streak > 0 else (f"❄️ {abs(streak)}L Cold" if streak < 0 else "⚪ Even")
 
-    lineup_text = (
-        f"🏀 **PG**: {picks['PG']['emoji']} **{picks['PG']['name']}** (`${picks['PG']['cost']}`) • *{picks['PG'].get('archetype', 'Guard')}*\n"
-        f"🏀 **SG**: {picks['SG']['emoji']} **{picks['SG']['name']}** (`${picks['SG']['cost']}`) • *{picks['SG'].get('archetype', 'Guard')}*\n"
-        f"🏀 **SF**: {picks['SF']['emoji']} **{picks['SF']['name']}** (`${picks['SF']['cost']}`) • *{picks['SF'].get('archetype', 'Forward')}*\n"
-        f"🏀 **PF**: {picks['PF']['emoji']} **{picks['PF']['name']}** (`${picks['PF']['cost']}`) • *{picks['PF'].get('archetype', 'Forward')}*\n"
-        f"🏀 **C**: {picks['C']['emoji']} **{picks['C']['name']}** (`${picks['C']['cost']}`) • *{picks['C'].get('archetype', 'Center')}*"
-    )
-    card_embed.add_field(name="⭐ Starting 5 Lineup", value=lineup_text, inline=False)
-
-    stats_text = (
-        f"• 🎯 **3PT Spacing**: `{evaluation['avg_3pt']}/99`\n"
-        f"• 🔒 **Defense & Clamp**: `{evaluation['avg_def']}/99`\n"
-        f"• 🧠 **Playmaking / IQ**: `{evaluation['avg_ply']}/99`\n"
-        f"• 💥 **Inside Finishing**: `{evaluation['avg_ins']}/99`\n"
-        f"• 👑 **Clutch Rating**: `{evaluation['avg_clu']}/99`"
-    )
-    card_embed.add_field(name="📊 Team Attribute Breakdown", value=stats_text, inline=True)
-
-    # GM Badges & Accolades
-    unlocked = stats.get("achievements", [])
-    if unlocked:
-        badge_lines = []
-        for ach_id in unlocked:
-            if ach_id in NBA_ACHIEVEMENTS:
-                meta = NBA_ACHIEVEMENTS[ach_id]
-                badge_lines.append(f"{meta['emoji']} **{meta['title']}** — *{meta['desc']}*")
-        card_embed.add_field(name=f"🏅 GM Badges & Accolades ({len(unlocked)} Unlocked)", value="\n".join(badge_lines), inline=False)
-    else:
-        card_embed.add_field(name="🏅 GM Badges & Accolades", value="*No badges unlocked yet. Challenge members with `/teambattle` to unlock permanent titles!*", inline=False)
-
-    card_embed.add_field(name="🔥 Squad Strengths", value="\n".join(evaluation["strengths"]), inline=False)
-    if evaluation["weaknesses"]:
-        card_embed.add_field(name="⚠️ Potential Weaknesses", value="\n".join(evaluation["weaknesses"]), inline=False)
-
-    # Generate PIL 2D starting 5 court graphic with real player photo headshots
-    img_buf = generate_dream_team_card(target.display_name, picks, evaluation)
-    card_file = discord.File(img_buf, filename="my_dream_team.png")
-    card_embed.set_image(url="attachment://my_dream_team.png")
-
-    card_embed.set_footer(text="Challenge friends using /teambattle @user or join the queue with /teamqueue!")
-    card_embed.timestamp = discord.utils.utcnow()
-    return card_embed, card_file
+        fallback_embed = discord.Embed(
+            title=f"🏆 {target.display_name}'s $15 All-Time Dream Team",
+            description=(
+                f"**Rating**: `{evaluation['ovr']} OVR` • **{evaluation['tier']}**\n"
+                f"**Salary Cap**: `${total_cost} / $15`\n"
+                f"**Career Record**: 📊 **`{wins}W — {losses}L`** (`{win_rate:.1f}% WR`) • **{streak_fmt}** *(Best: 🔥 {stats.get('best_streak', 0)}W)*"
+            ),
+            color=evaluation.get("color", discord.Color.gold())
+        )
+        return fallback_embed, None
 
 
 async def build_teambattle_embed(author: Union[discord.Member, discord.User], opponent: Union[discord.Member, discord.User], row_a: Any, row_b: Any) -> discord.Embed:
@@ -6249,7 +6419,12 @@ class HubDraftButtonView(discord.ui.View):
             )
             return
         card_embed, card_file = await build_myteam_embed(interaction.user, row)
-        await interaction.response.send_message(embed=card_embed, file=card_file, ephemeral=True)
+        if card_embed and card_file:
+            await interaction.response.send_message(embed=card_embed, file=card_file, ephemeral=True)
+        elif card_file:
+            await interaction.response.send_message(file=card_file, ephemeral=True)
+        elif card_embed:
+            await interaction.response.send_message(embed=card_embed, ephemeral=True)
 
     @discord.ui.button(label="GM Profile & Rank", style=discord.ButtonStyle.secondary, emoji="📊", custom_id="hub_gm_profile_btn", row=1)
     async def gm_profile_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -7862,7 +8037,12 @@ async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[disc
         return
 
     card_embed, card_file = await build_myteam_embed(target, row)
-    await interaction.response.send_message(embed=card_embed, file=card_file)
+    if card_embed and card_file:
+        await interaction.response.send_message(embed=card_embed, file=card_file)
+    elif card_file:
+        await interaction.response.send_message(file=card_file)
+    elif card_embed:
+        await interaction.response.send_message(embed=card_embed)
 
 
 @bot.tree.command(name="teamqueue", description="⚔️ Join the live matchmaking queue to battle another member's $15 Dream Team")
@@ -9417,7 +9597,12 @@ async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Memb
         return
 
     card_embed, card_file = await build_myteam_embed(target, row)
-    await ctx.send(embed=card_embed, file=card_file)
+    if card_embed and card_file:
+        await ctx.send(embed=card_embed, file=card_file)
+    elif card_file:
+        await ctx.send(file=card_file)
+    elif card_embed:
+        await ctx.send(embed=card_embed)
 
 
 @bot.command(name="teamqueue", aliases=["matchmaking", "queue", "findmatch"])
