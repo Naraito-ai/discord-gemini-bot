@@ -4229,6 +4229,7 @@ class InteractiveTeamBattleView(discord.ui.View):
         self.tactics_log: List[Dict[str, Any]] = []
         self.is_clutch_mode = False
         self._is_resolving = False
+        self.last_trash_talk_msg: Optional[discord.Message] = None
         
         # Detect Sweety AI opponent personality (Aggressive Blitzer & Adaptive Counter Boss)
         self.is_sweety_ai = getattr(self.opponent, "bot", False) or (bot.user and self.opponent.id == bot.user.id)
@@ -4877,43 +4878,53 @@ class InteractiveTeamBattleView(discord.ui.View):
         embed.timestamp = discord.utils.utcnow()
         self.final_embed = embed
 
-        # Broadcast Public Sports Ticker to the match channel
+        # Clean up any leftover in-game trash talk message so channel is clean after the game
+        if getattr(self, "last_trash_talk_msg", None):
+            try:
+                _bot_deleted_message_ids.add(self.last_trash_talk_msg.id)
+                await self.last_trash_talk_msg.delete()
+            except Exception:
+                pass
+            self.last_trash_talk_msg = None
+
+        # Broadcast Public Sports Ticker ONLY for matchmaking queue channels (not direct duels)
         try:
-            chan = getattr(self, "channel", None) or (self.message.channel if self.message else None)
-            if chan and hasattr(chan, "send"):
-                ticker_desc = (
-                    f"👑 **`{winner_name}`** (`{winner_pts} PTS`) defeats **`{loser_name}`** (`{loser_pts} PTS`) in **{len(self.round_history)} Quarters**!\n\n"
-                    f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Series: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
-                    f"• 👑 **Champion**: **{winner_name}** (`{winner_eval.get('ovr', 90)} OVR`) • `Record: {updated_stats_w.get('wins', 0)}W-{updated_stats_w.get('losses', 0)}L` • {updated_rank_w['title']}\n"
-                    f"• 📊 **Box Score**: {q_grid_str}\n"
-                    f"• 🎖️ **Series MVP**: {p_emoji} **{p_name}** (`{mvp_pts} PTS` • `{mvp_reb} REB` • `{mvp_ast} AST` • `{mvp_blk} BLK`)"
-                )
-                if rivalry_info and (rivalry_info.get("wins_a", 0) + rivalry_info.get("wins_b", 0) + rivalry_info.get("ties", 0)) >= 3:
-                    ticker_desc += f"\n• ⚔️ **Rivalry Series**: `{self.author.display_name} ({rivalry_info.get('wins_a', 0)}) — {self.opponent.display_name} ({rivalry_info.get('wins_b', 0)})`"
-
-                ticker_embed = discord.Embed(
-                    title="📢 🏀 BREAKING: NBA DUEL FINAL SCORE",
-                    description=ticker_desc,
-                    color=discord.Color.gold()
-                )
-                if promoted_rank:
-                    ticker_embed.add_field(
-                        name="🚀 GM PROMOTION ALERT!",
-                        value=f"👑 **{winner_member.display_name}** has leveled up to **{promoted_rank['title']}**! ({promoted_rank['bar']})",
-                        inline=False
+            if getattr(self, "is_queue_match", False):
+                chan = getattr(self, "channel", None) or (self.message.channel if self.message else None)
+                if chan and hasattr(chan, "send"):
+                    ticker_desc = (
+                        f"👑 **`{winner_name}`** (`{winner_pts} PTS`) defeats **`{loser_name}`** (`{loser_pts} PTS`) in **{len(self.round_history)} Quarters**!\n\n"
+                        f"### 🏀 Final Score: **`{final_score_a} — {final_score_b}`** *(Series: `{self.duels_won_a} — {self.duels_won_b}`)*\n"
+                        f"• 👑 **Champion**: **{winner_name}** (`{winner_eval.get('ovr', 90)} OVR`) • `Record: {updated_stats_w.get('wins', 0)}W-{updated_stats_w.get('losses', 0)}L` • {updated_rank_w['title']}\n"
+                        f"• 📊 **Box Score**: {q_grid_str}\n"
+                        f"• 🎖️ **Series MVP**: {p_emoji} **{p_name}** (`{mvp_pts} PTS` • `{mvp_reb} REB` • `{mvp_ast} AST` • `{mvp_blk} BLK`)"
                     )
-                if is_daily_awarded:
-                    ticker_embed.add_field(
-                        name="🏅 DAILY CHALLENGE CONQUERED!",
-                        value=f"👑 **{winner_member.display_name}** claimed today's Daily Boss bounty! (Total Daily Ws: `{updated_stats_w.get('daily_wins', 0)}`)",
-                        inline=False
-                    )
-                if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
-                    ticker_embed.set_thumbnail(url=winner_member.display_avatar.url)
+                    if rivalry_info and (rivalry_info.get("wins_a", 0) + rivalry_info.get("wins_b", 0) + rivalry_info.get("ties", 0)) >= 3:
+                        ticker_desc += f"\n• ⚔️ **Rivalry Series**: `{self.author.display_name} ({rivalry_info.get('wins_a', 0)}) — {self.opponent.display_name} ({rivalry_info.get('wins_b', 0)})`"
 
-                ticker_embed.set_footer(text="Sweety Live Tactical NBA Engine • Challenge members with /teambattle or queue with /teamqueue")
-                ticker_embed.timestamp = discord.utils.utcnow()
-                await chan.send(embed=ticker_embed)
+                    ticker_embed = discord.Embed(
+                        title="📢 🏀 BREAKING: NBA DUEL FINAL SCORE",
+                        description=ticker_desc,
+                        color=discord.Color.gold()
+                    )
+                    if promoted_rank:
+                        ticker_embed.add_field(
+                            name="🚀 GM PROMOTION ALERT!",
+                            value=f"👑 **{winner_member.display_name}** has leveled up to **{promoted_rank['title']}**! ({promoted_rank['bar']})",
+                            inline=False
+                        )
+                    if is_daily_awarded:
+                        ticker_embed.add_field(
+                            name="🏅 DAILY CHALLENGE CONQUERED!",
+                            value=f"👑 **{winner_member.display_name}** claimed today's Daily Boss bounty! (Total Daily Ws: `{updated_stats_w.get('daily_wins', 0)}`)",
+                            inline=False
+                        )
+                    if hasattr(winner_member, "display_avatar") and winner_member.display_avatar:
+                        ticker_embed.set_thumbnail(url=winner_member.display_avatar.url)
+
+                    ticker_embed.set_footer(text="Sweety Live Tactical NBA Engine • Challenge members with /teambattle or queue with /teamqueue")
+                    ticker_embed.timestamp = discord.utils.utcnow()
+                    await chan.send(embed=ticker_embed)
         except Exception as broadcast_err:
             logger.warning(f"[InteractiveTeamBattleView] Auto-broadcast ticker failed: {broadcast_err}")
 
@@ -5224,12 +5235,22 @@ class InteractiveTeamBattleView(discord.ui.View):
 
             await interaction.edit_original_response(embed=embed, view=self)
 
-            # Send Sweety trash talk as a separate follow-up message (NOT inside the embed)
+            # Send Sweety trash talk: delete previous trash talk before sending the next one (0 spam, at most 1 message)
             if self.is_sweety_ai and sweety_talk_line and not self.is_game_over:
                 try:
-                    await interaction.followup.send(sweety_talk_line)
+                    if self.last_trash_talk_msg:
+                        try:
+                            _bot_deleted_message_ids.add(self.last_trash_talk_msg.id)
+                            await self.last_trash_talk_msg.delete()
+                        except Exception:
+                            pass
+                        self.last_trash_talk_msg = None
+
+                    chan = getattr(self, "channel", None) or (interaction.channel if interaction else None)
+                    if chan and hasattr(chan, "send"):
+                        self.last_trash_talk_msg = await chan.send(sweety_talk_line)
                 except Exception as st_err:
-                    logger.debug(f"Sweety followup trash talk send error: {st_err}")
+                    logger.debug(f"Sweety dynamic single trash talk send error: {st_err}")
 
         except Exception as e:
             logger.error(f"[InteractiveTeamBattleView] handle_tactical_action error: {e}", exc_info=True)
