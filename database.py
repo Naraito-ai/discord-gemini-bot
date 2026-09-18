@@ -292,6 +292,32 @@ class DatabaseManager:
                 updated_at REAL NOT NULL,
                 PRIMARY KEY (player_a, player_b)
             );
+            """,
+            # User Snipe 30-Day History Table
+            """
+            CREATE TABLE IF NOT EXISTS user_snipe_history (
+                id SERIAL PRIMARY KEY,
+                message_id TEXT NOT NULL,
+                guild_id TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                channel_name TEXT DEFAULT '',
+                user_id TEXT NOT NULL,
+                user_name TEXT NOT NULL,
+                user_display_name TEXT DEFAULT '',
+                user_avatar TEXT,
+                content TEXT,
+                attachments_json TEXT DEFAULT '[]',
+                stickers_json TEXT DEFAULT '[]',
+                message_type TEXT DEFAULT 'deleted',
+                before_content TEXT,
+                after_content TEXT,
+                created_at REAL NOT NULL,
+                recorded_at REAL NOT NULL
+            );
+            """,
+            # Fast index for 30-day user snipe lookup
+            """
+            CREATE INDEX IF NOT EXISTS idx_user_snipe_lookup ON user_snipe_history(guild_id, user_id, recorded_at);
             """
         ]
         
@@ -819,6 +845,138 @@ class DatabaseManager:
             LIMIT ?
         """
         return await self.fetch(query, int(limit))
+
+    async def record_user_snipe_event(
+        self,
+        message_id: Any,
+        guild_id: Any,
+        channel_id: Any,
+        channel_name: str,
+        user_id: Any,
+        user_name: str,
+        user_display_name: str,
+        user_avatar: Optional[str],
+        content: str,
+        attachments_json: str = "[]",
+        stickers_json: str = "[]",
+        message_type: str = "deleted",
+        before_content: Optional[str] = None,
+        after_content: Optional[str] = None,
+        created_at: Optional[float] = None,
+        recorded_at: Optional[float] = None
+    ) -> bool:
+        """Stores a deleted or edited message in persistent database for up to 30-day user snipe history."""
+        now = recorded_at or datetime.now().timestamp()
+        c_at = created_at or now
+        query = """
+            INSERT INTO user_snipe_history (
+                message_id, guild_id, channel_id, channel_name, user_id,
+                user_name, user_display_name, user_avatar, content,
+                attachments_json, stickers_json, message_type,
+                before_content, after_content, created_at, recorded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        try:
+            await self.execute(
+                query,
+                str(message_id),
+                str(guild_id),
+                str(channel_id),
+                str(channel_name),
+                str(user_id),
+                str(user_name),
+                str(user_display_name),
+                str(user_avatar or ""),
+                str(content or ""),
+                str(attachments_json or "[]"),
+                str(stickers_json or "[]"),
+                str(message_type),
+                str(before_content or "") if before_content is not None else None,
+                str(after_content or "") if after_content is not None else None,
+                float(c_at),
+                float(now)
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error recording user snipe event: {e}")
+            return False
+
+    async def get_user_snipe_history(
+        self,
+        guild_id: Any,
+        user_id: Any,
+        days: int = 30,
+        message_type: Optional[str] = None,
+        limit: int = 150
+    ) -> List[Dict[str, Any]]:
+        """Fetches deleted/edited message history for a specific user in a guild within the past X days (default 30)."""
+        cutoff = datetime.now().timestamp() - (max(1, min(days, 30)) * 86400)
+        if message_type:
+            query = """
+                SELECT * FROM user_snipe_history
+                WHERE guild_id = ? AND user_id = ? AND message_type = ? AND recorded_at >= ?
+                ORDER BY recorded_at DESC
+                LIMIT ?
+            """
+            return await self.fetch(query, str(guild_id), str(user_id), str(message_type), cutoff, int(limit))
+        else:
+            query = """
+                SELECT * FROM user_snipe_history
+                WHERE guild_id = ? AND user_id = ? AND recorded_at >= ?
+                ORDER BY recorded_at DESC
+                LIMIT ?
+            """
+            return await self.fetch(query, str(guild_id), str(user_id), cutoff, int(limit))
+
+    async def get_user_snipe_stats(
+        self,
+        guild_id: Any,
+        user_id: Any,
+        days: int = 30
+    ) -> Dict[str, Any]:
+        """Calculates 30-day deleted and edited message stats for a user."""
+        cutoff = datetime.now().timestamp() - (max(1, min(days, 30)) * 86400)
+        query = """
+            SELECT 
+                COUNT(*) as total_count,
+                SUM(CASE WHEN message_type = 'deleted' THEN 1 ELSE 0 END) as deleted_count,
+                SUM(CASE WHEN message_type = 'edited' THEN 1 ELSE 0 END) as edited_count
+            FROM user_snipe_history
+            WHERE guild_id = ? AND user_id = ? AND recorded_at >= ?
+        """
+        row = await self.fetchrow(query, str(guild_id), str(user_id), cutoff)
+        if not row:
+            return {"total_count": 0, "deleted_count": 0, "edited_count": 0}
+        return {
+            "total_count": row.get("total_count", 0) or 0,
+            "deleted_count": row.get("deleted_count", 0) or 0,
+            "edited_count": row.get("edited_count", 0) or 0
+        }
+
+    async def prune_old_snipe_history(self, days: int = 30) -> int:
+        """Prunes snipe history older than specified days (default 30)."""
+        cutoff = datetime.now().timestamp() - (max(1, days) * 86400)
+        query = "DELETE FROM user_snipe_history WHERE recorded_at < ?"
+        try:
+            res = await self.execute(query, cutoff)
+            return res if isinstance(res, int) else 0
+        except Exception as e:
+            logger.error(f"Error pruning old snipe history: {e}")
+            return 0
+
+    async def clear_user_snipe_history(self, guild_id: Any, user_id: Optional[Any] = None) -> int:
+        """Clears persistent snipe history for a specific user or entire guild."""
+        try:
+            if user_id:
+                query = "DELETE FROM user_snipe_history WHERE guild_id = ? AND user_id = ?"
+                res = await self.execute(query, str(guild_id), str(user_id))
+            else:
+                query = "DELETE FROM user_snipe_history WHERE guild_id = ?"
+                res = await self.execute(query, str(guild_id))
+            return res if isinstance(res, int) else 0
+        except Exception as e:
+            logger.error(f"Error clearing user snipe history: {e}")
+            return 0
 
     async def close(self):
         """Closes all database connections."""

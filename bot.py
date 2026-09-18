@@ -1149,8 +1149,30 @@ def record_deleted_message(message: discord.Message):
     if len(_snipe_cache[chan_id]) > MAX_SNIPE_HISTORY:
         _snipe_cache[chan_id].pop()
 
+    # Asynchronously save to persistent 30-day user snipe database
+    db_payload = {
+        "message_id": message.id,
+        "guild_id": message.guild.id,
+        "channel_id": chan_id,
+        "channel_name": getattr(message.channel, "name", "channel"),
+        "author_id": message.author.id,
+        "author_name": str(message.author),
+        "author_display_name": getattr(message.author, "display_name", str(message.author)),
+        "author_avatar": message.author.display_avatar.url if getattr(message.author, "display_avatar", None) else None,
+        "content": message.content or "",
+        "attachments": attachments,
+        "stickers": stickers,
+        "created_at_ts": message.created_at.timestamp() if hasattr(message.created_at, "timestamp") else time.time(),
+        "deleted_at_ts": time.time()
+    }
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(async_record_user_snipe("deleted", db_payload))
+    except RuntimeError:
+        pass
+
 def record_edited_message(before: discord.Message, after: discord.Message):
-    """Stores edited message in channel ring buffer (capped at MAX_SNIPE_HISTORY)."""
+    """Stores edited message in channel ring buffer (capped at MAX_SNIPE_HISTORY) and persistent 30-day database."""
     if not before.guild or (before.author and before.author.bot):
         return
     if before.content == after.content:
@@ -1178,6 +1200,306 @@ def record_edited_message(before: discord.Message, after: discord.Message):
     _editsnipe_cache[chan_id].insert(0, entry)
     if len(_editsnipe_cache[chan_id]) > MAX_SNIPE_HISTORY:
         _editsnipe_cache[chan_id].pop()
+
+    # Asynchronously save to persistent 30-day user snipe database
+    db_payload = {
+        "message_id": before.id,
+        "guild_id": before.guild.id,
+        "channel_id": chan_id,
+        "channel_name": getattr(before.channel, "name", "channel"),
+        "author_id": before.author.id,
+        "author_name": str(before.author),
+        "author_display_name": getattr(before.author, "display_name", str(before.author)),
+        "author_avatar": before.author.display_avatar.url if getattr(before.author, "display_avatar", None) else None,
+        "before_content": before.content or "",
+        "after_content": after.content or "",
+        "created_at_ts": before.created_at.timestamp() if hasattr(before.created_at, "timestamp") else time.time(),
+        "edited_at_ts": (after.edited_at.timestamp() if hasattr(after.edited_at, "timestamp") and after.edited_at else time.time())
+    }
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(async_record_user_snipe("edited", db_payload))
+    except RuntimeError:
+        pass
+
+
+async def async_record_user_snipe(event_type: str, data: dict):
+    """Background task to store a deleted/edited message event in the 30-day persistent user snipe database."""
+    try:
+        if event_type == "deleted":
+            await db.record_user_snipe_event(
+                message_id=data["message_id"],
+                guild_id=data["guild_id"],
+                channel_id=data["channel_id"],
+                channel_name=data["channel_name"],
+                user_id=data["author_id"],
+                user_name=data["author_name"],
+                user_display_name=data["author_display_name"],
+                user_avatar=data["author_avatar"],
+                content=data["content"],
+                attachments_json=json.dumps(data.get("attachments", [])),
+                stickers_json=json.dumps(data.get("stickers", [])),
+                message_type="deleted",
+                created_at=data["created_at_ts"],
+                recorded_at=data["deleted_at_ts"]
+            )
+        elif event_type == "edited":
+            await db.record_user_snipe_event(
+                message_id=data["message_id"],
+                guild_id=data["guild_id"],
+                channel_id=data["channel_id"],
+                channel_name=data["channel_name"],
+                user_id=data["author_id"],
+                user_name=data["author_name"],
+                user_display_name=data["author_display_name"],
+                user_avatar=data["author_avatar"],
+                content=data["after_content"],
+                message_type="edited",
+                before_content=data["before_content"],
+                after_content=data["after_content"],
+                created_at=data["created_at_ts"],
+                recorded_at=data["edited_at_ts"]
+            )
+    except Exception as e:
+        logger.debug(f"Error saving user snipe history event: {e}")
+
+
+class UserSnipePaginationView(discord.ui.View):
+    """Interactive paginated viewer for up to 30 days of a specific user's deleted and edited message history."""
+    def __init__(
+        self,
+        author: Union[discord.Member, discord.User],
+        target_user: Union[discord.Member, discord.User],
+        guild_id: int,
+        records: List[Dict[str, Any]],
+        stats: Dict[str, Any],
+        days: int = 30,
+        filter_type: str = "all",
+        page: int = 0
+    ):
+        super().__init__(timeout=180)
+        self.author = author
+        self.target_user = target_user
+        self.guild_id = guild_id
+        self.all_records = records
+        self.stats = stats
+        self.days = min(30, max(1, days))
+        self.filter_type = filter_type
+        self.page = page
+        self._apply_filter()
+        self._build_components()
+
+    def _apply_filter(self):
+        if self.filter_type == "deleted":
+            self.filtered_records = [r for r in self.all_records if r.get("message_type") == "deleted"]
+        elif self.filter_type == "edited":
+            self.filtered_records = [r for r in self.all_records if r.get("message_type") == "edited"]
+        else:
+            self.filtered_records = list(self.all_records)
+        
+        self.total_pages = max(1, len(self.filtered_records))
+        self.page = min(self.page, self.total_pages - 1)
+
+    def _build_components(self):
+        self.clear_items()
+        
+        # Filter select menu
+        select = discord.ui.Select(
+            placeholder="🔍 Filter message type...",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=f"All Activity ({len(self.all_records)})", value="all", emoji="📋", default=(self.filter_type == "all")),
+                discord.SelectOption(label=f"Deleted Messages ({self.stats.get('deleted_count', 0)})", value="deleted", emoji="🗑️", default=(self.filter_type == "deleted")),
+                discord.SelectOption(label=f"Edited Messages ({self.stats.get('edited_count', 0)})", value="edited", emoji="✏️", default=(self.filter_type == "edited")),
+            ],
+            row=0
+        )
+        select.callback = self.filter_callback
+        self.add_item(select)
+
+        # Pagination buttons
+        btn_first = discord.ui.Button(label="⏮️", style=discord.ButtonStyle.secondary, disabled=(self.page <= 0 or len(self.filtered_records) <= 1), row=1)
+        btn_first.callback = self.first_page_callback
+        self.add_item(btn_first)
+
+        btn_prev = discord.ui.Button(label="◀️ Prev", style=discord.ButtonStyle.primary, disabled=(self.page <= 0 or len(self.filtered_records) <= 1), row=1)
+        btn_prev.callback = self.prev_page_callback
+        self.add_item(btn_prev)
+
+        btn_page = discord.ui.Button(
+            label=f"{self.page + 1}/{self.total_pages}",
+            style=discord.ButtonStyle.secondary,
+            disabled=True,
+            row=1
+        )
+        self.add_item(btn_page)
+
+        btn_next = discord.ui.Button(label="Next ▶️", style=discord.ButtonStyle.primary, disabled=(self.page >= self.total_pages - 1 or len(self.filtered_records) <= 1), row=1)
+        btn_next.callback = self.next_page_callback
+        self.add_item(btn_next)
+
+        btn_last = discord.ui.Button(label="⏭️", style=discord.ButtonStyle.secondary, disabled=(self.page >= self.total_pages - 1 or len(self.filtered_records) <= 1), row=1)
+        btn_last.callback = self.last_page_callback
+        self.add_item(btn_last)
+
+        # Clear button for moderators
+        btn_clear = discord.ui.Button(label="Purge User History", style=discord.ButtonStyle.danger, emoji="🗑️", row=2)
+        btn_clear.callback = self.clear_callback
+        self.add_item(btn_clear)
+
+    def make_embed(self) -> discord.Embed:
+        if not self.filtered_records:
+            embed = discord.Embed(
+                title=f"🎯 30-Day Snipe History • {self.target_user.display_name}",
+                description=f"✅ **No sniped {self.filter_type} messages found for {self.target_user.mention} in the last {self.days} days!**",
+                color=discord.Color.green()
+            )
+            if hasattr(self.target_user, "display_avatar") and self.target_user.display_avatar:
+                embed.set_author(name=f"{self.target_user.display_name} (@{self.target_user.name})", icon_url=self.target_user.display_avatar.url)
+            return embed
+
+        entry = self.filtered_records[self.page]
+        m_type = entry.get("message_type", "deleted")
+        is_deleted = (m_type == "deleted")
+
+        col = discord.Color.from_rgb(255, 75, 75) if is_deleted else discord.Color.gold()
+        type_str = "🗑️ Deleted Message" if is_deleted else "✏️ Edited Message"
+
+        embed = discord.Embed(
+            title=f"🎯 30-Day Snipe History • {self.target_user.display_name}",
+            color=col
+        )
+        if hasattr(self.target_user, "display_avatar") and self.target_user.display_avatar:
+            embed.set_author(name=f"{self.target_user.display_name} (@{self.target_user.name})", icon_url=self.target_user.display_avatar.url)
+
+        del_cnt = self.stats.get("deleted_count", 0)
+        edit_cnt = self.stats.get("edited_count", 0)
+        tot_cnt = self.stats.get("total_count", 0)
+
+        embed.description = (
+            f"📊 **Past {self.days} Days Activity**: 🗑️ **`{del_cnt}`** Deleted • ✏️ **`{edit_cnt}`** Edited *(Total: `{tot_cnt}`)*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
+
+        chan_id = entry.get("channel_id")
+        chan_mention = f"<#{chan_id}>" if chan_id else f"#{entry.get('channel_name', 'unknown')}"
+        
+        embed.add_field(
+            name=f"{type_str} • Page {self.page + 1}/{self.total_pages}",
+            value=f"📍 **Channel**: {chan_mention}",
+            inline=False
+        )
+
+        if is_deleted:
+            content = entry.get("content", "")
+            if content:
+                embed.add_field(name="💬 Message Content", value=f">>> {content[:1000]}", inline=False)
+            else:
+                embed.add_field(name="💬 Message Content", value="*[No text content]*", inline=False)
+        else:
+            b_cnt = entry.get("before_content", "") or "*[No text]*"
+            a_cnt = entry.get("after_content", "") or "*[No text]*"
+            embed.add_field(name="🔴 Before Edit", value=f">>> {b_cnt[:950]}", inline=False)
+            embed.add_field(name="🟢 After Edit", value=f">>> {a_cnt[:950]}", inline=False)
+
+        # Attachments & Stickers
+        try:
+            attachments = json.loads(entry.get("attachments_json") or "[]")
+        except Exception:
+            attachments = []
+
+        first_img = False
+        if attachments:
+            att_links = []
+            for att in attachments:
+                if att.get("is_image") and not first_img:
+                    embed.set_image(url=att.get("proxy_url") or att.get("url"))
+                    first_img = True
+                att_links.append(f"[{att.get('filename', 'attachment')}]({att.get('url', '')})")
+            if att_links:
+                embed.add_field(name=f"📎 Attachments ({len(attachments)})", value="\n".join(att_links)[:800], inline=False)
+
+        # Timestamps
+        created_ts = int(entry.get("created_at", time.time()))
+        recorded_ts = int(entry.get("recorded_at", time.time()))
+        time_label = "🗑️ Deleted" if is_deleted else "✏️ Edited"
+        
+        embed.add_field(name="🕒 Sent", value=f"<t:{created_ts}:R>\n`<t:{created_ts}:f>`", inline=True)
+        embed.add_field(name=time_label, value=f"<t:{recorded_ts}:R>\n`<t:{recorded_ts}:f>`", inline=True)
+
+        embed.set_footer(text=f"User ID: {self.target_user.id} • Message ID: {entry.get('message_id', 'N/A')} • Retained up to 30 Days")
+        return embed
+
+    async def filter_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("❌ This is not your snipe history viewer!", ephemeral=True)
+            return
+        await interaction.response.defer()
+        self.filter_type = interaction.data["values"][0]
+        self.page = 0
+        self._apply_filter()
+        self._build_components()
+        embed = self.make_embed()
+        await interaction.edit_original_response(embed=embed, view=self)
+
+    async def first_page_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("❌ This is not your snipe history viewer!", ephemeral=True)
+            return
+        await interaction.response.defer()
+        self.page = 0
+        self._build_components()
+        embed = self.make_embed()
+        await interaction.edit_original_response(embed=embed, view=self)
+
+    async def prev_page_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("❌ This is not your snipe history viewer!", ephemeral=True)
+            return
+        await interaction.response.defer()
+        self.page = max(0, self.page - 1)
+        self._build_components()
+        embed = self.make_embed()
+        await interaction.edit_original_response(embed=embed, view=self)
+
+    async def next_page_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("❌ This is not your snipe history viewer!", ephemeral=True)
+            return
+        await interaction.response.defer()
+        self.page = min(self.total_pages - 1, self.page + 1)
+        self._build_components()
+        embed = self.make_embed()
+        await interaction.edit_original_response(embed=embed, view=self)
+
+    async def last_page_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("❌ This is not your snipe history viewer!", ephemeral=True)
+            return
+        await interaction.response.defer()
+        self.page = self.total_pages - 1
+        self._build_components()
+        embed = self.make_embed()
+        await interaction.edit_original_response(embed=embed, view=self)
+
+    async def clear_callback(self, interaction: discord.Interaction):
+        if not is_protected(interaction.user) and not interaction.permissions.manage_messages:
+            await interaction.response.send_message("❌ You need `Manage Messages` permission to purge a user's snipe history.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        del_count = await db.clear_user_snipe_history(self.guild_id, self.target_user.id)
+        self.all_records = []
+        self.stats = {"total_count": 0, "deleted_count": 0, "edited_count": 0}
+        self.page = 0
+        self._apply_filter()
+        self._build_components()
+        embed = discord.Embed(
+            title="🧹 User Snipe History Purged",
+            description=f"Successfully purged **`{del_count}`** saved messages for {self.target_user.mention} from the 30-day database.",
+            color=discord.Color.green()
+        )
+        await interaction.edit_original_response(embed=embed, view=self)
 
 def create_snipe_embed(channel: Union[discord.TextChannel, discord.Thread, discord.abc.GuildChannel, Any], index: int = 1) -> tuple[Optional[discord.Embed], Optional[str]]:
     """Generates a Discord Embed for the sniped deleted message at 1-based index."""
@@ -7372,7 +7694,7 @@ class GeminiBot(commands.Bot):
 
     @tasks.loop(minutes=10)
     async def presence_keepalive(self):
-        """Periodically broadcasts presence so the bot stays visible as Online across all guilds."""
+        """Periodically broadcasts presence so the bot stays visible as Online across all guilds and prunes old 30-day snipe history."""
         try:
             await self.change_presence(
                 status=discord.Status.online,
@@ -7384,6 +7706,11 @@ class GeminiBot(commands.Bot):
             logger.info("🔄 Gateway presence keepalive ping sent")
         except Exception as e:
             logger.warning(f"Gateway presence keepalive failed: {e}")
+
+        try:
+            await db.prune_old_snipe_history(30)
+        except Exception as prune_err:
+            logger.debug(f"Snipe prune error: {prune_err}")
 
     async def on_connect(self):
         logger.info("Gateway connected — broadcasting online presence")
@@ -8132,10 +8459,13 @@ async def editsnipe_slash_cmd(interaction: discord.Interaction, channel: Optiona
 
 
 @bot.tree.command(name="clearsnipe", description="Clear deleted and edited message snipe history for safety/privacy")
-@app_commands.describe(channel="Channel to clear snipe cache for (defaults to current channel)")
+@app_commands.describe(
+    channel="Channel to clear in-memory snipe cache for (defaults to current channel)",
+    user="Optional member whose 30-day persistent history to purge"
+)
 @app_commands.default_permissions(manage_messages=True)
 @app_commands.guild_only()
-async def clearsnipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
+async def clearsnipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, user: Optional[discord.Member] = None):
     if not is_protected(interaction.user) and not interaction.permissions.manage_messages:
         await interaction.response.send_message("❌ You need `Manage Messages` permissions to clear the snipe cache.", ephemeral=True)
         return
@@ -8143,12 +8473,57 @@ async def clearsnipe_slash_cmd(interaction: discord.Interaction, channel: Option
     target_channel = channel or interaction.channel
     del_cnt, edit_cnt = clear_snipe_history(target_channel.id)
     
+    user_purged = 0
+    if user:
+        user_purged = await db.clear_user_snipe_history(interaction.guild.id, user.id)
+
     embed = discord.Embed(
         title="🧹 Snipe History Cleared",
-        description=f"Cleared **`{del_cnt}`** deleted messages and **`{edit_cnt}`** edited messages from {target_channel.mention}.",
+        description=f"Cleared **`{del_cnt}`** deleted messages and **`{edit_cnt}`** edited messages from {target_channel.mention}." + (f"\nAlso purged **`{user_purged}`** persistent 30-day records for {user.mention}." if user else ""),
         color=discord.Color.green()
     )
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="usersnipe", description="🎯 View up to 30 days of deleted and edited message history for a specific user")
+@app_commands.describe(
+    user="The member whose 30-day snipe history you want to view",
+    days="Number of days to look back (1 to 30, defaults to 30)",
+    filter_type="Filter message events"
+)
+@app_commands.choices(
+    filter_type=[
+        app_commands.Choice(name="📋 All Activity (Deleted & Edited)", value="all"),
+        app_commands.Choice(name="🗑️ Deleted Messages Only", value="deleted"),
+        app_commands.Choice(name="✏️ Edited Messages Only", value="edited")
+    ]
+)
+@app_commands.guild_only()
+async def usersnipe_slash_cmd(
+    interaction: discord.Interaction,
+    user: discord.Member,
+    days: Optional[int] = 30,
+    filter_type: Optional[str] = "all"
+):
+    await interaction.response.defer()
+    days_val = min(30, max(1, days or 30))
+    f_type = filter_type or "all"
+    
+    records = await db.get_user_snipe_history(interaction.guild.id, user.id, days=days_val)
+    stats = await db.get_user_snipe_stats(interaction.guild.id, user.id, days=days_val)
+    
+    view = UserSnipePaginationView(
+        author=interaction.user,
+        target_user=user,
+        guild_id=interaction.guild.id,
+        records=records,
+        stats=stats,
+        days=days_val,
+        filter_type=f_type,
+        page=0
+    )
+    embed = view.make_embed()
+    await interaction.followup.send(embed=embed, view=view)
 
 
 @bot.tree.command(name="antighostping", description="Configure automated Anti-Ghost-Ping detection and public exposure shield")
@@ -9691,20 +10066,49 @@ async def editsnipe_prefix_cmd(ctx: commands.Context, *args):
 
 @bot.command(name="clearsnipe", aliases=["csnipe", "clearsnipes"])
 @commands.guild_only()
-async def clearsnipe_prefix_cmd(ctx: commands.Context, channel: Optional[discord.TextChannel] = None):
-    """Clear deleted & edited snipe history: !clearsnipe [channel] (or !csnipe)"""
+async def clearsnipe_prefix_cmd(ctx: commands.Context, channel: Optional[discord.TextChannel] = None, user: Optional[discord.Member] = None):
+    """Clear deleted & edited snipe history: !clearsnipe [#channel] [@user] (or !csnipe)"""
     if not is_protected(ctx.author) and not ctx.author.guild_permissions.manage_messages:
         await ctx.send("❌ You need `Manage Messages` permission to clear snipe cache.")
         return
     
     target_channel = channel or ctx.channel
     del_cnt, edit_cnt = clear_snipe_history(target_channel.id)
+    
+    user_purged = 0
+    if user:
+        user_purged = await db.clear_user_snipe_history(ctx.guild.id, user.id)
+
     embed = discord.Embed(
         title="🧹 Snipe History Cleared",
-        description=f"Cleared **`{del_cnt}`** deleted messages and **`{edit_cnt}`** edited messages from {target_channel.mention}.",
+        description=f"Cleared **`{del_cnt}`** deleted messages and **`{edit_cnt}`** edited messages from {target_channel.mention}." + (f"\nAlso purged **`{user_purged}`** persistent 30-day records for {user.mention}." if user else ""),
         color=discord.Color.green()
     )
     await ctx.send(embed=embed)
+
+
+@bot.command(name="usersnipe", aliases=["snipeuser", "usnipe", "userhistory", "usersnipes"])
+@commands.guild_only()
+async def usersnipe_prefix_cmd(ctx: commands.Context, user: Optional[discord.Member] = None, days: Optional[int] = 30):
+    """View up to 30 days of deleted & edited message history for a specific user: !usersnipe @user [days=30]"""
+    target_user = user or ctx.author
+    days_val = min(30, max(1, days or 30))
+    
+    records = await db.get_user_snipe_history(ctx.guild.id, target_user.id, days=days_val)
+    stats = await db.get_user_snipe_stats(ctx.guild.id, target_user.id, days=days_val)
+    
+    view = UserSnipePaginationView(
+        author=ctx.author,
+        target_user=target_user,
+        guild_id=ctx.guild.id,
+        records=records,
+        stats=stats,
+        days=days_val,
+        filter_type="all",
+        page=0
+    )
+    embed = view.make_embed()
+    await ctx.send(embed=embed, view=view)
 
 
 @bot.command(name="antighostping", aliases=["agp", "ghostping"])
