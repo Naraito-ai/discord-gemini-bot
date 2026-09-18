@@ -7,6 +7,8 @@ import io
 import time
 import datetime
 import random
+import math
+import urllib.request
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -6411,20 +6413,21 @@ class HubDraftButtonView(discord.ui.View):
 
     @discord.ui.button(label="My Team Card", style=discord.ButtonStyle.secondary, emoji="📋", custom_id="hub_myteam_btn", row=1)
     async def myteam_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
         row = await db.get_dream_team(interaction.user.id)
         if not row:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ **You haven't built a $15 Dream Team yet!**\nClick **Draft $15 Squad** above to build your roster.",
                 ephemeral=True
             )
             return
         card_embed, card_file = await build_myteam_embed(interaction.user, row)
         if card_embed and card_file:
-            await interaction.response.send_message(embed=card_embed, file=card_file, ephemeral=True)
+            await interaction.followup.send(embed=card_embed, file=card_file, ephemeral=True)
         elif card_file:
-            await interaction.response.send_message(file=card_file, ephemeral=True)
+            await interaction.followup.send(file=card_file, ephemeral=True)
         elif card_embed:
-            await interaction.response.send_message(embed=card_embed, ephemeral=True)
+            await interaction.followup.send(embed=card_embed, ephemeral=True)
 
     @discord.ui.button(label="GM Profile & Rank", style=discord.ButtonStyle.secondary, emoji="📊", custom_id="hub_gm_profile_btn", row=1)
     async def gm_profile_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -8023,6 +8026,7 @@ async def buildteam_slash_cmd(interaction: discord.Interaction):
 @app_commands.describe(user="The member whose dream team you want to view (defaults to yourself)")
 @app_commands.guild_only()
 async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[discord.Member] = None):
+    await interaction.response.defer()
     target = user or interaction.user
     if getattr(target, "bot", False) or (bot.user and target.id == bot.user.id):
         row = await ensure_sweety_ai_team(guild_id=interaction.guild.id if interaction.guild else None, target_id=target.id)
@@ -8031,18 +8035,18 @@ async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[disc
     
     if not row:
         if target.id == interaction.user.id:
-            await interaction.response.send_message("❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` to draft your 5-man championship squad.", ephemeral=True)
+            await interaction.followup.send("❌ **You haven't built a $15 Dream Team yet!**\nUse `/buildteam` to draft your 5-man championship squad.", ephemeral=True)
         else:
-            await interaction.response.send_message(f"❌ **{target.display_name}** hasn't drafted a $15 Dream Team yet. Tell them to run `/buildteam`!", ephemeral=True)
+            await interaction.followup.send(f"❌ **{target.display_name}** hasn't drafted a $15 Dream Team yet. Tell them to run `/buildteam`!", ephemeral=True)
         return
 
     card_embed, card_file = await build_myteam_embed(target, row)
     if card_embed and card_file:
-        await interaction.response.send_message(embed=card_embed, file=card_file)
+        await interaction.followup.send(embed=card_embed, file=card_file)
     elif card_file:
-        await interaction.response.send_message(file=card_file)
+        await interaction.followup.send(file=card_file)
     elif card_embed:
-        await interaction.response.send_message(embed=card_embed)
+        await interaction.followup.send(embed=card_embed)
 
 
 @bot.tree.command(name="teamqueue", description="⚔️ Join the live matchmaking queue to battle another member's $15 Dream Team")
