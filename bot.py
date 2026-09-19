@@ -1208,8 +1208,8 @@ def record_deleted_message(message: discord.Message):
     """Stores deleted message in channel ring buffer (capped at MAX_SNIPE_HISTORY)."""
     if not message.guild or (message.author and message.author.bot):
         return
-    # Skip if message has zero text, attachments, or stickers
-    if not message.content and not message.attachments and not getattr(message, "stickers", None):
+    # Skip if message has zero text, attachments, stickers, or embeds
+    if not message.content and not message.attachments and not getattr(message, "stickers", None) and not getattr(message, "embeds", None):
         return
 
     chan_id = message.channel.id
@@ -1220,11 +1220,36 @@ def record_deleted_message(message: discord.Message):
     for att in message.attachments:
         ct = getattr(att, "content_type", "") or ""
         fn = getattr(att, "filename", "") or ""
+        size_bytes = getattr(att, "size", 0)
+        
+        if size_bytes > 1024 * 1024:
+            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+        elif size_bytes > 1024:
+            size_str = f"{size_bytes / 1024:.1f} KB"
+        elif size_bytes > 0:
+            size_str = f"{size_bytes} B"
+        else:
+            size_str = ""
+
         is_img = ct.startswith("image/") or fn.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
+        is_video = ct.startswith("video/") or fn.lower().endswith((".mp4", ".mov", ".webm", ".avi", ".mkv"))
+        is_audio = ct.startswith("audio/") or fn.lower().endswith((".mp3", ".ogg", ".wav", ".m4a", ".flac"))
+        
+        if is_img:
+            file_type = "🖼️ Image"
+        elif is_video:
+            file_type = "🎥 Video"
+        elif is_audio:
+            file_type = "🎵 Audio/Voice"
+        else:
+            file_type = "📄 File"
+
         attachments.append({
             "filename": fn or "attachment",
             "url": att.url,
             "proxy_url": getattr(att, "proxy_url", att.url),
+            "size": size_str,
+            "file_type": file_type,
             "is_image": is_img
         })
 
@@ -1236,7 +1261,51 @@ def record_deleted_message(message: discord.Message):
                 "url": getattr(st, "url", "")
             })
 
+    # Reply/Reference Context
+    reply_info = None
+    if message.reference:
+        ref_msg = getattr(message.reference, "resolved", None)
+        if isinstance(ref_msg, discord.Message):
+            ref_content = ref_msg.content[:150] + ("..." if len(ref_msg.content) > 150 else "") if ref_msg.content else "*[Media/Attachment]*"
+            reply_info = {
+                "author_id": ref_msg.author.id,
+                "author_name": str(ref_msg.author),
+                "author_display": ref_msg.author.display_name,
+                "content": ref_content,
+                "jump_url": getattr(ref_msg, "jump_url", "")
+            }
+        elif getattr(message.reference, "message_id", None):
+            reply_info = {
+                "message_id": message.reference.message_id
+            }
+
+    # User & Role Mentions
+    mentions_list = []
+    if message.mentions:
+        for m in message.mentions:
+            if not m.bot:
+                mentions_list.append(f"{m.mention} (`@{m.name}`)")
+    if message.role_mentions:
+        for r in message.role_mentions:
+            mentions_list.append(f"{r.mention}")
+
+    # Embeds / Rich Media (e.g. Tenor GIFs, links)
+    embeds_summary = []
+    if message.embeds:
+        for em in message.embeds[:3]:
+            em_title = getattr(em, "title", "") or ""
+            em_desc = getattr(em, "description", "") or ""
+            em_url = getattr(em, "url", "") or ""
+            if em_title or em_desc or em_url:
+                snippet = f"**{em_title}** " if em_title else ""
+                if em_url:
+                    snippet += f"([Link]({em_url})) "
+                if em_desc:
+                    snippet += em_desc[:80] + ("..." if len(em_desc) > 80 else "")
+                embeds_summary.append(snippet.strip())
+
     entry = {
+        "message_id": message.id,
         "author": message.author,
         "author_name": str(message.author),
         "author_display_name": getattr(message.author, "display_name", str(message.author)),
@@ -1247,6 +1316,9 @@ def record_deleted_message(message: discord.Message):
         "deleted_at": discord.utils.utcnow(),
         "attachments": attachments,
         "stickers": stickers,
+        "reply_info": reply_info,
+        "mentions": mentions_list,
+        "embeds_summary": embeds_summary,
         "channel_id": chan_id,
         "channel_name": getattr(message.channel, "name", "channel")
     }
@@ -1288,7 +1360,19 @@ def record_edited_message(before: discord.Message, after: discord.Message):
     if chan_id not in _editsnipe_cache:
         _editsnipe_cache[chan_id] = []
 
+    # Reply info
+    reply_info = None
+    if before.reference:
+        ref_msg = getattr(before.reference, "resolved", None)
+        if isinstance(ref_msg, discord.Message):
+            reply_info = {
+                "author_display": ref_msg.author.display_name,
+                "author_id": ref_msg.author.id,
+                "jump_url": getattr(ref_msg, "jump_url", "")
+            }
+
     entry = {
+        "message_id": before.id,
         "author": before.author,
         "author_name": str(before.author),
         "author_display_name": getattr(before.author, "display_name", str(before.author)),
@@ -1296,6 +1380,7 @@ def record_edited_message(before: discord.Message, after: discord.Message):
         "author_id": before.author.id,
         "before_content": before.content or "*[No text content]*",
         "after_content": after.content or "*[No text content]*",
+        "reply_info": reply_info,
         "created_at": before.created_at,
         "edited_at": after.edited_at or discord.utils.utcnow(),
         "jump_url": getattr(after, "jump_url", ""),
@@ -1608,7 +1693,7 @@ class UserSnipePaginationView(discord.ui.View):
         await interaction.edit_original_response(embed=embed, view=self)
 
 def create_snipe_embed(channel: Union[discord.TextChannel, discord.Thread, discord.abc.GuildChannel, Any], index: int = 1) -> tuple[Optional[discord.Embed], Optional[str]]:
-    """Generates a Discord Embed for the sniped deleted message at 1-based index."""
+    """Generates a Discord Embed with comprehensive, rich information for the sniped deleted message."""
     chan_id = getattr(channel, "id", None)
     if not chan_id:
         return None, "❌ Could not determine channel."
@@ -1623,69 +1708,121 @@ def create_snipe_embed(channel: Union[discord.TextChannel, discord.Thread, disco
     entry = cache[index - 1]
     
     author_display = entry["author_display_name"]
+    author_name = entry["author_name"]
     author_id = entry["author_id"]
+    author_avatar = entry.get("author_avatar")
     content = entry["content"]
     created_at = entry["created_at"]
     deleted_at = entry["deleted_at"]
-    attachments = entry["attachments"]
-    stickers = entry["stickers"]
+    attachments = entry.get("attachments", [])
+    stickers = entry.get("stickers", [])
+    reply_info = entry.get("reply_info")
+    mentions = entry.get("mentions", [])
+    embeds_summary = entry.get("embeds_summary", [])
+    msg_id = entry.get("message_id", "N/A")
 
     embed = discord.Embed(
         title=f"🎯 Sniped Deleted Message ({index}/{total})",
         color=discord.Color.from_rgb(255, 75, 75)
     )
     
-    if entry.get("author_avatar"):
-        embed.set_author(name=f"{author_display} (@{entry['author_name']})", icon_url=entry["author_avatar"])
+    if author_avatar:
+        embed.set_author(name=f"{author_display} (@{author_name})", icon_url=author_avatar)
     else:
-        embed.set_author(name=f"{author_display} (@{entry['author_name']})")
+        embed.set_author(name=f"{author_display} (@{author_name})")
 
+    # 1. Main Deleted Message Content
     if content:
         if len(content) > 2000:
-            embed.description = content[:1990] + "..."
+            embed.description = f">>> {content[:1990]}..."
         else:
-            embed.description = content
+            embed.description = f">>> {content}"
     else:
-        embed.description = "*[No text content]*"
+        embed.description = "*[No text content — Media / Attachment only]*"
 
-    first_image_set = False
-    if attachments:
-        att_links = []
-        for att in attachments:
-            if att.get("is_image") and not first_image_set:
-                embed.set_image(url=att.get("proxy_url") or att.get("url"))
-                first_image_set = True
-            att_links.append(f"[{att['filename']}]({att['url']})")
-        
+    # 2. Reply Context (if replying to another message)
+    if reply_info:
+        if "author_display" in reply_info:
+            reply_text = f"↩️ Replying to **{reply_info['author_display']}** (<@{reply_info['author_id']}>):\n> {reply_info['content']}"
+            if reply_info.get("jump_url"):
+                reply_text += f" • [Jump to Original]({reply_info['jump_url']})"
+            embed.add_field(name="💬 Context", value=reply_text[:1000], inline=False)
+        elif reply_info.get("message_id"):
+            embed.add_field(name="💬 Context", value=f"↩️ Replying to Message ID `{reply_info['message_id']}`", inline=False)
+
+    # 3. Mentioned users & ghost pings
+    if mentions:
         embed.add_field(
-            name=f"📎 Attachments ({len(attachments)})",
-            value="\n".join(att_links)[:1000],
+            name=f"👥 Mentions & Pings ({len(mentions)})",
+            value=", ".join(mentions[:10])[:1000],
             inline=False
         )
 
-    if stickers:
-        st_list = [f"• {s['name']}" for s in stickers]
+    # 4. Attachments & Media
+    first_image_set = False
+    if attachments:
+        att_lines = []
+        for att in attachments:
+            fn = att.get("filename", "file")
+            url = att.get("url", "")
+            proxy_url = att.get("proxy_url", url)
+            size_str = f" `({att['size']})`" if att.get("size") else ""
+            type_str = att.get("file_type", "📎 File")
+            
+            if att.get("is_image") and not first_image_set:
+                embed.set_image(url=proxy_url or url)
+                first_image_set = True
+
+            att_lines.append(f"{type_str}: [{fn}]({url}){size_str}")
+        
         embed.add_field(
-            name="🏷️ Stickers",
+            name=f"📎 Attached Files ({len(attachments)})",
+            value="\n".join(att_lines)[:1000],
+            inline=False
+        )
+
+    # 5. Stickers
+    if stickers:
+        st_list = [f"• **{s['name']}**" + (f" ([View Sticker]({s['url']}))" if s.get('url') else "") for s in stickers]
+        embed.add_field(
+            name=f"🏷️ Stickers ({len(stickers)})",
             value="\n".join(st_list)[:1000],
             inline=False
         )
 
+    # 6. Embedded Links / Rich Media
+    if embeds_summary:
+        embed.add_field(
+            name="🔗 Embedded Media / Rich Links",
+            value="\n".join(f"• {e}" for e in embeds_summary)[:1000],
+            inline=False
+        )
+
+    # 7. Exact Sent and Deleted Timestamps + Lifetime
     created_ts = int(created_at.timestamp()) if isinstance(created_at, datetime.datetime) else int(time.time())
     deleted_ts = int(deleted_at.timestamp()) if isinstance(deleted_at, datetime.datetime) else int(time.time())
-    
+    lifetime_secs = max(0, deleted_ts - created_ts)
+    lifetime_str = format_time_elapsed(lifetime_secs) if lifetime_secs > 0 else "Instant (<1 sec)"
+
     embed.add_field(
         name="🕒 Sent",
-        value=f"<t:{created_ts}:R>\n`<t:{created_ts}:f>`",
+        value=f"<t:{created_ts}:f>\n*(<t:{created_ts}:R>)*",
         inline=True
     )
     embed.add_field(
         name="🗑️ Deleted",
-        value=f"<t:{deleted_ts}:R>\n`<t:{deleted_ts}:f>`",
+        value=f"<t:{deleted_ts}:f>\n*(<t:{deleted_ts}:R>)*",
         inline=True
     )
-    
-    embed.set_footer(text=f"Author ID: {author_id} • Channel: #{getattr(channel, 'name', 'channel')} • Index {index}/{total}")
+    embed.add_field(
+        name="⏱️ Was Visible For",
+        value=f"**{lifetime_str}**",
+        inline=True
+    )
+
+    embed.set_footer(
+        text=f"Author ID: {author_id} • Msg ID: {msg_id} • Channel: #{getattr(channel, 'name', 'channel')} • Index {index}/{total}"
+    )
     return embed, None
 
 def create_editsnipe_embed(channel: Union[discord.TextChannel, discord.Thread, discord.abc.GuildChannel, Any], index: int = 1) -> tuple[Optional[discord.Embed], Optional[str]]:
@@ -1704,43 +1841,66 @@ def create_editsnipe_embed(channel: Union[discord.TextChannel, discord.Thread, d
     entry = cache[index - 1]
     
     author_display = entry["author_display_name"]
+    author_name = entry["author_name"]
     author_id = entry["author_id"]
+    author_avatar = entry.get("author_avatar")
     before_content = entry["before_content"]
     after_content = entry["after_content"]
     created_at = entry["created_at"]
     edited_at = entry["edited_at"]
     jump_url = entry.get("jump_url", "")
+    reply_info = entry.get("reply_info")
+    msg_id = entry.get("message_id", "N/A")
 
     embed = discord.Embed(
         title=f"✏️ Sniped Edited Message ({index}/{total})",
         color=discord.Color.gold()
     )
     
-    if entry.get("author_avatar"):
-        embed.set_author(name=f"{author_display} (@{entry['author_name']})", icon_url=entry["author_avatar"])
+    if author_avatar:
+        embed.set_author(name=f"{author_display} (@{author_name})", icon_url=author_avatar)
     else:
-        embed.set_author(name=f"{author_display} (@{entry['author_name']})")
+        embed.set_author(name=f"{author_display} (@{author_name})")
+
+    # Reply context
+    if reply_info and "author_display" in reply_info:
+        embed.add_field(name="💬 Context", value=f"↩️ Replying to **{reply_info['author_display']}** (<@{reply_info['author_id']}>)", inline=False)
 
     embed.add_field(
-        name="🔴 Before Edit",
-        value=before_content[:1000] if before_content else "*[Empty]*",
+        name="🔴 Original Content (Before Edit)",
+        value=f">>> {before_content[:950]}" if before_content else "*[Empty]*",
         inline=False
     )
     embed.add_field(
-        name="🟢 After Edit",
-        value=after_content[:1000] if after_content else "*[Empty]*",
+        name="🟢 Modified Content (After Edit)",
+        value=f">>> {after_content[:950]}" if after_content else "*[Empty]*",
         inline=False
     )
 
     created_ts = int(created_at.timestamp()) if isinstance(created_at, datetime.datetime) else int(time.time())
     edited_ts = int(edited_at.timestamp()) if isinstance(edited_at, datetime.datetime) else int(time.time())
+    time_diff = max(0, edited_ts - created_ts)
+    diff_str = format_time_elapsed(time_diff) if time_diff > 0 else "Instant (<1 sec)"
 
-    time_text = f"**Sent:** <t:{created_ts}:R> | **Edited:** <t:{edited_ts}:R>"
-    if jump_url:
-        time_text += f"\n🔗 **[Jump to Message]({jump_url})**"
+    embed.add_field(
+        name="🕒 Sent",
+        value=f"<t:{created_ts}:f>\n*(<t:{created_ts}:R>)*",
+        inline=True
+    )
+    embed.add_field(
+        name="✏️ Edited",
+        value=f"<t:{edited_ts}:f>\n*(<t:{edited_ts}:R>)*",
+        inline=True
+    )
+    embed.add_field(
+        name="⏱️ Edited After",
+        value=f"**{diff_str}**" + (f"\n🔗 **[Jump to Message]({jump_url})**" if jump_url else ""),
+        inline=True
+    )
 
-    embed.add_field(name="🕒 Details", value=time_text, inline=False)
-    embed.set_footer(text=f"Author ID: {author_id} • Channel: #{getattr(channel, 'name', 'channel')} • Index {index}/{total}")
+    embed.set_footer(
+        text=f"Author ID: {author_id} • Msg ID: {msg_id} • Channel: #{getattr(channel, 'name', 'channel')} • Index {index}/{total}"
+    )
     return embed, None
 
 def clear_snipe_history(channel_id: Optional[int] = None) -> tuple[int, int]:
