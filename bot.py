@@ -11447,15 +11447,6 @@ async def powerup_slash_cmd(interaction: discord.Interaction, member: Optional[d
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="awaken", description="Channel raw Super Saiyan / Domain Expansion aura (alias for /powerup)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def awaken_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("powerup", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="heal", description="Cast a soothing green rejuvenation aura to restore health")
 @app_commands.describe(member="The member you want to target (leave blank to target yourself)")
 @app_commands.guild_only()
@@ -11474,15 +11465,6 @@ async def shield_slash_cmd(interaction: discord.Interaction, member: Optional[di
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="barrier", description="Erect an impenetrable hexagonal energy barrier (alias for /shield)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def barrier_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("shield", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="freeze", description="Cast an ice spell that turns the target into a frozen statue")
 @app_commands.describe(member="The member you want to target (leave blank to target yourself)")
 @app_commands.guild_only()
@@ -11492,28 +11474,10 @@ async def freeze_slash_cmd(interaction: discord.Interaction, member: Optional[di
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="ice", description="Cast an ice spell that turns the target into a frozen statue (alias for /freeze)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def ice_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("freeze", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="hypnotize", description="Swirling spiral anime eyes putting someone into a trance")
 @app_commands.describe(member="The member you want to target (leave blank to target yourself)")
 @app_commands.guild_only()
 async def hypnotize_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("hypnotize", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="hypno", description="Swirling spiral anime eyes putting someone into a trance (alias for /hypnotize)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def hypno_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
     embed = create_action_embed("hypnotize", interaction.user, target, bot.user)
     await interaction.response.send_message(embed=embed)
@@ -11537,15 +11501,6 @@ async def uppercut_slash_cmd(interaction: discord.Interaction, member: Optional[
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="shoryuken", description="Shoryuken! Launch someone into the ceiling with a flaming uppercut (alias for /uppercut)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def shoryuken_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("uppercut", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="spank", description="Comedic anime discipline spank with a squeaky paddle")
 @app_commands.describe(member="The member you want to target (leave blank to target yourself)")
 @app_commands.guild_only()
@@ -11564,37 +11519,10 @@ async def kamehameha_slash_cmd(interaction: discord.Interaction, member: Optiona
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="beam", description="Charge up a massive glowing energy blast and obliterate someone (alias for /kamehameha)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def beam_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("kamehameha", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="blast", description="Charge up a massive glowing energy blast and obliterate someone (alias for /kamehameha)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def blast_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("kamehameha", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="bodyslam", description="Full-weight WWE anime flying elbow/body slam")
 @app_commands.describe(member="The member you want to target (leave blank to target yourself)")
 @app_commands.guild_only()
 async def bodyslam_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("bodyslam", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="slam", description="Full-weight WWE anime flying elbow/body slam (alias for /bodyslam)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def slam_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
     embed = create_action_embed("bodyslam", interaction.user, target, bot.user)
     await interaction.response.send_message(embed=embed)
@@ -11609,15 +11537,6 @@ async def slash_slash_cmd(interaction: discord.Interaction, member: Optional[dis
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="slice", description="Unsheathe a katana and slice past them with an anime shadow cut (alias for /slash)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def slice_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("slash", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="bite", description="Playful anime chomp on someone's arm or cheek")
 @app_commands.describe(member="The member you want to target (leave blank to target yourself)")
 @app_commands.guild_only()
@@ -11627,37 +11546,10 @@ async def bite_slash_cmd(interaction: discord.Interaction, member: Optional[disc
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="chomp", description="Playful anime chomp on someone's arm or cheek (alias for /bite)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def chomp_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("bite", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="nom", description="Playful anime chomp on someone's arm or cheek (alias for /bite)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def nom_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("bite", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="shoot", description="Finger guns with an unexpectedly catastrophic laser explosion")
 @app_commands.describe(member="The member you want to target (leave blank to target yourself)")
 @app_commands.guild_only()
 async def shoot_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("shoot", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="pew", description="Finger guns with an unexpectedly catastrophic laser explosion (alias for /shoot)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def pew_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
     embed = create_action_embed("shoot", interaction.user, target, bot.user)
     await interaction.response.send_message(embed=embed)
@@ -11681,46 +11573,10 @@ async def counter_slash_cmd(interaction: discord.Interaction, member: Optional[d
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="parry", description="Ultra Instinct dodge into an effortless reversal counter-strike (alias for /counter)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def parry_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("counter", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="dodge", description="Ultra Instinct dodge into an effortless reversal counter-strike (alias for /counter)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def dodge_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("counter", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="explode", description="Channel Megumin's iconic EXPLOSION! and vaporize the target")
 @app_commands.describe(member="The member you want to target (leave blank to target yourself)")
 @app_commands.guild_only()
 async def explode_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("explode", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="explosion", description="Channel Megumin's iconic EXPLOSION! and vaporize the target (alias for /explode)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def explosion_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
-    target = member or interaction.user
-    embed = create_action_embed("explode", interaction.user, target, bot.user)
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="nuke", description="Channel Megumin's iconic EXPLOSION! and vaporize the target (alias for /explode)")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
-@app_commands.guild_only()
-async def nuke_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
     embed = create_action_embed("explode", interaction.user, target, bot.user)
     await interaction.response.send_message(embed=embed)
