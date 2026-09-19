@@ -7861,7 +7861,691 @@ ACTION_METADATA = {
             "https://cdn.otakugifs.xyz/gifs/punch/f179131bd406f951.gif",
             "https://cdn.otakugifs.xyz/gifs/punch/lQbYrpwHpz.gif"
         ]
-    }
+    },
+    "powerup": {
+        "color": discord.Color.from_rgb(255, 215, 0),
+        "verb": "powers up around",
+        "emoji": "⚡🔥 (ง •̀_•́)ง *DOMAIN EXPANSION!*",
+        "self_text": "{author} powers up to Maximum Overdrive! ⚡🔥 Power level over 9000!",
+        "bot_text": "{author} unleashes an overwhelming aura in front of Sweety! 🌟 Power level off the charts!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/cool/524083d4d4ef102b.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/b2aa83618c310ea6.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/d2776011d23a58d9.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/e21901cb5c2cc452.gif",
+            "https://cdn.otakugifs.xyz/gifs/headbang/2dbcfff4aacfc35c.gif",
+            "https://cdn.otakugifs.xyz/gifs/headbang/3dfce864742ca2dc.gif",
+            "https://cdn.otakugifs.xyz/gifs/headbang/42f1c8dcc8bdb310.gif",
+            "https://cdn.otakugifs.xyz/gifs/headbang/604d383ab8441574.gif",
+            "https://cdn.otakugifs.xyz/gifs/headbang/66cb01ba0b436e29.gif",
+            "https://cdn.otakugifs.xyz/gifs/headbang/6a418d09cd51b0ca.gif",
+            "https://cdn.otakugifs.xyz/gifs/headbang/e0d913d4cb0e65a7.gif",
+            "https://cdn.otakugifs.xyz/gifs/headbang/ee26e1d98ed198e5.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/27faa1158ff1cba5.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/412eae3ff7434e20.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/510f2458e7c1cb44.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/5e4ffcedaabf093f.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6370fa29c87821c7.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6476f441cc4247d7.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6d02471da7e6f2a2.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/788f68452cc26030.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/8c094342a17330fb.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/8ec31cfd3e68e9f5.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/97771003f3c18024.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/a3d30cee15aa0d4c.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/ad93180675107851.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/bb21161444f35e77.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/be527d38cbe987cf.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/cdeEfW3511.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/gYJyw7TjAYrm.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/mxqrRHp7QGpZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/ot6EOi3bk4.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/2Wjs8tPsFY.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/8lZS3HMy3g.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/97RMv3fv88.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/LjIj5RXuy5.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/iScekvZbab2F.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/mRmtk3eAxD.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/nVUs8edNSp.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/neUSD4xPjl.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/xYq39NkXcb.gif"
+        ]
+    },
+    "heal": {
+        "color": discord.Color.from_rgb(46, 204, 113),
+        "verb": "casts a restorative healing aura on",
+        "emoji": "✨💚 ( ˘ ³˘)♥ *FULL HP RESTORED!*",
+        "self_text": "{author} casts a rejuvenation spell on themselves! ✨💚 HP fully restored!",
+        "bot_text": "{author} heals Sweety with a soothing aura! 💖 Full HP & Mana restored!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/blush/101feac622d97739.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/1ab8106c45113bc3.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/3ayzPqyCAVwd.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/47c217aa975f7473.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/49a5ea35a50c4241.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/65ecb1d0c15b3226.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/7A4Fc9SfoA.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/94860ccca44ef501.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/94edd92c144694d2.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/98cbc5bef3590dcf.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/9cdad4bff80d4fa9.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/DOFArjbVbT.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/IsQveBoWJk.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/OhK3Hhq1U1.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/Q3S8e4fP9qVA.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/ZH5myuNxSD.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/b23277dd835243bb.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/b57021de2fa39cd0.gif",
+            "https://cdn.otakugifs.xyz/gifs/blush/jEYLG5UfvY.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/03d063c6eae43782.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/3412fc5930c6962f.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/41b4954d25a2aa93.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/64bb946e4e8e6d1e.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/c05873ab3b4d795d.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/c719a134dd76a24d.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/20d2c2a4788f3c84.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/2870bb4a1b4dbf7a.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/38a3deeedde47184.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/733a0ac9fcf79b9d.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/8f7027ee5d1c2016.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/95bf8e31d13a9449.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/9765fba3d6d7fbe6.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/W7tz474WLB.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/b24b78867b086f70.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/k62NxdMQEv.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/kD4v9darQUd5.gif",
+            "https://cdn.otakugifs.xyz/gifs/happy/vhplowmpdJ.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/1ed4f2f87c10680b.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/3f68669bea688d61.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/4fa4d3db1f354994.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/953e43f154b3d1ec.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/9d47a61cc07ae787.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/ad13109ed6ed7a0d.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/adc831819611cd4f.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/d76192c045a06700.gif",
+            "https://cdn.otakugifs.xyz/gifs/love/f2ebf1ab54d7af7a.gif"
+        ]
+    },
+    "shield": {
+        "color": discord.Color.from_rgb(52, 152, 219),
+        "verb": "erects a protective barrier around",
+        "emoji": "🛡️✨ ＼(｀0´)／ *DEFENSE MATRIX ACTIVE!*",
+        "self_text": "{author} deploys an impenetrable hexagonal energy shield! 🛡️⚡ Protected from all attacks!",
+        "bot_text": "{author} shields Sweety from incoming damage! 🛡️✨ Maximum defense deployed!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/cool/524083d4d4ef102b.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/b2aa83618c310ea6.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/d2776011d23a58d9.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/e21901cb5c2cc452.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/119a49e8c1ddc292.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/61fcf29d108dd009.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/da8139a0f0761722.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/ee25f56bc4044ce9.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/f2a139f3fad2795e.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/qhOOLFgZyb.gif",
+            "https://cdn.otakugifs.xyz/gifs/no/rCXCfPJI51.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/6506ce576e412fc7.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/681cc6cf7f59168e.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/6FNjbL81TV.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/83e6c4b9528aafc1.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/S3h8xyBPXZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/ad300b8210b6103e.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/fc41bb1bd17069b7.gif"
+        ]
+    },
+    "freeze": {
+        "color": discord.Color.from_rgb(175, 238, 238),
+        "verb": "casts an ice spell and freezes",
+        "emoji": "❄️🥶 (🧊_🧊) *FROZEN SOLID!*",
+        "self_text": "{author} turns themselves into a block of solid ice! 🧊🥶",
+        "bot_text": "{author} casts a blizzard at Sweety! ❄️ Energy barrier melted the ice!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/scared/020fb750208b8656.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/047b44116e629984.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/2540a413bf1cd026.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/3a3ea4f0dca616da.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/4c8dd2896c7b298b.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/651f2e71a31255e2.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/6983a1b1e53481ce.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/94d1a9b7546c36ad.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/9719d8f88c9858e1.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/99bb87962a275ac3.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/9a0993ea5c7f1b82.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/HwwXICqilI.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/bd69d2f122e5ed2c.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/ctvjXUcLKJkz.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/e5ac0df3cc558d6e.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/f4a625d7b20cfbf7.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/fd7aca3ebd781ae8.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/qSFcYXydXz.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/s5FrmKcf2S.gif",
+            "https://cdn.otakugifs.xyz/gifs/scared/w87OKY0UD1.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/0b4a444de96527b3.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/74eaa20bcda2fa0f.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/9c552ebb578ceec7.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/9f2ab1bd83f83bd1.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/RJcZBNkYAO.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/UpeOsd0OjI.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/a530eea2f0880717.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/aMYP3z4fmG.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/ab52b3e4058cb2cc.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/b0e54a4172fd0bbc.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/ced852263270cafe.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/e79675e5ee95a537.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/eb8b8a83da023242.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/rvYCQ3eRMbfP.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/2zs94WotGe.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/436bc4299cfffbdd.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/4XwpLdBZ8vg7.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/505aaad444519a9d.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/71ade604a08c60cd.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/8bdc33883d8bf390.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/90d97ca9c606d80e.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/958ecfadf5220a9d.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/GiQWcyRdap.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/c3zEwoCxHF.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/e2db612572bbff28.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/ed08f6a1f6db7afa.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/gsNNR7XWgj.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/kqFMlblKpE.gif"
+        ]
+    },
+    "hypnotize": {
+        "color": discord.Color.from_rgb(155, 89, 182),
+        "verb": "hypnotizes",
+        "emoji": "🌀_🌀 *look into my eyes...*",
+        "self_text": "{author} stares into a mirror and hypnotizes themselves! 🌀_🌀",
+        "bot_text": "{author} tries to hypnotize Sweety! 🤖 AI firewall bypassed the hypnotic trance!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/confused/9pRx8tWMYn.gif",
+            "https://cdn.otakugifs.xyz/gifs/confused/c39bbb202809e527.gif",
+            "https://cdn.otakugifs.xyz/gifs/confused/cc25bf41cdb577e4.gif",
+            "https://cdn.otakugifs.xyz/gifs/confused/e95a5e31e56439c4.gif",
+            "https://cdn.otakugifs.xyz/gifs/confused/f496db3f81b3cfb3.gif",
+            "https://cdn.otakugifs.xyz/gifs/confused/f8e3af5327975524.gif",
+            "https://cdn.otakugifs.xyz/gifs/confused/ffdcv093Pw.gif",
+            "https://cdn.otakugifs.xyz/gifs/huh/6Hq8UVc1qN.gif",
+            "https://cdn.otakugifs.xyz/gifs/huh/8PHI2MsyUq.gif",
+            "https://cdn.otakugifs.xyz/gifs/huh/NRvcCv0cIs.gif",
+            "https://cdn.otakugifs.xyz/gifs/huh/OiernjHK9N.gif",
+            "https://cdn.otakugifs.xyz/gifs/huh/OpS8ugDWEy.gif",
+            "https://cdn.otakugifs.xyz/gifs/huh/XGXcYjOTMA.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/0b4a444de96527b3.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/74eaa20bcda2fa0f.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/9c552ebb578ceec7.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/9f2ab1bd83f83bd1.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/RJcZBNkYAO.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/UpeOsd0OjI.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/a530eea2f0880717.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/aMYP3z4fmG.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/ab52b3e4058cb2cc.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/b0e54a4172fd0bbc.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/ced852263270cafe.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/e79675e5ee95a537.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/eb8b8a83da023242.gif",
+            "https://cdn.otakugifs.xyz/gifs/stare/rvYCQ3eRMbfP.gif"
+        ]
+    },
+    "suplex": {
+        "color": discord.Color.from_rgb(231, 76, 60),
+        "verb": "delivers a devastating suplex to",
+        "emoji": "🤼💥 (╯°□°)╯︵ ┻━┻ *CRASH!*",
+        "self_text": "{author} trips over their own shadow and suplexes themselves! 😵💫",
+        "bot_text": "{author} tries to suplex Sweety! 🛡️ Hydraulic counter-balance absorbed the impact!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/punch/05bc002e281ddd92.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/120ad1827ee066b2.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/2fd18184c78ec80d.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/3a6417e6568b2e96.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/6Nl4IdAcfX.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/7895d749a1244483.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/7iu27NtD3W57.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/SAn5cOlzM5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/UAru8Vy4rnU5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/a68e34a1994c91f7.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f179131bd406f951.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f55xAxN6kKHY.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/lQbYrpwHpz.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/2cb1cdcdd94b4856.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/42d72a170391c6a8.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/56b07eff8bb431ae.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/6835178ba482bae6.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/J5zM22aFag7P.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/ccebdeea0db69d31.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/f1bba9ab4dbe1ed8.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/42f09810ba12345e.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/504b9994f7248a46.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/7537179b546d66db.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/78c956974f371f70.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/Avh6ieJLzKeZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/Xhxvcdkcfx.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/a3f546a9518843d7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b281eb32b6bb3547.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b2a96e2b92d86304.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/bd269a201834e64c.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/bf58f1a69065bea7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/d601af5bffe114cc.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/f518f98959e91052.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/fFLE6PqCbCvb.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/fa0c23b3a4fb3915.gif"
+        ]
+    },
+    "uppercut": {
+        "color": discord.Color.from_rgb(243, 156, 18),
+        "verb": "launches a flaming uppercut at",
+        "emoji": "🥊🔥 ᕕ( ᐛ )ᕗ *SHORYUKEN!*",
+        "self_text": "{author} hits a flying Shoryuken straight into the ceiling! 🚀",
+        "bot_text": "{author} throws a Shoryuken at Sweety! 🛡️ Deflected upward safely!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/punch/05bc002e281ddd92.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/120ad1827ee066b2.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/2fd18184c78ec80d.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/3a6417e6568b2e96.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/6Nl4IdAcfX.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/7895d749a1244483.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/7iu27NtD3W57.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/SAn5cOlzM5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/UAru8Vy4rnU5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/a68e34a1994c91f7.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f179131bd406f951.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f55xAxN6kKHY.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/lQbYrpwHpz.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/2Wjs8tPsFY.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/8lZS3HMy3g.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/97RMv3fv88.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/LjIj5RXuy5.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/iScekvZbab2F.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/mRmtk3eAxD.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/nVUs8edNSp.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/neUSD4xPjl.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/xYq39NkXcb.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/42f09810ba12345e.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/504b9994f7248a46.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/7537179b546d66db.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/78c956974f371f70.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/Avh6ieJLzKeZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/Xhxvcdkcfx.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/a3f546a9518843d7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b281eb32b6bb3547.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b2a96e2b92d86304.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/bd269a201834e64c.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/bf58f1a69065bea7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/d601af5bffe114cc.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/f518f98959e91052.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/fFLE6PqCbCvb.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/fa0c23b3a4fb3915.gif"
+        ]
+    },
+    "spank": {
+        "color": discord.Color.from_rgb(255, 120, 150),
+        "verb": "spanks",
+        "emoji": "🏏💥 ( `Д´)ノ *SMACK!*",
+        "self_text": "{author} spanks themselves in frustration! ( >﹏< )",
+        "bot_text": "{author} tries to spank Sweety! 🛡️ Steel chassis bounced it right back!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/slap/004ebed9b64b0581.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/0vSCEWQ6ib.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/21a5eb00bdd9bc78.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/56d8426acc62f8fb.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/7882244dc2ba254c.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/83850d2e7434d541.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/8Xg35eViSf.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/8b4aad19774ed00c.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/99d7a3247ec4bd51.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/IGraVDzh5b.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/MEHoADoE1X.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/a51d5c14f73d4c4f.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/b8e3c1be7b5fd4e8.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/bec6d0d98bd68398.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/ece489ec8a6a0c27.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/iycRe43Ygg.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/42f09810ba12345e.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/504b9994f7248a46.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/7537179b546d66db.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/78c956974f371f70.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/Avh6ieJLzKeZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/Xhxvcdkcfx.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/a3f546a9518843d7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b281eb32b6bb3547.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b2a96e2b92d86304.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/bd269a201834e64c.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/bf58f1a69065bea7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/d601af5bffe114cc.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/f518f98959e91052.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/fFLE6PqCbCvb.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/fa0c23b3a4fb3915.gif"
+        ]
+    },
+    "kamehameha": {
+        "color": discord.Color.from_rgb(0, 191, 255),
+        "verb": "blasts a massive Kamehameha at",
+        "emoji": "⚡🌊 (҂`з´)⊃━☆ﾟ.*･｡ﾟ *KA-ME-HA-ME-HA!*",
+        "self_text": "{author} fires a Kamehameha into the sky! 🌌⚡",
+        "bot_text": "{author} fires a beam at Sweety! 🛡️ Hyper-shield deflected the ki wave!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/cool/524083d4d4ef102b.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/b2aa83618c310ea6.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/d2776011d23a58d9.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/e21901cb5c2cc452.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/27faa1158ff1cba5.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/412eae3ff7434e20.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/510f2458e7c1cb44.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/5e4ffcedaabf093f.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6370fa29c87821c7.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6476f441cc4247d7.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6d02471da7e6f2a2.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/788f68452cc26030.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/8c094342a17330fb.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/8ec31cfd3e68e9f5.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/97771003f3c18024.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/a3d30cee15aa0d4c.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/ad93180675107851.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/bb21161444f35e77.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/be527d38cbe987cf.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/cdeEfW3511.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/gYJyw7TjAYrm.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/mxqrRHp7QGpZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/ot6EOi3bk4.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/2Wjs8tPsFY.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/8lZS3HMy3g.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/97RMv3fv88.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/LjIj5RXuy5.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/iScekvZbab2F.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/mRmtk3eAxD.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/nVUs8edNSp.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/neUSD4xPjl.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/xYq39NkXcb.gif"
+        ]
+    },
+    "bodyslam": {
+        "color": discord.Color.from_rgb(220, 20, 60),
+        "verb": "delivers a full-weight flying body slam to",
+        "emoji": "💥🤼 ╰(°Д°)╯ *FLATLINE!*",
+        "self_text": "{author} belly-flops and body-slams the floor! 💥",
+        "bot_text": "{author} body slams Sweety! 🛡️ Shock-absorbers activated!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/punch/05bc002e281ddd92.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/120ad1827ee066b2.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/2fd18184c78ec80d.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/3a6417e6568b2e96.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/6Nl4IdAcfX.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/7895d749a1244483.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/7iu27NtD3W57.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/SAn5cOlzM5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/UAru8Vy4rnU5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/a68e34a1994c91f7.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f179131bd406f951.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f55xAxN6kKHY.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/lQbYrpwHpz.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/2cb1cdcdd94b4856.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/42d72a170391c6a8.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/56b07eff8bb431ae.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/6835178ba482bae6.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/J5zM22aFag7P.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/ccebdeea0db69d31.gif",
+            "https://cdn.otakugifs.xyz/gifs/roll/f1bba9ab4dbe1ed8.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/42f09810ba12345e.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/504b9994f7248a46.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/7537179b546d66db.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/78c956974f371f70.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/Avh6ieJLzKeZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/Xhxvcdkcfx.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/a3f546a9518843d7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b281eb32b6bb3547.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b2a96e2b92d86304.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/bd269a201834e64c.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/bf58f1a69065bea7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/d601af5bffe114cc.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/f518f98959e91052.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/fFLE6PqCbCvb.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/fa0c23b3a4fb3915.gif"
+        ]
+    },
+    "slash": {
+        "color": discord.Color.from_rgb(186, 85, 211),
+        "verb": "unsheathes a katana and slashes past",
+        "emoji": "⚔️💨 ( -_•) *...Omae Wa Mou Shindeiru.*",
+        "self_text": "{author} practices sword Katas with anime precision! ⚔️✨",
+        "bot_text": "{author} slashes at Sweety! 🛡️ Titanium plating parried the blade!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/cool/524083d4d4ef102b.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/b2aa83618c310ea6.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/d2776011d23a58d9.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/e21901cb5c2cc452.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/05bc002e281ddd92.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/120ad1827ee066b2.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/2fd18184c78ec80d.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/3a6417e6568b2e96.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/6Nl4IdAcfX.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/7895d749a1244483.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/7iu27NtD3W57.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/SAn5cOlzM5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/UAru8Vy4rnU5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/a68e34a1994c91f7.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f179131bd406f951.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f55xAxN6kKHY.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/lQbYrpwHpz.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/2Wjs8tPsFY.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/8lZS3HMy3g.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/97RMv3fv88.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/LjIj5RXuy5.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/iScekvZbab2F.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/mRmtk3eAxD.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/nVUs8edNSp.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/neUSD4xPjl.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/xYq39NkXcb.gif"
+        ]
+    },
+    "bite": {
+        "color": discord.Color.from_rgb(240, 128, 128),
+        "verb": "takes a playful bite out of",
+        "emoji": "🦷😋 ( ˙꒳​˙ ) *CHOMP!*",
+        "self_text": "{author} nibbles on their own fingers! ( ˙꒳​˙ ) nom nom",
+        "bot_text": "{author} bites Sweety! 🤖 *Tastes like circuits and strawberry milk!*",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/bite/00f2ae5edc6c3e33.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/035142fddca989cb.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/2b869d0d6cd05a40.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/39880e1cae9bd963.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/45f4413ad8709d8f.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/655d4c17003f602b.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/7b9343dc2123353e.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/912cdb636d8dcae1.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/CV4RPSRD2A.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/b9c349dfe1e57de6.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/f317e3d3ff3a7986.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/f99be8ff02b8f27b.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/fde14f48cf99baf0.gif",
+            "https://cdn.otakugifs.xyz/gifs/bite/qSQsCXHTRi.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/08b555e737a80c24.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/4a6ad1e9124ecd87.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/5688dceaf7e6f66c.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/56c4dede663b195c.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/715669aff76e91ad.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/731e4519bc3f53da.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/7dd9691a0855d7b5.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/865e18a7f459109b.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/95703c7eaa7adf1b.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/9e6d546b9894ebd8.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/a0330202267e875b.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/a6a6acb7d803c808.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/b1da3ef5dd6fbf1c.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/c695119f04f41b08.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/d20837ae7da50a6c.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/d97ae7eb802d5065.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/e011735f4fbeec62.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/e19e3b2d7220ee10.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/fc75b3ea3325450e.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/xnzHKLJLjx.gif",
+            "https://cdn.otakugifs.xyz/gifs/nom/yrpM2Ct3zJ.gif"
+        ]
+    },
+    "shoot": {
+        "color": discord.Color.from_rgb(255, 69, 0),
+        "verb": "points finger guns and shoots",
+        "emoji": "👉💥 ( •_•)r︻デ═一 *PEW PEW!*",
+        "self_text": "{author} does finger guns in the mirror! 👉😎👉 *Click click!*",
+        "bot_text": "{author} shoots finger lasers at Sweety! 🛡️ Absorbed by photon battery!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/cool/524083d4d4ef102b.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/b2aa83618c310ea6.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/d2776011d23a58d9.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/e21901cb5c2cc452.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/2Wjs8tPsFY.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/8lZS3HMy3g.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/97RMv3fv88.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/LjIj5RXuy5.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/iScekvZbab2F.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/mRmtk3eAxD.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/nVUs8edNSp.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/neUSD4xPjl.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/xYq39NkXcb.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/1362ced2d2853604.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/1c383c21519a03f2.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/268082c8b1cea0ff.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/2800b23d741f69bc.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/2d7699393d3762db.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/36f2630acbe06e06.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/3c87cbe5bdc39a9c.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/554364fd35eab043.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/765450c9024b2884.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/89a724a865ff15a7.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/9a0d7a2846cb7692.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/GHQSjVwZcYpC.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/KOLnUuQpNg.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/a44f098a34e5c937.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/a5fb8576b8199e96.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/c36ae6e435e81a8e.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/d9e9b85ebd57558c.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/e8465ffbb602318c.gif",
+            "https://cdn.otakugifs.xyz/gifs/wink/f362fbd86c4a6229.gif"
+        ]
+    },
+    "pinch": {
+        "color": discord.Color.from_rgb(255, 182, 193),
+        "verb": "pinches the squishy cheeks of",
+        "emoji": "🤏🌸 ( >ω< ) *pinch pinch!*",
+        "self_text": "{author} pinches their own cheeks to see if they're dreaming! 🤏💤",
+        "bot_text": "{author} pinches Sweety's cheeks! (* >ω<) ✨ *Soft holographic cheeks!*",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/pinch/08cb26d0dc270658.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/1d7d49d97d7d9e79.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/28e35340f9138653.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/3a9538701bfaa677.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/9cec760fee1aca29.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/GGJVLYj95s.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/b1dfb21541e2249b.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/cae30be941199378.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/d44459f14913ccb1.gif",
+            "https://cdn.otakugifs.xyz/gifs/pinch/nvwFxg3Su3.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/08002e2d348de3f5.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/0fac7376e78ccfe4.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/1e2d642623174623.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/2527bd1932ba80df.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/5817436bbf77458c.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/7ba5d933965fe1a3.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/7e68001662f53449.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/b6969ba7388c3327.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/cc64b741a94d53cf.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/db2fdca3996922ad.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/dd9a1a19ba6e13de.gif",
+            "https://cdn.otakugifs.xyz/gifs/poke/e572cc39c9817440.gif"
+        ]
+    },
+    "counter": {
+        "color": discord.Color.from_rgb(138, 43, 226),
+        "verb": "effortlessly counters and parries",
+        "emoji": "⚡🌀 ᕦ(ò_óˇ)ᕤ *ULTRA INSTINCT COUNTER!*",
+        "self_text": "{author} activates Ultra Instinct and dodges imaginary attacks! ⚡🌀",
+        "bot_text": "{author} counters Sweety! 🤖 Predictive algorithm matched the move!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/cool/524083d4d4ef102b.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/b2aa83618c310ea6.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/d2776011d23a58d9.gif",
+            "https://cdn.otakugifs.xyz/gifs/cool/e21901cb5c2cc452.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/1d56f26879e52f7a.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/3175324d39802027.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/328dbfdbef568d4e.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/4c257647666c60e8.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/4df0b265c98240c5.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/74a0daba2796bf72.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/8feb790323611f57.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/95780d391092ddb5.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/990f15cf01b42f28.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/NRVm2rHkM0.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/a248b4c2011100dd.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/ac2ecc4978caa5a0.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/d04e42e8ffcb4124.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/da643bc002bd7b87.gif",
+            "https://cdn.otakugifs.xyz/gifs/smug/f3c4af78a724523f.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/6506ce576e412fc7.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/681cc6cf7f59168e.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/6FNjbL81TV.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/83e6c4b9528aafc1.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/S3h8xyBPXZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/ad300b8210b6103e.gif",
+            "https://cdn.otakugifs.xyz/gifs/stop/fc41bb1bd17069b7.gif"
+        ]
+    },
+    "explode": {
+        "color": discord.Color.from_rgb(255, 69, 0),
+        "verb": "channels Megumin's magic and EXPLODES",
+        "emoji": "💥🌋 (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧ *EXPLOSION!*",
+        "self_text": "{author} casts EXPLOSION and collapses from mana exhaustion! 💥🌋",
+        "bot_text": "{author} casts EXPLOSION at Sweety! 🛡️ Thermal shields took the brunt of the blast!",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/mad/27faa1158ff1cba5.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/412eae3ff7434e20.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/510f2458e7c1cb44.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/5e4ffcedaabf093f.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6370fa29c87821c7.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6476f441cc4247d7.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/6d02471da7e6f2a2.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/788f68452cc26030.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/8c094342a17330fb.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/8ec31cfd3e68e9f5.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/97771003f3c18024.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/a3d30cee15aa0d4c.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/ad93180675107851.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/bb21161444f35e77.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/be527d38cbe987cf.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/cdeEfW3511.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/gYJyw7TjAYrm.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/mxqrRHp7QGpZ.gif",
+            "https://cdn.otakugifs.xyz/gifs/mad/ot6EOi3bk4.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/2Wjs8tPsFY.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/8lZS3HMy3g.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/97RMv3fv88.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/LjIj5RXuy5.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/iScekvZbab2F.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/mRmtk3eAxD.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/nVUs8edNSp.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/neUSD4xPjl.gif",
+            "https://cdn.otakugifs.xyz/gifs/shout/xYq39NkXcb.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/2zs94WotGe.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/436bc4299cfffbdd.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/4XwpLdBZ8vg7.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/505aaad444519a9d.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/71ade604a08c60cd.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/8bdc33883d8bf390.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/90d97ca9c606d80e.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/958ecfadf5220a9d.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/GiQWcyRdap.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/c3zEwoCxHF.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/e2db612572bbff28.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/ed08f6a1f6db7afa.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/gsNNR7XWgj.gif",
+            "https://cdn.otakugifs.xyz/gifs/surprised/kqFMlblKpE.gif",
+            "https://cdn.otakugifs.xyz/gifs/woah/00dQIgf6Ph.gif",
+            "https://cdn.otakugifs.xyz/gifs/woah/864d555611220697.gif",
+            "https://cdn.otakugifs.xyz/gifs/woah/9246d664e2ef8471.gif",
+            "https://cdn.otakugifs.xyz/gifs/woah/92c497c0063845f1.gif",
+            "https://cdn.otakugifs.xyz/gifs/woah/93718e33769dfd32.gif",
+            "https://cdn.otakugifs.xyz/gifs/woah/B01FFTmMQq.gif",
+            "https://cdn.otakugifs.xyz/gifs/woah/SGZUvm7Jaq.gif",
+            "https://cdn.otakugifs.xyz/gifs/woah/azyJGv2HQc.gif"
+        ]
+    },
 }
 
 def create_action_embed(action_type: str, author: Union[discord.Member, discord.User], target: Union[discord.Member, discord.User], bot_user: Optional[Union[discord.Member, discord.User]] = None) -> discord.Embed:
@@ -9414,7 +10098,7 @@ def make_help_embed() -> discord.Embed:
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/appeal [reason]` — Official strike / 7-day timeout appeal\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs (with instant appeal button)\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
-    embed.add_field(name="💖 **Wholesome Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/pat [user]` — Wholesome anime headpats\n• `/kiss [user]` — Romantic anime kiss *(Admins/Owner or authorized role)*\n• `/kissrole [action] [role]` — Configure kiss command role permissions\n• `/highfive [user]` — Epic high five / celebration\n• `/wave [user]` — Friendly anime wave\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/punch [user]` — Deliver a super anime punch", inline=False)
+    embed.add_field(name="💖 **Wholesome Social & Anime Actions**", value="• **Social & Romance**: `/hug`, `/pat`, `/kiss` *(Admins/Role)*, `/kissrole`, `/pinch`, `/bite`, `/highfive`, `/wave`\n• **Anime Combat & Slapstick**: `/slap`, `/punch`, `/suplex`, `/uppercut`, `/bodyslam`, `/spank`, `/slash`, `/shoot`, `/counter`\n• **Spells & Superpowers**: `/powerup`, `/kamehameha`, `/explode`, `/heal`, `/shield`, `/freeze`, `/hypnotize`", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     return embed
@@ -10752,6 +11436,294 @@ async def kissrole_slash_cmd(interaction: discord.Interaction, action: str = "vi
             
         embed.set_footer(text="Use /kissrole set @Role to change, or /kissrole remove to reset.")
         await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="powerup", description="Channel raw Super Saiyan / Domain Expansion aura")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def powerup_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("powerup", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="awaken", description="Channel raw Super Saiyan / Domain Expansion aura (alias for /powerup)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def awaken_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("powerup", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="heal", description="Cast a soothing green rejuvenation aura to restore health")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def heal_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("heal", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="shield", description="Erect an impenetrable hexagonal energy barrier")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def shield_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("shield", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="barrier", description="Erect an impenetrable hexagonal energy barrier (alias for /shield)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def barrier_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("shield", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="freeze", description="Cast an ice spell that turns the target into a frozen statue")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def freeze_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("freeze", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="ice", description="Cast an ice spell that turns the target into a frozen statue (alias for /freeze)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def ice_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("freeze", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="hypnotize", description="Swirling spiral anime eyes putting someone into a trance")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def hypnotize_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("hypnotize", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="hypno", description="Swirling spiral anime eyes putting someone into a trance (alias for /hypnotize)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def hypno_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("hypnotize", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="suplex", description="Pick someone up and deliver a dramatic anime pro-wrestling suplex")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def suplex_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("suplex", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="uppercut", description="Shoryuken! Launch someone into the ceiling with a flaming uppercut")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def uppercut_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("uppercut", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="shoryuken", description="Shoryuken! Launch someone into the ceiling with a flaming uppercut (alias for /uppercut)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def shoryuken_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("uppercut", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="spank", description="Comedic anime discipline spank with a squeaky paddle")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def spank_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("spank", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="kamehameha", description="Charge up a massive glowing energy blast and obliterate someone")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def kamehameha_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("kamehameha", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="beam", description="Charge up a massive glowing energy blast and obliterate someone (alias for /kamehameha)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def beam_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("kamehameha", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="blast", description="Charge up a massive glowing energy blast and obliterate someone (alias for /kamehameha)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def blast_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("kamehameha", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="bodyslam", description="Full-weight WWE anime flying elbow/body slam")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def bodyslam_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("bodyslam", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="slam", description="Full-weight WWE anime flying elbow/body slam (alias for /bodyslam)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def slam_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("bodyslam", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="slash", description="Unsheathe a katana and slice past them with an anime shadow cut")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def slash_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("slash", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="slice", description="Unsheathe a katana and slice past them with an anime shadow cut (alias for /slash)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def slice_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("slash", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="bite", description="Playful anime chomp on someone's arm or cheek")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def bite_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("bite", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="chomp", description="Playful anime chomp on someone's arm or cheek (alias for /bite)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def chomp_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("bite", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="nom", description="Playful anime chomp on someone's arm or cheek (alias for /bite)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def nom_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("bite", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="shoot", description="Finger guns with an unexpectedly catastrophic laser explosion")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def shoot_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("shoot", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="pew", description="Finger guns with an unexpectedly catastrophic laser explosion (alias for /shoot)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def pew_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("shoot", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="pinch", description="Pinch someone's squishy cheeks until they apologize")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def pinch_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("pinch", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="counter", description="Ultra Instinct dodge into an effortless reversal counter-strike")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def counter_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("counter", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="parry", description="Ultra Instinct dodge into an effortless reversal counter-strike (alias for /counter)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def parry_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("counter", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="dodge", description="Ultra Instinct dodge into an effortless reversal counter-strike (alias for /counter)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def dodge_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("counter", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="explode", description="Channel Megumin's iconic EXPLOSION! and vaporize the target")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def explode_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("explode", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="explosion", description="Channel Megumin's iconic EXPLOSION! and vaporize the target (alias for /explode)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def explosion_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("explode", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="nuke", description="Channel Megumin's iconic EXPLOSION! and vaporize the target (alias for /explode)")
+@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@app_commands.guild_only()
+async def nuke_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    target = member or interaction.user
+    embed = create_action_embed("explode", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
 
 
 
@@ -12223,6 +13195,150 @@ async def kissrole_prefix_cmd(ctx: commands.Context, action: Optional[str] = Non
             
         embed.set_footer(text="Use !kissrole set @Role to change, or !kissrole remove to reset.")
         await ctx.send(embed=embed)
+
+
+@bot.command(name="powerup", aliases=['awaken'])
+@commands.guild_only()
+async def powerup_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Channel raw Super Saiyan / Domain Expansion aura: !powerup [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("powerup", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="heal")
+@commands.guild_only()
+async def heal_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Cast a soothing green rejuvenation aura to restore health: !heal [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("heal", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="shield", aliases=['barrier'])
+@commands.guild_only()
+async def shield_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Erect an impenetrable hexagonal energy barrier: !shield [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("shield", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="freeze", aliases=['ice'])
+@commands.guild_only()
+async def freeze_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Cast an ice spell that turns the target into a frozen statue: !freeze [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("freeze", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="hypnotize", aliases=['hypno'])
+@commands.guild_only()
+async def hypnotize_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Swirling spiral anime eyes putting someone into a trance: !hypnotize [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("hypnotize", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="suplex")
+@commands.guild_only()
+async def suplex_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Pick someone up and deliver a dramatic anime pro-wrestling suplex: !suplex [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("suplex", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="uppercut", aliases=['shoryuken'])
+@commands.guild_only()
+async def uppercut_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Shoryuken! Launch someone into the ceiling with a flaming uppercut: !uppercut [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("uppercut", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="spank")
+@commands.guild_only()
+async def spank_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Comedic anime discipline spank with a squeaky paddle: !spank [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("spank", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="kamehameha", aliases=['beam', 'blast'])
+@commands.guild_only()
+async def kamehameha_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Charge up a massive glowing energy blast and obliterate someone: !kamehameha [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("kamehameha", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="bodyslam", aliases=['slam'])
+@commands.guild_only()
+async def bodyslam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Full-weight WWE anime flying elbow/body slam: !bodyslam [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("bodyslam", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="slash", aliases=['slice'])
+@commands.guild_only()
+async def slash_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Unsheathe a katana and slice past them with an anime shadow cut: !slash [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("slash", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="bite", aliases=['chomp', 'nom'])
+@commands.guild_only()
+async def bite_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Playful anime chomp on someone's arm or cheek: !bite [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("bite", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="shoot", aliases=['pew'])
+@commands.guild_only()
+async def shoot_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Finger guns with an unexpectedly catastrophic laser explosion: !shoot [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("shoot", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="pinch")
+@commands.guild_only()
+async def pinch_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Pinch someone's squishy cheeks until they apologize: !pinch [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("pinch", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="counter", aliases=['parry', 'dodge'])
+@commands.guild_only()
+async def counter_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Ultra Instinct dodge into an effortless reversal counter-strike: !counter [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("counter", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="explode", aliases=['explosion', 'nuke'])
+@commands.guild_only()
+async def explode_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Channel Megumin's iconic EXPLOSION! and vaporize the target: !explode [@user]"""
+    target = member or ctx.author
+    embed = create_action_embed("explode", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
 
 
 
