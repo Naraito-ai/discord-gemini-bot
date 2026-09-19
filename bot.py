@@ -8,6 +8,7 @@ import time
 import datetime
 import random
 import math
+import unicodedata
 import urllib.request
 import discord
 from discord.ext import commands, tasks
@@ -7538,6 +7539,84 @@ async def teardown_guild(guild):
     await db.clear_resources(guild.id)
     return stats
 
+# ── Security & Rate Limit Helpers for Production Hardening ────────────────
+_image_render_timestamps: dict[int, list[float]] = {}
+_roleall_cooldowns: dict[int, float] = {}
+
+def check_image_render_limit(guild_id: int, max_renders: int = 5, window: int = 60) -> bool:
+    """Returns True if within rate limit (max 5 image renders per minute per server)."""
+    now = time.time()
+    timestamps = _image_render_timestamps.get(guild_id, [])
+    valid = [t for t in timestamps if now - t < window]
+    if len(valid) >= max_renders:
+        _image_render_timestamps[guild_id] = valid
+        return False
+    valid.append(now)
+    _image_render_timestamps[guild_id] = valid
+    return True
+
+BLOCKED_ROLE_PERMISSIONS = [
+    "administrator",
+    "manage_guild",
+    "manage_roles",
+    "manage_channels",
+    "ban_members",
+    "kick_members",
+    "moderate_members"
+]
+
+def role_has_dangerous_perms(role: discord.Role) -> bool:
+    """Checks if a role possesses high-privilege permissions that would cause privilege escalation."""
+    perms = role.permissions
+    return any(getattr(perms, perm, False) for perm in BLOCKED_ROLE_PERMISSIONS)
+
+MIN_REMINDER_SECONDS = 10
+MAX_REMINDER_SECONDS = 31_536_000  # 365 days
+
+def sanitize_reminder_text(text: str) -> str:
+    """Sanitizes user reminder text against zero-width characters, homoglyphs, and mention injections."""
+    text = re.sub(r'[\u200B-\u200D\uFEFF\u00AD\u2060\u180E]', '', text)
+    text = unicodedata.normalize('NFKC', text)
+    text = discord.utils.escape_mentions(text)
+    return text[:500].strip()
+
+class ConfirmActionView(discord.ui.View):
+    def __init__(self, original_user_id: int, action: str):
+        super().__init__(timeout=30.0)
+        self.original_user_id = original_user_id
+        self.action = action  # "setup" or "teardown"
+        self.confirmed = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.original_user_id:
+            await interaction.response.send_message(
+                "❌ Only the person who ran this command can confirm.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="✅ Confirm", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.confirmed = True
+        self.stop()
+        await interaction.response.defer()
+
+    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.confirmed = False
+        self.stop()
+        await interaction.response.edit_message(
+            content="❌ Action cancelled. No changes were made.",
+            embed=None,
+            view=None
+        )
+
+    async def on_timeout(self):
+        self.confirmed = False
+        self.stop()
+
+
 # ── Interactive UI Views ───────────────────────────────────────────────────
 
 class SetupConfirmView(discord.ui.View):
@@ -8525,11 +8604,35 @@ async def help_prefix_cmd(ctx: commands.Context):
         app_commands.Choice(name="Business / Team Workspace", value="business")
     ]
 )
-@app_commands.default_permissions(manage_guild=True)
+@app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
 async def setup_command(interaction: discord.Interaction, theme: str = None, description: str = None):
+    # Runtime Administrator Guard
+    if not interaction.user.guild_permissions.administrator and interaction.user.id != getattr(interaction.guild, "owner_id", None) and interaction.user.id != 719932313919684670:
+        return await interaction.response.send_message(
+            "❌ Only server administrators can use this command. Moderators and managers do not have access.",
+            ephemeral=True
+        )
+
     if not theme and not description:
         await interaction.response.send_message("❌ Please provide a preset `theme` OR a custom `description` to set up your server.", ephemeral=True)
+        return
+
+    # Double Confirmation View
+    confirm_embed = discord.Embed(
+        title="⚙️ Confirm Server Setup",
+        description=(
+            "This will create channels, roles, and categories for Sweety.\n"
+            "Existing bot-created content may be overwritten.\n\n"
+            "**Are you sure you want to proceed?**"
+        ),
+        color=discord.Color.orange()
+    )
+    confirm_view = ConfirmActionView(interaction.user.id, "setup")
+    await interaction.response.send_message(embed=confirm_embed, view=confirm_view, ephemeral=True)
+    await confirm_view.wait()
+
+    if not confirm_view.confirmed:
         return
 
     # ── Layer 1: Rate limit (user cooldown) ────────────────────────────────
@@ -8537,7 +8640,7 @@ async def setup_command(interaction: discord.Interaction, theme: str = None, des
     if description:
         allowed, remaining = _check_user_cooldown(interaction.user.id)
         if not allowed:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"⏳ You're sending commands too fast. Please wait **{remaining}s** before using `/setup` again.",
                 ephemeral=True
             )
@@ -8545,7 +8648,7 @@ async def setup_command(interaction: discord.Interaction, theme: str = None, des
 
         # ── Layer 2: Rate limit (server hourly cap) ─────────────────────────
         if not _check_server_limit(interaction.guild.id):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"🚫 This server has reached the **{_SERVER_HOURLY_LIMIT} AI uses/hour** limit. Try again later or use a preset theme.",
                 ephemeral=True
             )
@@ -8555,14 +8658,13 @@ async def setup_command(interaction: discord.Interaction, theme: str = None, des
         is_clean, result = _sanitize_ai_input(description)
         if not is_clean:
             logger.warning(f"Prompt injection attempt in /setup by {interaction.user} ({interaction.user.id}) in guild {interaction.guild.id}: matched '{result}'")
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "⚠️ Your description was flagged for suspicious content. Please describe a normal Discord server.",
                 ephemeral=True
             )
             return
         description = result  # use sanitized (truncated) version
 
-    await interaction.response.defer(thinking=True)
     data = None
     
     # Case 1: Preset Theme only (runs instantly, zero quota usage)
@@ -8626,6 +8728,7 @@ async def setup_command(interaction: discord.Interaction, theme: str = None, des
 
     view = SetupConfirmView(interaction.user, interaction.guild, data, interaction)
     await interaction.followup.send(embed=embed, view=view)
+    await log_mod_action(interaction.guild, interaction.user, interaction.guild.me, "Server Setup Initiated", f"Theme: {theme or 'Custom'}", f"🔧 /setup executed by {interaction.user.mention} at <t:{int(time.time())}:F>")
 
 
 @bot.tree.command(name="stylechannels", description="Apply a custom text styling aesthetic to all text channels in the server")
@@ -9016,7 +9119,14 @@ async def purge_command(interaction: discord.Interaction, amount: int):
 )
 @app_commands.guild_only()
 async def snipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, index: Optional[int] = 1):
+    everyone_role = interaction.guild.default_role
+    if not interaction.channel.permissions_for(everyone_role).view_channel:
+        return await interaction.response.send_message("❌ Snipe is disabled in restricted channels.", ephemeral=True)
+
     target_channel = channel or interaction.channel
+    if not target_channel.permissions_for(everyone_role).view_channel:
+        return await interaction.response.send_message("❌ That message originated from a restricted channel and cannot be sniped.", ephemeral=True)
+
     embed, err_msg = create_snipe_embed(target_channel, index=index or 1)
     if err_msg:
         await interaction.response.send_message(err_msg, ephemeral=True)
@@ -9031,7 +9141,14 @@ async def snipe_slash_cmd(interaction: discord.Interaction, channel: Optional[di
 )
 @app_commands.guild_only()
 async def editsnipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, index: Optional[int] = 1):
+    everyone_role = interaction.guild.default_role
+    if not interaction.channel.permissions_for(everyone_role).view_channel:
+        return await interaction.response.send_message("❌ Snipe is disabled in restricted channels.", ephemeral=True)
+
     target_channel = channel or interaction.channel
+    if not target_channel.permissions_for(everyone_role).view_channel:
+        return await interaction.response.send_message("❌ That message originated from a restricted channel and cannot be sniped.", ephemeral=True)
+
     embed, err_msg = create_editsnipe_embed(target_channel, index=index or 1)
     if err_msg:
         await interaction.response.send_message(err_msg, ephemeral=True)
@@ -9086,6 +9203,10 @@ async def usersnipe_slash_cmd(
     days: Optional[int] = 30,
     filter_type: Optional[str] = "all"
 ):
+    everyone_role = interaction.guild.default_role
+    if not interaction.channel.permissions_for(everyone_role).view_channel:
+        return await interaction.response.send_message("❌ Snipe is disabled in restricted channels.", ephemeral=True)
+
     await interaction.response.defer()
     days_val = min(30, max(1, days or 30))
     f_type = filter_type or "all"
@@ -9093,11 +9214,21 @@ async def usersnipe_slash_cmd(
     records = await db.get_user_snipe_history(interaction.guild.id, user.id, days=days_val)
     stats = await db.get_user_snipe_stats(interaction.guild.id, user.id, days=days_val)
     
+    # Filter out records originating from restricted channels
+    filtered_records = []
+    for rec in records:
+        cid = rec.get("channel_id") if isinstance(rec, dict) else rec[3]
+        if cid:
+            src_chan = interaction.guild.get_channel(int(cid))
+            if src_chan and not src_chan.permissions_for(everyone_role).view_channel:
+                continue
+        filtered_records.append(rec)
+
     view = UserSnipePaginationView(
         author=interaction.user,
         target_user=user,
         guild_id=interaction.guild.id,
-        records=records,
+        records=filtered_records,
         stats=stats,
         days=days_val,
         filter_type=f_type,
@@ -9171,6 +9302,36 @@ async def remindme_slash_cmd(interaction: discord.Interaction, time_arg: str, no
         )
         return
 
+    if seconds < MIN_REMINDER_SECONDS:
+        await interaction.response.send_message(
+            f"❌ **Reminder duration too short!** Minimum duration is `{MIN_REMINDER_SECONDS}s`.",
+            ephemeral=True
+        )
+        return
+
+    if seconds > MAX_REMINDER_SECONDS:
+        await interaction.response.send_message(
+            "❌ **Reminder duration too long!** Maximum duration cannot exceed 365 days (1 year).",
+            ephemeral=True
+        )
+        return
+
+    clean_note = sanitize_reminder_text(note)
+    if not clean_note:
+        await interaction.response.send_message(
+            "❌ **Reminder text cannot be empty or contain only invisible characters!**",
+            ephemeral=True
+        )
+        return
+
+    active_reminders = await db.get_user_reminders(interaction.user.id)
+    if active_reminders and len(active_reminders) >= 10:
+        await interaction.response.send_message(
+            "❌ **Reminder limit reached!** You can have a maximum of **10** active reminders at once. Use `/reminders` to view or `/reminders clear` to cancel them.",
+            ephemeral=True
+        )
+        return
+
     now = time.time()
     remind_at = now + seconds
     rem_id = f"rem_{interaction.user.id}_{int(remind_at)}_{int(now)}"
@@ -9181,7 +9342,7 @@ async def remindme_slash_cmd(interaction: discord.Interaction, time_arg: str, no
         user_id=interaction.user.id,
         guild_id=interaction.guild.id,
         channel_id=interaction.channel.id,
-        reminder_text=note,
+        reminder_text=clean_note,
         remind_at=remind_at,
         created_at=now,
         delivery_method=dest
@@ -9192,7 +9353,7 @@ async def remindme_slash_cmd(interaction: discord.Interaction, time_arg: str, no
         description=f"I will remind you <t:{int(remind_at)}:R> (<t:{int(remind_at)}:f>).",
         color=discord.Color.blue()
     )
-    embed.add_field(name="📝 Note", value=f">>> {note[:1000]}", inline=False)
+    embed.add_field(name="📝 Note", value=f">>> {clean_note[:1000]}", inline=False)
     embed.add_field(
         name="📍 Delivery Location",
         value="📬 **Direct Message (DM)** (Private)" if dest == "dm" else f"💬 **{interaction.channel.mention}**",
@@ -9286,8 +9447,15 @@ async def buildteam_slash_cmd(interaction: discord.Interaction):
 
 @bot.tree.command(name="myteam", description="🏀 View your (or another member's) active $15 Dream Team card, career record & GM badges")
 @app_commands.describe(user="The member whose dream team you want to view (defaults to yourself)")
+@app_commands.checks.cooldown(1, 10.0, key=lambda i: (i.guild_id or 0, i.user.id))
 @app_commands.guild_only()
 async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[discord.Member] = None):
+    if not check_image_render_limit(interaction.guild_id or 0):
+        return await interaction.response.send_message(
+            "⏳ Image generation is on cooldown. Max 5 renders per minute per server. Try again shortly.",
+            ephemeral=True
+        )
+
     await interaction.response.defer()
     target = user or interaction.user
     if getattr(target, "bot", False) or (bot.user and target.id == bot.user.id):
@@ -9319,8 +9487,15 @@ async def teamqueue_slash_cmd(interaction: discord.Interaction):
 
 @bot.tree.command(name="battlecard", description="⚔️ Generate a high-definition 2K Head-to-Head Versus Matchup card against another member or @Sweety")
 @app_commands.describe(opponent="The member whose dream team you want to scout / face off against (or @Sweety)")
+@app_commands.checks.cooldown(1, 10.0, key=lambda i: (i.guild_id or 0, i.user.id))
 @app_commands.guild_only()
 async def battlecard_slash_cmd(interaction: discord.Interaction, opponent: discord.Member):
+    if not check_image_render_limit(interaction.guild_id or 0):
+        return await interaction.response.send_message(
+            "⏳ Image generation is on cooldown. Max 5 renders per minute per server. Try again shortly.",
+            ephemeral=True
+        )
+
     await interaction.response.defer()
     target_a = interaction.user
     target_b = opponent
@@ -9972,15 +10147,42 @@ async def aiperms_command(interaction: discord.Interaction, target: discord.abc.
 
 
 @bot.tree.command(name="teardown", description="Delete only the roles, categories, and channels created by this bot")
-@app_commands.default_permissions(manage_guild=True)
+@app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
 async def teardown_command(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="⚠️ Confirm Teardown",
-        description="Are you sure you want to delete all roles, categories, and channels created by the Gemini Bot in this server?",
-        color=discord.Color.orange()
+    # Runtime Administrator Guard
+    if not interaction.user.guild_permissions.administrator and interaction.user.id != getattr(interaction.guild, "owner_id", None) and interaction.user.id != 719932313919684670:
+        return await interaction.response.send_message(
+            "❌ Only server administrators can use this command. Moderators and managers do not have access.",
+            ephemeral=True
+        )
+
+    confirm_embed = discord.Embed(
+        title="⚠️ CONFIRM SERVER TEARDOWN",
+        description=(
+            "**This will PERMANENTLY DELETE all bot-created channels, roles, and categories.**\n\n"
+            "⛔ This action CANNOT be undone.\n\n"
+            "**Are you absolutely sure?**"
+        ),
+        color=discord.Color.red()
     )
-    view = TeardownConfirmView(interaction.user, interaction.guild)
+    confirm_view = ConfirmActionView(interaction.user.id, "teardown")
+    await interaction.response.send_message(embed=confirm_embed, view=confirm_view, ephemeral=True)
+    await confirm_view.wait()
+
+    if not confirm_view.confirmed:
+        return
+
+    stats = await teardown_guild(interaction.guild)
+    
+    result_embed = discord.Embed(title="🗑️ Teardown Complete", color=discord.Color.red())
+    result_embed.add_field(name="Channels Deleted", value=str(stats.get('channels', 0)), inline=True)
+    result_embed.add_field(name="Categories Deleted", value=str(stats.get('categories', 0)), inline=True)
+    result_embed.add_field(name="Roles Deleted", value=str(stats.get('roles', 0)), inline=True)
+    result_embed.set_footer(text="Sweety Server Cleanup Engine")
+    
+    await interaction.followup.send(embed=result_embed, ephemeral=True)
+    await log_mod_action(interaction.guild, interaction.user, interaction.guild.me, "Server Teardown Executed", "Purged AI-created infrastructure", f"🗑️ /teardown executed by {interaction.user.mention} at <t:{int(time.time())}:F>")
 
 
 
@@ -10766,6 +10968,36 @@ async def remindme_prefix_cmd(ctx: commands.Context, time_arg: str, *, note: str
             await ctx.send(f"❌ {ctx.author.mention} **Invalid time format!** Examples: `!remindme 10m check email`", delete_after=6)
         return
 
+    if seconds < MIN_REMINDER_SECONDS:
+        try:
+            await ctx.author.send(f"❌ **Reminder duration too short!** Minimum duration is `{MIN_REMINDER_SECONDS}s`.")
+        except Exception:
+            await ctx.send(f"❌ {ctx.author.mention} **Reminder duration too short!** Minimum duration is `{MIN_REMINDER_SECONDS}s`.", delete_after=6)
+        return
+
+    if seconds > MAX_REMINDER_SECONDS:
+        try:
+            await ctx.author.send("❌ **Reminder duration too long!** Maximum duration cannot exceed 365 days (1 year).")
+        except Exception:
+            await ctx.send(f"❌ {ctx.author.mention} **Reminder duration too long!** Maximum duration cannot exceed 365 days (1 year).", delete_after=6)
+        return
+
+    clean_note = sanitize_reminder_text(note)
+    if not clean_note:
+        try:
+            await ctx.author.send("❌ **Reminder text cannot be empty or contain only invisible characters!**")
+        except Exception:
+            await ctx.send(f"❌ {ctx.author.mention} **Reminder text cannot be empty or contain only invisible characters!**", delete_after=6)
+        return
+
+    active_reminders = await db.get_user_reminders(ctx.author.id)
+    if active_reminders and len(active_reminders) >= 10:
+        try:
+            await ctx.author.send("❌ **Reminder limit reached!** You can have a maximum of **10** active reminders at once. Use `!reminders` or `!reminders clear`.")
+        except Exception:
+            await ctx.send(f"❌ {ctx.author.mention} **Reminder limit reached!** You can have a maximum of **10** active reminders at once. Use `!reminders clear`.", delete_after=6)
+        return
+
     now = time.time()
     remind_at = now + seconds
     rem_id = f"rem_{ctx.author.id}_{int(remind_at)}_{int(now)}"
@@ -10775,7 +11007,7 @@ async def remindme_prefix_cmd(ctx: commands.Context, time_arg: str, *, note: str
         user_id=ctx.author.id,
         guild_id=ctx.guild.id,
         channel_id=ctx.channel.id,
-        reminder_text=note,
+        reminder_text=clean_note,
         remind_at=remind_at,
         created_at=now,
         delivery_method="dm"
@@ -10786,7 +11018,7 @@ async def remindme_prefix_cmd(ctx: commands.Context, time_arg: str, *, note: str
         description=f"I will remind you <t:{int(remind_at)}:R> (<t:{int(remind_at)}:f>) via **Direct Message**.",
         color=discord.Color.blue()
     )
-    embed.add_field(name="📝 Note", value=f">>> {note[:1000]}", inline=False)
+    embed.add_field(name="📝 Note", value=f">>> {clean_note[:1000]}", inline=False)
     embed.set_footer(text=f"ID: {rem_id[:16]} • Sweety Productivity Suite (Private)")
     embed.timestamp = discord.utils.utcnow()
 
@@ -10970,9 +11202,13 @@ async def buildteam_prefix_cmd(ctx: commands.Context):
 
 
 @bot.command(name="myteam", aliases=["squad", "dreamteam"])
+@commands.cooldown(1, 10.0, commands.BucketType.user)
 @commands.guild_only()
 async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """View your (or another member's) active $15 Dream Team squad, career record & GM badges: !myteam [@user]"""
+    if not check_image_render_limit(ctx.guild.id if ctx.guild else 0):
+        return await ctx.send("⏳ Image generation is on cooldown. Max 5 renders per minute per server. Try again shortly.")
+
     target = member or ctx.author
     if getattr(target, "bot", False) or (bot.user and target.id == bot.user.id):
         row = await ensure_sweety_ai_team(guild_id=ctx.guild.id if ctx.guild else None, target_id=target.id)
@@ -11003,9 +11239,13 @@ async def teamqueue_prefix_cmd(ctx: commands.Context):
 
 
 @bot.command(name="battlecard", aliases=["versus", "matchup", "faceoff", "scout"])
+@commands.cooldown(1, 10.0, commands.BucketType.user)
 @commands.guild_only()
 async def battlecard_prefix_cmd(ctx: commands.Context, opponent: discord.Member):
     """Generate a high-definition 2K Head-to-Head Versus Matchup card against another member: !battlecard @user"""
+    if not check_image_render_limit(ctx.guild.id if ctx.guild else 0):
+        return await ctx.send("⏳ Image generation is on cooldown. Max 5 renders per minute per server. Try again shortly.")
+
     target_a = ctx.author
     target_b = opponent
     if target_a.id == target_b.id:
@@ -11442,13 +11682,33 @@ async def roleall_command(interaction: discord.Interaction, role: discord.Role):
     if role.managed:
         await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually assigned.", ephemeral=True)
         return
+
+    # 1. Block dangerous permission escalation
+    if role_has_dangerous_perms(role):
+        return await interaction.response.send_message(
+            f"❌ Cannot mass-assign **{role.name}** — this role has elevated permissions (Administrator, Manage Server, etc.).\n"
+            "This restriction exists to prevent server-wide privilege escalation.",
+            ephemeral=True
+        )
         
-    if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
-        await interaction.response.send_message("❌ You cannot assign a role that is higher than or equal to your own top role.", ephemeral=True)
+    # 2. Hierarchy Check
+    if role >= interaction.user.top_role and interaction.user.id != getattr(interaction.guild, "owner_id", None) and interaction.user.id != 719932313919684670:
+        await interaction.response.send_message("❌ You cannot mass-assign a role equal to or higher than your own top role.", ephemeral=True)
         return
     if role.position >= interaction.guild.me.top_role.position:
         await interaction.response.send_message("❌ I cannot assign this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
         return
+
+    # 3. 5-Minute Rate Limit Per Server
+    now = time.time()
+    last_run = _roleall_cooldowns.get(interaction.guild.id, 0)
+    if now - last_run < 300:
+        remaining = int(300 - (now - last_run))
+        return await interaction.response.send_message(
+            f"⏳ `/roleall` is on cooldown. Try again in {remaining} seconds.",
+            ephemeral=True
+        )
+    _roleall_cooldowns[interaction.guild.id] = now
 
     await interaction.response.defer(thinking=True)
     success = 0
@@ -11463,11 +11723,12 @@ async def roleall_command(interaction: discord.Interaction, role: discord.Role):
         try:
             await member.add_roles(role, reason=f"Bulk assignment by {interaction.user.display_name}")
             success += 1
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
         except Exception:
             fail += 1
             
     await interaction.followup.send(f"✅ **Bulk Role Assignment Complete!**\nAdded **{role.name}** to `{success}` members. (Failed: `{fail}`)")
+    await log_mod_action(interaction.guild, interaction.user, interaction.guild.me, "Bulk Role Assignment", f"Role: @{role.name}", f"🔧 /roleall executed by {interaction.user.mention}: assigned @{role.name} to {success} members at <t:{int(time.time())}:F>")
 
 
 @bot.tree.command(name="roleallremove", description="Remove a role from every member in the server")
@@ -11479,12 +11740,23 @@ async def roleallremove_command(interaction: discord.Interaction, role: discord.
         await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually removed.", ephemeral=True)
         return
         
-    if role.position >= interaction.user.top_role.position and interaction.user.id != interaction.guild.owner_id:
+    if role >= interaction.user.top_role and interaction.user.id != getattr(interaction.guild, "owner_id", None) and interaction.user.id != 719932313919684670:
         await interaction.response.send_message("❌ You cannot remove a role that is higher than or equal to your own top role.", ephemeral=True)
         return
     if role.position >= interaction.guild.me.top_role.position:
         await interaction.response.send_message("❌ I cannot remove this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
         return
+
+    # 5-Minute Rate Limit Per Server
+    now = time.time()
+    last_run = _roleall_cooldowns.get(interaction.guild.id, 0)
+    if now - last_run < 300:
+        remaining = int(300 - (now - last_run))
+        return await interaction.response.send_message(
+            f"⏳ `/roleallremove` is on cooldown. Try again in {remaining} seconds.",
+            ephemeral=True
+        )
+    _roleall_cooldowns[interaction.guild.id] = now
 
     await interaction.response.defer(thinking=True)
     success = 0
@@ -11499,11 +11771,12 @@ async def roleallremove_command(interaction: discord.Interaction, role: discord.
         try:
             await member.remove_roles(role, reason=f"Bulk removal by {interaction.user.display_name}")
             success += 1
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
         except Exception:
             fail += 1
             
     await interaction.followup.send(f"✅ **Bulk Role Removal Complete!**\nRemoved **{role.name}** from `{success}` members. (Failed: `{fail}`)")
+    await log_mod_action(interaction.guild, interaction.user, interaction.guild.me, "Bulk Role Removal", f"Role: @{role.name}", f"🔧 /roleallremove executed by {interaction.user.mention}: removed @{role.name} from {success} members at <t:{int(time.time())}:F>")
 
 
 # ── User Profile & Comprehensive Server Audit (/whois & /userinfo) ──────────
