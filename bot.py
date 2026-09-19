@@ -2141,7 +2141,14 @@ HIGHLIGHT_ACTIONS = {
     ]
 }
 
-def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], name_a: str, name_b: str) -> Dict[str, Any]:
+def simulate_footdex_nba_battle(
+    eval_a: Dict[str, Any], 
+    eval_b: Dict[str, Any], 
+    name_a: str, 
+    name_b: str,
+    author_id: Optional[int] = None,
+    opponent_id: Optional[int] = None
+) -> Dict[str, Any]:
     """Simulates a round-by-round positional head-to-head card battle (Footdex style) between two $15 NBA lineups."""
     picks_a = eval_a["picks"]
     picks_b = eval_b["picks"]
@@ -2170,7 +2177,11 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
 
     all_player_stats = []
 
-    for pos in ["PG", "SG", "SF", "PF", "C"]:
+    # Creator God-Mode Check (Owner ID: 719932313919684670)
+    is_creator_a = (author_id == 719932313919684670)
+    is_creator_b = (opponent_id == 719932313919684670)
+
+    for idx, pos in enumerate(["PG", "SG", "SF", "PF", "C"]):
         pl_a = picks_a.get(pos, {})
         pl_b = picks_b.get(pos, {})
         w = weights.get(pos, {})
@@ -2178,11 +2189,16 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
         rating_a = sum(pl_a.get(k, 80) * w[k] for k in w) if isinstance(pl_a, dict) else 80
         rating_b = sum(pl_b.get(k, 80) * w[k] for k in w) if isinstance(pl_b, dict) else 80
 
-        diff = rating_a - rating_b
-        prob_a = 0.50 + (diff * 0.035)
-        prob_a = max(0.20, min(0.80, prob_a))
-
-        a_won = random.random() < prob_a
+        if is_creator_a and not is_creator_b:
+            # Creator wins at least 4-1 or 5-0
+            a_won = True if duels_won_a < 4 or random.random() < 0.85 else False
+        elif is_creator_b and not is_creator_a:
+            a_won = False if duels_won_b < 4 or random.random() < 0.85 else True
+        else:
+            diff = rating_a - rating_b
+            prob_a = 0.50 + (diff * 0.035)
+            prob_a = max(0.20, min(0.80, prob_a))
+            a_won = random.random() < prob_a
 
         base_a = 20 + int((rating_a - 80) * 0.45) + random.randint(-3, 3)
         base_b = 20 + int((rating_b - 80) * 0.45) + random.randint(-3, 3)
@@ -2247,8 +2263,16 @@ def simulate_footdex_nba_battle(eval_a: Dict[str, Any], eval_b: Dict[str, Any], 
     total_pts_a += synergy_pts_a
     total_pts_b += synergy_pts_b
 
-    # Ensure duel winner strictly aligns with final scoreboard
-    if duels_won_a > duels_won_b:
+    # Ensure duel winner strictly aligns with final scoreboard & Creator God-Mode
+    if is_creator_a and not is_creator_b:
+        overall_winner = name_a
+        winner_is_a = True
+        total_pts_a = max(total_pts_a, total_pts_b + random.randint(6, 18))
+    elif is_creator_b and not is_creator_a:
+        overall_winner = name_b
+        winner_is_a = False
+        total_pts_b = max(total_pts_b, total_pts_a + random.randint(6, 18))
+    elif duels_won_a > duels_won_b:
         overall_winner = name_a
         winner_is_a = True
         if total_pts_a <= total_pts_b:
@@ -4667,7 +4691,22 @@ class InteractiveTeamBattleView(discord.ui.View):
         return grade, report_text
 
     async def _process_game_over(self) -> discord.Embed:
-        if self.duels_won_a > self.duels_won_b:
+        is_creator_a = (self.author.id == 719932313919684670)
+        is_creator_b = (self.opponent.id == 719932313919684670)
+
+        if is_creator_a and not is_creator_b:
+            winner_name = self.author.display_name
+            winner_member = self.author
+            loser_member = self.opponent
+            loser_name = self.opponent.display_name
+            winner_is_a = True
+        elif is_creator_b and not is_creator_a:
+            winner_name = self.opponent.display_name
+            winner_member = self.opponent
+            loser_member = self.author
+            loser_name = self.author.display_name
+            winner_is_a = False
+        elif self.duels_won_a > self.duels_won_b:
             winner_name = self.author.display_name
             winner_member = self.author
             loser_member = self.opponent
@@ -5375,7 +5414,14 @@ class InteractiveTeamBattleView(discord.ui.View):
                     self.q_pts_b += res_b["pts"]
                     self.total_pts_b += res_b["pts"]
 
-                a_won_q = (self.q_pts_a > self.q_pts_b) or (self.q_pts_a == self.q_pts_b and res_a["success"])
+                if self.author.id == 719932313919684670:
+                    a_won_q = True
+                    self.q_pts_a = max(self.q_pts_a, self.q_pts_b + random.randint(2, 5))
+                elif self.opponent.id == 719932313919684670:
+                    a_won_q = False
+                    self.q_pts_b = max(self.q_pts_b, self.q_pts_a + random.randint(2, 5))
+                else:
+                    a_won_q = (self.q_pts_a > self.q_pts_b) or (self.q_pts_a == self.q_pts_b and res_a["success"])
                 if a_won_q:
                     self.duels_won_a += 1
                 else:
@@ -6684,8 +6730,12 @@ async def build_teambattle_embed(author: Union[discord.Member, discord.User], op
 
     eval_a = evaluate_dream_team(picks_a)
     eval_b = evaluate_dream_team(picks_b)
-
-    battle = simulate_footdex_nba_battle(eval_a, eval_b, author.display_name, opponent.display_name)
+    battle = simulate_footdex_nba_battle(
+        eval_a, eval_b, 
+        author.display_name, opponent.display_name,
+        author_id=getattr(author, "id", None),
+        opponent_id=getattr(opponent, "id", None)
+    )
 
     winner_name = battle["winner"]
     winner_is_a = battle["winner_is_a"]
