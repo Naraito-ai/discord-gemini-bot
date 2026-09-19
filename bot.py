@@ -215,6 +215,46 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
 
 # ── AI Real-Time Question Answering & Knowledge Search ─────────────────────
 
+def extract_chat_reminder(text: str) -> Optional[tuple[str, str]]:
+    """Extracts (time_string, reminder_note) from conversational reminder phrases in chat."""
+    if not text or len(text) < 5:
+        return None
+    clean = text.strip()
+    # Strip bot mentions, greetings, polite request words
+    clean = re.sub(r'^(?:<@!?\d+>\s*,?\s*|(?:hey\s+|hi\s+|yo\s+)?sweety\s*,?\s*)', '', clean, flags=re.IGNORECASE).strip()
+    clean = re.sub(r'^(?:can\s+you\s+|could\s+you\s+|please\s+)', '', clean, flags=re.IGNORECASE).strip()
+    
+    time_unit_pat = r'(?:\d+\s*(?:hours?|hrs?|h|minutes?|mins?|m|days?|d|seconds?|secs?|s|weeks?|w|months?|mo|years?|y)|tomorrow|tonight|an hour|1 day|one day)'
+    
+    # Pattern A: remind me [in] <time> [to/that/about/for] <note>
+    mA = re.match(
+        rf'^(?:remind\s+(?:me|us))\s+(?:in\s+)?({time_unit_pat})\s*(?:to\s+|that\s+|about\s+|for\s+)?(.*)$',
+        clean,
+        re.IGNORECASE
+    )
+    if mA:
+        t_str = mA.group(1).strip()
+        note_str = mA.group(2).strip()
+        if not note_str:
+            note_str = "Reminder"
+        return t_str, note_str
+
+    # Pattern B: remind me [to/that/about/for] <note> in <time>
+    mB = re.match(
+        rf'^(?:remind\s+(?:me|us))\s+(?:to\s+|that\s+|about\s+|for\s+)?(.+?)\s+in\s+({time_unit_pat})$',
+        clean,
+        re.IGNORECASE
+    )
+    if mB:
+        note_str = mB.group(1).strip()
+        t_str = mB.group(2).strip()
+        if not note_str:
+            note_str = "Reminder"
+        return t_str, note_str
+
+    return None
+
+
 async def auto_extract_user_memory(user_id: Any, user_text: str, guild_id: Optional[Any] = None):
     """Passively detects and stores personal facts/preferences declared by a user in conversation."""
     if not user_text or len(user_text) < 6:
@@ -222,12 +262,14 @@ async def auto_extract_user_memory(user_id: Any, user_text: str, guild_id: Optio
 
     # Trigger patterns indicating personal self-declarations / preferences
     trigger_patterns = [
-        "my name is", "call me", "i am called", "my nickname is",
-        "i love", "i like", "my favorite", "my fav", "i prefer",
-        "i live in", "i'm from", "i am from",
-        "my birthday is", "i am a", "i work as", "my job is",
-        "my dog", "my cat", "my pet", "i play", "my main",
-        "remember that", "don't forget that", "note that", "fyi i", "just so you know"
+        "my name is", "call me", "i am called", "my nickname is", "i go by",
+        "i love", "i like", "my favorite", "my fav", "i prefer", "i enjoy",
+        "i hate", "i dislike", "i am allergic to",
+        "i live in", "i'm from", "i am from", "i was born in", "i moved to",
+        "my birthday is", "i am a", "i work as", "my job is", "my profession is", "my major is", "i study",
+        "my dog", "my cat", "my pet", "i drive a", "i own a", "i play", "my main is", "my main",
+        "my hobby is", "i speak", "remember that", "don't forget that", "note that", "fyi i", "just so you know",
+        "my dream is", "i support", "my age is", "my pronouns are", "i code in", "i program in"
     ]
     
     lower_text = user_text.lower()
@@ -243,7 +285,7 @@ async def auto_extract_user_memory(user_id: Any, user_text: str, guild_id: Optio
         "  ]\n"
         "}\n"
         "If no clear personal facts about the user are declared, return {\"facts\": []}.\n"
-        "Examples of valid keys: nickname, favorite_team, favorite_game, location, profession, pet_name, hobby, birthday."
+        "Examples of valid keys: nickname, favorite_team, favorite_game, favorite_food, location, profession, pet_name, hobby, birthday, allergic_to."
     )
     system_instruction = "You are a precise entity and user fact extraction engine. Return ONLY valid JSON."
     
@@ -253,7 +295,7 @@ async def auto_extract_user_memory(user_id: Any, user_text: str, guild_id: Optio
             facts = raw_res.get("facts", [])
             for item in facts:
                 if isinstance(item, dict):
-                    k = str(item.get("key", "")).strip()
+                    k = str(item.get("key", "")).strip().lower().replace(" ", "_")
                     v = str(item.get("value", "")).strip()
                     if k and v and len(k) <= 50 and len(v) <= 300:
                         await db.set_user_memory(user_id, k, v, guild_id=guild_id, source="auto")
@@ -1853,6 +1895,8 @@ def parse_duration_string(time_str: str) -> Optional[int]:
 
     if time_str in ["tomorrow", "1 day", "one day"]:
         return 86400
+    if time_str in ["tonight"]:
+        return 14400
     if time_str in ["1 hour", "one hour", "an hour"]:
         return 3600
     if time_str in ["1 week", "one week"]:
@@ -13316,7 +13360,59 @@ async def on_message(message):
                                 duration_minutes=20
                             )
                             return
+    # ── Ambient User Memory Extractor (Passively learns user facts from conversation)
+    if not message.author.bot and message.content:
+        content_stripped = message.content.strip()
+        if not content_stripped.startswith(('!', '/', '$', '.', '-', '~', '>', ';')):
+            asyncio.create_task(auto_extract_user_memory(message.author.id, content_stripped, message.guild.id if message.guild else None))
 
+    # ── Conversational Chat Reminder Auto-Detection ───────────────────────────
+    if not message.author.bot and message.guild:
+        remind_parsed = extract_chat_reminder(message.content)
+        if remind_parsed:
+            time_arg, note_arg = remind_parsed
+            seconds = parse_duration_string(time_arg)
+            if seconds and seconds >= MIN_REMINDER_SECONDS:
+                active_reminders = await db.get_user_reminders(message.author.id)
+                if active_reminders and len(active_reminders) >= 10:
+                    await message.reply(
+                        "⚠️ **Reminder limit reached!** You can have a maximum of **10** active reminders at once. Use `/reminders` to view or `/reminders clear` to cancel them.",
+                        mention_author=True
+                    )
+                    return
+
+                now = time.time()
+                remind_at = now + seconds
+                rem_id = f"rem_{message.author.id}_{int(remind_at)}_{int(now)}"
+                clean_note = sanitize_reminder_text(note_arg) or "Reminder"
+
+                await db.add_reminder(
+                    reminder_id=rem_id,
+                    user_id=message.author.id,
+                    guild_id=message.guild.id,
+                    channel_id=message.channel.id,
+                    reminder_text=clean_note,
+                    remind_at=remind_at,
+                    created_at=now,
+                    delivery_method="channel"
+                )
+
+                try:
+                    await message.add_reaction("⏰")
+                except Exception:
+                    pass
+
+                embed = discord.Embed(
+                    title="⏰ Reminder Set!",
+                    description=f"Got it! I will remind you <t:{int(remind_at)}:R> (<t:{int(remind_at)}:f>).",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(name="📝 Note", value=f">>> {clean_note}", inline=False)
+                embed.add_field(name="📍 Channel", value=message.channel.mention, inline=True)
+                embed.set_footer(text=f"ID: {rem_id[:16]} • Sweety Smart Reminders")
+                embed.timestamp = discord.utils.utcnow()
+                await message.reply(embed=embed, mention_author=True)
+                return
 
     # ── Creator Inquiry (Who made you?) ─────────────────────────────────────
     if not message.author.bot and message.guild:
