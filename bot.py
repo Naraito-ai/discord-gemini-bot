@@ -7684,7 +7684,18 @@ ACTION_METADATA = {
             "https://cdn.otakugifs.xyz/gifs/hug/522c5565e52dc3c6.gif",
             "https://cdn.otakugifs.xyz/gifs/hug/b726e6b16c163d04.gif",
             "https://cdn.otakugifs.xyz/gifs/hug/608e7397da18e9c7.gif",
-            "https://cdn.otakugifs.xyz/gifs/hug/60927361c059c503.gif"
+            "https://cdn.otakugifs.xyz/gifs/hug/60927361c059c503.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/04524ef0040ff2ad.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/0d8f88e421d8b1eb.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/37876b8d388310f3.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/46d86a48965b31c3.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/68ed8177a3a022d8.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/825610ec7fdc1e8c.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/8a10a971e9f5a514.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/LXPpIHtTEu.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/bf06f94d20fb33f3.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/c787d02e22435395.gif",
+            "https://cdn.otakugifs.xyz/gifs/hug/f544HNxZR0.gif"
         ]
     },
     "pat": {
@@ -7699,7 +7710,47 @@ ACTION_METADATA = {
             "https://cdn.otakugifs.xyz/gifs/pat/0d868f84caad8696.gif",
             "https://cdn.otakugifs.xyz/gifs/pat/7bce755fd304f03e.gif",
             "https://cdn.otakugifs.xyz/gifs/pat/a9fdc8c531b4e66e.gif",
-            "https://cdn.otakugifs.xyz/gifs/pat/ea4737750a0447bb.gif"
+            "https://cdn.otakugifs.xyz/gifs/pat/ea4737750a0447bb.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/13ec930fd42770f6.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/328e34427f543969.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/519797f8714e4a5e.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/5c90b301ee64c14a.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/5cb16aa0e7fa5891.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/761c3fc2651263bc.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/7pUEkSbx3r.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/84f7a138d35d4081.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/a2f5902d10f68ae5.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/bafe48cd8212994b.gif",
+            "https://cdn.otakugifs.xyz/gifs/pat/rzn5K09230.gif"
+        ]
+    },
+    "kiss": {
+        "color": discord.Color.from_rgb(255, 105, 180),
+        "verb": "kisses",
+        "emoji": "(づ￣ ³￣)づ ❤️ *kiss*",
+        "self_text": "{author} blows a loving kiss into the air! (づ￣ ³￣)づ💋",
+        "bot_text": "{author} kisses Sweety! (*ﾉωﾉ) 💖 *blushes deeply*",
+        "gifs": [
+            "https://cdn.otakugifs.xyz/gifs/kiss/03b7558413fbedf8.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/130309a20a4a9b3a.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/15a312f23dec92ab.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/1ddfcffef8148cca.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/3f141e8d94dd07ca.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/55dce627608eb620.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/6f908e301d1a1d5f.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/736a111d8ed929b2.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/9cb66f2a86d8b3a3.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/NGLVWgfzrI.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/d440c4eb46056f58.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/e344703a274d59e6.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/e5ba4cf1044a70a5.gif",
+            "https://cdn.otakugifs.xyz/gifs/kiss/eb4d6b2db71bb1e6.gif",
+            "https://cdn.otakugifs.xyz/gifs/airkiss/7b4d25f8de3942bc.gif",
+            "https://cdn.otakugifs.xyz/gifs/airkiss/NUqoApLJGg.gif",
+            "https://cdn.otakugifs.xyz/gifs/airkiss/a446875d20d4d363.gif",
+            "https://cdn.otakugifs.xyz/gifs/airkiss/a840b9606d1fb6dd.gif",
+            "https://cdn.otakugifs.xyz/gifs/airkiss/bd3a995ce96573ef.gif",
+            "https://cdn.otakugifs.xyz/gifs/airkiss/d600bf56401dbee5.gif"
         ]
     },
     "highfive": {
@@ -7717,7 +7768,23 @@ ACTION_METADATA = {
             "https://cdn.otakugifs.xyz/gifs/thumbsup/SLPQSVVKVQQm.gif",
             "https://cdn.otakugifs.xyz/gifs/thumbsup/86c02b24f136e08f.gif",
             "https://cdn.otakugifs.xyz/gifs/thumbsup/6d802665ed2a176b.gif",
-            "https://cdn.otakugifs.xyz/gifs/thumbsup/96a5a4d278e37832.gif"
+            "https://cdn.otakugifs.xyz/gifs/thumbsup/96a5a4d278e37832.gif",
+            "https://cdn.otakugifs.xyz/gifs/brofist/0qEaIcvowz.gif",
+            "https://cdn.otakugifs.xyz/gifs/brofist/14f01db51999d44f.gif",
+            "https://cdn.otakugifs.xyz/gifs/brofist/47cdea3ee11ea46d.gif",
+            "https://cdn.otakugifs.xyz/gifs/brofist/524bc07b24ce7392.gif",
+            "https://cdn.otakugifs.xyz/gifs/brofist/5OdMjFhhAO.gif",
+            "https://cdn.otakugifs.xyz/gifs/brofist/86ac6d7fcd6aa037.gif",
+            "https://cdn.otakugifs.xyz/gifs/brofist/b0a36a34d7981d2b.gif",
+            "https://cdn.otakugifs.xyz/gifs/brofist/fe9bb21e05fabd1d.gif",
+            "https://cdn.otakugifs.xyz/gifs/celebrate/058ace7bf9412c28.gif",
+            "https://cdn.otakugifs.xyz/gifs/celebrate/124b84f058d8d6bc.gif",
+            "https://cdn.otakugifs.xyz/gifs/celebrate/2250bd2042d3a838.gif",
+            "https://cdn.otakugifs.xyz/gifs/celebrate/6972def9c7c55de5.gif",
+            "https://cdn.otakugifs.xyz/gifs/celebrate/a4cee6028f5fec0e.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/3412fc5930c6962f.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/41b4954d25a2aa93.gif",
+            "https://cdn.otakugifs.xyz/gifs/cheers/64bb946e4e8e6d1e.gif"
         ]
     },
     "wave": {
@@ -7732,7 +7799,15 @@ ACTION_METADATA = {
             "https://cdn.otakugifs.xyz/gifs/wave/3f6db91547ebde66.gif",
             "https://cdn.otakugifs.xyz/gifs/wave/2d7e6d6ab4f8c55e.gif",
             "https://cdn.otakugifs.xyz/gifs/wave/2e565abe8764327d.gif",
-            "https://cdn.otakugifs.xyz/gifs/wave/d8a72db89663ed79.gif"
+            "https://cdn.otakugifs.xyz/gifs/wave/d8a72db89663ed79.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/29801143d387184f.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/61621fefb2bce465.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/76f12f54a77d5333.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/7832e5c768ca70cb.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/c265105164e5f6ba.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/c431fefc7b33b594.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/de5ac5daf0c3b4c5.gif",
+            "https://cdn.otakugifs.xyz/gifs/wave/nruMcDv2tiFq.gif"
         ]
     },
     "slap": {
@@ -7747,7 +7822,24 @@ ACTION_METADATA = {
             "https://cdn.otakugifs.xyz/gifs/slap/bec6d0d98bd68398.gif",
             "https://cdn.otakugifs.xyz/gifs/slap/MEHoADoE1X.gif",
             "https://cdn.otakugifs.xyz/gifs/slap/99d7a3247ec4bd51.gif",
-            "https://cdn.otakugifs.xyz/gifs/slap/728770007827600b.gif"
+            "https://cdn.otakugifs.xyz/gifs/slap/728770007827600b.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/004ebed9b64b0581.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/0d82850a623b04f6.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/0vSCEWQ6ib.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/1abaf6b890032911.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/2215a625136a1cda.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/56d8426acc62f8fb.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/756d7b12e16fbb1d.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/83850d2e7434d541.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/YZVDKmmik2.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/bb9bdfcbd5c606f7.gif",
+            "https://cdn.otakugifs.xyz/gifs/slap/iycRe43Ygg.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/504b9994f7248a46.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/7537179b546d66db.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/78c956974f371f70.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/WWetybgH3D3g.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/a3f546a9518843d7.gif",
+            "https://cdn.otakugifs.xyz/gifs/smack/b2a96e2b92d86304.gif"
         ]
     },
     "punch": {
@@ -7762,7 +7854,12 @@ ACTION_METADATA = {
             "https://cdn.otakugifs.xyz/gifs/punch/UAru8Vy4rnU5.gif",
             "https://cdn.otakugifs.xyz/gifs/punch/f55xAxN6kKHY.gif",
             "https://cdn.otakugifs.xyz/gifs/punch/05bc002e281ddd92.gif",
-            "https://cdn.otakugifs.xyz/gifs/punch/SAn5cOlzM5.gif"
+            "https://cdn.otakugifs.xyz/gifs/punch/SAn5cOlzM5.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/120ad1827ee066b2.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/2fd18184c78ec80d.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/a68e34a1994c91f7.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/f179131bd406f951.gif",
+            "https://cdn.otakugifs.xyz/gifs/punch/lQbYrpwHpz.gif"
         ]
     }
 }
@@ -7802,6 +7899,62 @@ def create_action_embed(action_type: str, author: Union[discord.Member, discord.
     )
     embed.set_image(url=gif_url)
     return embed
+
+
+def can_manage_kiss_role(guild: Optional[discord.Guild], user: Union[discord.Member, discord.User]) -> bool:
+    """Checks if a user has authority to configure the kiss allowed role (Owner, Admins, Creator)."""
+    if not guild:
+        return False
+    uid = getattr(user, "id", 0)
+    if uid == 719932313919684670:
+        return True
+    if uid == getattr(guild, "owner_id", None):
+        return True
+    perms = getattr(user, "guild_permissions", None)
+    if perms and perms.administrator:
+        return True
+    return False
+
+
+async def can_use_kiss_command(guild: Optional[discord.Guild], user: Union[discord.Member, discord.User]) -> Tuple[bool, Optional[int]]:
+    """
+    Checks if a user is authorized to use the kiss command.
+    Returns: (is_allowed: bool, configured_role_id: Optional[int])
+    
+    Rules:
+    - Creator (719932313919684670) is always allowed.
+    - Server Owner is always allowed.
+    - Server Administrators are always allowed.
+    - If a specific Kiss Role has been configured by Admins via /kissrole, members with that role are allowed.
+    """
+    if not guild:
+        return True, None
+    
+    uid = getattr(user, "id", 0)
+    if uid == 719932313919684670:
+        return True, None
+    if uid == getattr(guild, "owner_id", None):
+        return True, None
+    
+    perms = getattr(user, "guild_permissions", None)
+    if perms and perms.administrator:
+        return True, None
+    
+    # Check if a custom role is configured
+    allowed_role_id_raw = await db.get_config(guild.id, "kiss_allowed_role_id", None)
+    allowed_role_id = None
+    if allowed_role_id_raw and str(allowed_role_id_raw).lower() not in ("none", "null", "0", ""):
+        try:
+            allowed_role_id = int(allowed_role_id_raw)
+        except (ValueError, TypeError):
+            allowed_role_id = None
+            
+    if allowed_role_id and isinstance(user, discord.Member):
+        if any(r.id == allowed_role_id for r in user.roles):
+            return True, allowed_role_id
+            
+    return False, allowed_role_id
+
 
 # ── Teardown & Nuke Handlers ───────────────────────────────────────────────
 
@@ -9261,7 +9414,7 @@ def make_help_embed() -> discord.Embed:
     embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/appeal [reason]` — Official strike / 7-day timeout appeal\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs (with instant appeal button)\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
-    embed.add_field(name="💖 **Wholesome Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/pat [user]` — Wholesome anime headpats\n• `/highfive [user]` — Epic high five\n• `/wave [user]` — Friendly anime wave\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/punch [user]` — Deliver a super anime punch", inline=False)
+    embed.add_field(name="💖 **Wholesome Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/pat [user]` — Wholesome anime headpats\n• `/kiss [user]` — Romantic anime kiss *(Admins/Owner or authorized role)*\n• `/kissrole [action] [role]` — Configure kiss command role permissions\n• `/highfive [user]` — Epic high five / celebration\n• `/wave [user]` — Friendly anime wave\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/punch [user]` — Deliver a super anime punch", inline=False)
     embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
     return embed
@@ -10513,6 +10666,93 @@ async def punch_slash_cmd(interaction: discord.Interaction, member: Optional[dis
     target = member or interaction.user
     embed = create_action_embed("punch", interaction.user, target, bot.user)
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="kiss", description="Give a romantic anime kiss (Admins/Owner or authorized role only)")
+@app_commands.describe(member="The member you want to kiss")
+@app_commands.guild_only()
+async def kiss_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
+    is_allowed, allowed_role_id = await can_use_kiss_command(interaction.guild, interaction.user)
+    if not is_allowed:
+        if allowed_role_id:
+            msg = f"🔒 Only **Server Administrators**, the **Server Owner**, or members with the <@&{allowed_role_id}> role can use `/kiss`."
+        else:
+            msg = "🔒 Only **Server Administrators** and the **Server Owner** can use `/kiss`.\n*Administrators can configure role access with `/kissrole set @Role`.*"
+        await interaction.response.send_message(msg, ephemeral=True)
+        return
+        
+    target = member or interaction.user
+    embed = create_action_embed("kiss", interaction.user, target, bot.user)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="kissrole", description="Configure which role has permission to use the /kiss command")
+@app_commands.describe(
+    action="Select action: set a role, remove role restriction, or view current setting",
+    role="The role to grant kiss command permissions to (required for 'set')"
+)
+@app_commands.choices(
+    action=[
+        app_commands.Choice(name="⚙️ Set Role (Allow a specific role)", value="set"),
+        app_commands.Choice(name="🔄 Remove Role (Reset to Admins & Owner only)", value="remove"),
+        app_commands.Choice(name="📋 View Current Setting", value="view")
+    ]
+)
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+async def kissrole_slash_cmd(interaction: discord.Interaction, action: str = "view", role: Optional[discord.Role] = None):
+    if not can_manage_kiss_role(interaction.guild, interaction.user):
+        await interaction.response.send_message("❌ Only Server Administrators and the Server Owner can manage kiss command permissions.", ephemeral=True)
+        return
+        
+    guild = interaction.guild
+    if action == "set":
+        if not role:
+            await interaction.response.send_message("❌ Please specify a `role` to grant kiss permissions to: `/kissrole set role:@Role`", ephemeral=True)
+            return
+        await db.set_config(guild.id, "kiss_allowed_role_id", role.id)
+        embed = discord.Embed(
+            title="💋 Kiss Command Role Updated",
+            description=f"Members with the {role.mention} role can now use `/kiss` and `!kiss`!\n\n*(Server Owner and Administrators always retain access)*",
+            color=discord.Color.from_rgb(255, 105, 180)
+        )
+        embed.set_footer(text=f"Configured by {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+        await interaction.response.send_message(embed=embed)
+        
+    elif action == "remove":
+        await db.set_config(guild.id, "kiss_allowed_role_id", "None")
+        embed = discord.Embed(
+            title="🔄 Kiss Command Role Reset",
+            description="The custom kiss role has been removed.\n\nNow **only Server Administrators and the Server Owner** can use `/kiss` and `!kiss`.",
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Configured by {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+        await interaction.response.send_message(embed=embed)
+        
+    else:  # view
+        allowed_role_id_raw = await db.get_config(guild.id, "kiss_allowed_role_id", None)
+        allowed_role_id = None
+        if allowed_role_id_raw and str(allowed_role_id_raw).lower() not in ("none", "null", "0", ""):
+            try:
+                allowed_role_id = int(allowed_role_id_raw)
+            except (ValueError, TypeError):
+                allowed_role_id = None
+                
+        embed = discord.Embed(
+            title=f"💋 Kiss Command Permissions — {guild.name}",
+            color=discord.Color.from_rgb(255, 105, 180)
+        )
+        embed.add_field(name="👑 Default Access", value="• Server Owner\n• Server Administrators\n• Bot Creator", inline=False)
+        if allowed_role_id:
+            role_obj = guild.get_role(allowed_role_id)
+            role_str = role_obj.mention if role_obj else f"`Role ID: {allowed_role_id}` *(Deleted Role)*"
+            embed.add_field(name="🎭 Configured Role", value=f"✅ {role_str}", inline=False)
+        else:
+            embed.add_field(name="🎭 Configured Role", value="*No custom role set (Admins & Owner only)*", inline=False)
+            
+        embed.set_footer(text="Use /kissrole set @Role to change, or /kissrole remove to reset.")
+        await interaction.response.send_message(embed=embed)
+
 
 
 @bot.tree.command(name="antiraid", description="Configure automated Join-Raid detection and Server Raid Shield")
@@ -11903,6 +12143,87 @@ async def punch_prefix_cmd(ctx: commands.Context, member: Optional[discord.Membe
     target = member or ctx.author
     embed = create_action_embed("punch", ctx.author, target, bot.user)
     await ctx.send(embed=embed)
+
+
+@bot.command(name="kiss", aliases=["smooch", "kisses"])
+@commands.guild_only()
+async def kiss_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
+    """Give a sweet anime kiss: !kiss [@user] (Admins, Owner, or configured role only)"""
+    is_allowed, allowed_role_id = await can_use_kiss_command(ctx.guild, ctx.author)
+    if not is_allowed:
+        if allowed_role_id:
+            msg = f"🔒 Only **Server Administrators**, the **Server Owner**, or members with the <@&{allowed_role_id}> role can use `!kiss`."
+        else:
+            msg = "🔒 Only **Server Administrators** and the **Server Owner** can use `!kiss`.\n*Administrators can configure role access with `!kissrole set @Role`.*"
+        await ctx.send(msg)
+        return
+        
+    target = member or ctx.author
+    embed = create_action_embed("kiss", ctx.author, target, bot.user)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="kissrole", aliases=["setkissrole", "kissroles", "kisspermission"])
+@commands.guild_only()
+async def kissrole_prefix_cmd(ctx: commands.Context, action: Optional[str] = None, role: Optional[discord.Role] = None):
+    """Configure permissions for the kiss command: !kissrole set @Role | !kissrole remove | !kissrole view"""
+    if not can_manage_kiss_role(ctx.guild, ctx.author):
+        await ctx.send("❌ Only Server Administrators and the Server Owner can manage kiss command permissions.")
+        return
+        
+    act = (action or "view").lower()
+    if act in ("set", "add", "enable"):
+        target_role = role
+        if not target_role and ctx.message.role_mentions:
+            target_role = ctx.message.role_mentions[0]
+            
+        if not target_role:
+            await ctx.send("❌ Please specify or mention a role: `!kissrole set @Role`")
+            return
+            
+        await db.set_config(ctx.guild.id, "kiss_allowed_role_id", target_role.id)
+        embed = discord.Embed(
+            title="💋 Kiss Command Role Updated",
+            description=f"Members with the {target_role.mention} role can now use `/kiss` and `!kiss`!\n\n*(Server Owner and Administrators always retain access)*",
+            color=discord.Color.from_rgb(255, 105, 180)
+        )
+        embed.set_footer(text=f"Configured by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+        await ctx.send(embed=embed)
+        
+    elif act in ("remove", "reset", "clear", "delete", "disable"):
+        await db.set_config(ctx.guild.id, "kiss_allowed_role_id", "None")
+        embed = discord.Embed(
+            title="🔄 Kiss Command Role Reset",
+            description="The custom kiss role has been removed.\n\nNow **only Server Administrators and the Server Owner** can use `/kiss` and `!kiss`.",
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Configured by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+        await ctx.send(embed=embed)
+        
+    else:  # view
+        allowed_role_id_raw = await db.get_config(ctx.guild.id, "kiss_allowed_role_id", None)
+        allowed_role_id = None
+        if allowed_role_id_raw and str(allowed_role_id_raw).lower() not in ("none", "null", "0", ""):
+            try:
+                allowed_role_id = int(allowed_role_id_raw)
+            except (ValueError, TypeError):
+                allowed_role_id = None
+                
+        embed = discord.Embed(
+            title=f"💋 Kiss Command Permissions — {ctx.guild.name}",
+            color=discord.Color.from_rgb(255, 105, 180)
+        )
+        embed.add_field(name="👑 Default Access", value="• Server Owner\n• Server Administrators\n• Bot Creator", inline=False)
+        if allowed_role_id:
+            role_obj = ctx.guild.get_role(allowed_role_id)
+            role_str = role_obj.mention if role_obj else f"`Role ID: {allowed_role_id}` *(Deleted Role)*"
+            embed.add_field(name="🎭 Configured Role", value=f"✅ {role_str}", inline=False)
+        else:
+            embed.add_field(name="🎭 Configured Role", value="*No custom role set (Admins & Owner only)*", inline=False)
+            
+        embed.set_footer(text="Use !kissrole set @Role to change, or !kissrole remove to reset.")
+        await ctx.send(embed=embed)
+
 
 
 # ── $15 All-Time NBA Dream Team Prefix Commands ─────────────────────────────
