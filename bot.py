@@ -8489,10 +8489,10 @@ ACTION_METADATA = {
     },
     "explode": {
         "color": discord.Color.from_rgb(255, 69, 0),
-        "verb": "channels Megumin's magic and EXPLODES",
-        "emoji": "💥🌋 (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧ *EXPLOSION!*",
-        "self_text": "{author} casts EXPLOSION and collapses from mana exhaustion! 💥🌋",
-        "bot_text": "{author} casts EXPLOSION at Sweety! 🛡️ Thermal shields took the brunt of the blast!",
+        "verb": "casts a catastrophic EXPLOSION and blows up",
+        "emoji": "💥🌋 (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧ *BOOOOM!*",
+        "self_text": "{author} accidentally drops a live bomb and blows themselves up! 💥🌋😵",
+        "bot_text": "{author} tries to blow up Sweety with EXPLOSION! 🛡️ Sweety's thermal barrier absorbed the blast!",
         "gifs": [
             "https://cdn.otakugifs.xyz/gifs/mad/27faa1158ff1cba5.gif",
             "https://cdn.otakugifs.xyz/gifs/mad/412eae3ff7434e20.gif",
@@ -11573,8 +11573,8 @@ async def counter_slash_cmd(interaction: discord.Interaction, member: Optional[d
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="explode", description="Channel Megumin's iconic EXPLOSION! and vaporize the target")
-@app_commands.describe(member="The member you want to target (leave blank to target yourself)")
+@bot.tree.command(name="explode", description="Blow up another user with Megumin's catastrophic EXPLOSION spell!")
+@app_commands.describe(member="The member you want to explode into smithereens")
 @app_commands.guild_only()
 async def explode_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
@@ -13191,7 +13191,7 @@ async def counter_prefix_cmd(ctx: commands.Context, member: Optional[discord.Mem
 @bot.command(name="explode", aliases=['explosion', 'nuke'])
 @commands.guild_only()
 async def explode_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
-    """Channel Megumin's iconic EXPLOSION! and vaporize the target: !explode [@user]"""
+    """Blow up another user with an anime explosion: !explode [@user]"""
     target = member or ctx.author
     embed = create_action_embed("explode", ctx.author, target, bot.user)
     await ctx.send(embed=embed)
