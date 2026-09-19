@@ -53,15 +53,20 @@ async def seed_dashboard_data(db):
     """Seeds some default data if the tables are empty, for instant beautiful charts."""
     try:
         rows = await db.fetch("SELECT COUNT(*) as count FROM guilds")
-        if rows and rows[0].get("count", 0) == 0:
+        count = 0
+        if rows:
+            r = rows[0]
+            count = r["count"] if isinstance(r, dict) and "count" in r else (r.get("count", 0) if hasattr(r, "get") else (r[0] if isinstance(r, (list, tuple)) else 0))
+        if count == 0:
+            now_ts = time.time()
             # Seed guilds
             await db.execute(
                 "INSERT INTO guilds (id, name, icon, owner_id, member_count, joined_at, ai_enabled, logging_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                "123456789012345678", "Naruto Hub", "a_abcd1234efgh5678", "987654321098765432", 1540, datetime.now(timezone.utc) - timedelta(days=30), True, True
+                "123456789012345678", "Naruto Hub", "a_abcd1234efgh5678", "987654321098765432", 1540, now_ts - (30 * 86400), True, True
             )
             await db.execute(
                 "INSERT INTO guilds (id, name, icon, owner_id, member_count, joined_at, ai_enabled, logging_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                "876543210987654321", "Konoha Sanctuary", None, "987654321098765432", 420, datetime.now(timezone.utc) - timedelta(days=10), True, False
+                "876543210987654321", "Konoha Sanctuary", None, "987654321098765432", 420, now_ts - (10 * 86400), True, False
             )
             
             # Seed analytics for the past 7 days
@@ -98,7 +103,7 @@ async def seed_dashboard_data(db):
             
             logger.info("Successfully seeded dashboard analytics and demonstration data.")
     except Exception as e:
-        logger.error(f"Error seeding dashboard data: {e}")
+        logger.debug(f"Dashboard data seeding skipped: {e}")
 
 # Live Log Broadcaster for WebSocket Console
 async def broadcast_console(log_line: str):
