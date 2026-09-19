@@ -7795,7 +7795,388 @@ async def build_server_structure(guild, data, response_channel):
     await response_channel.send(embed=embed)
 
 
-# ── Persistent Ticket UI Views ──────────────────────────────────────────────
+# ── Persistent Ticket UI Views & Strike Appeal System ───────────────────────
+
+TICKET_CHANNEL_ID = 1549080000328896583
+
+async def ensure_muted_role(guild: discord.Guild) -> Optional[discord.Role]:
+    """
+    Finds or creates a @Muted role in the guild with channel overrides:
+    - Ticket channels / ticket support: View Channel = True, Send Messages = True (so muted members can interact/appeal)
+    - All other channels: Send Messages = False, Add Reactions = False, Speak = False
+    """
+    muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", guild.roles)
+    if not muted_role:
+        try:
+            muted_role = await guild.create_role(
+                name="Muted",
+                color=discord.Color.dark_grey(),
+                reason="Auto-created @Muted role for 7-day strike timeouts and moderation",
+                permissions=discord.Permissions(send_messages=False, add_reactions=False, speak=False)
+            )
+            logger.info(f"Created @Muted role in guild {guild.name} ({guild.id})")
+        except Exception as e:
+            logger.warning(f"Could not create @Muted role in {guild.name}: {e}")
+            return None
+
+    # Apply channel overrides
+    try:
+        for channel in guild.channels:
+            is_ticket_channel = (
+                channel.id == TICKET_CHANNEL_ID or 
+                "ticket" in channel.name.lower() or 
+                "appeal" in channel.name.lower()
+            )
+            if is_ticket_channel:
+                if isinstance(channel, discord.TextChannel):
+                    overwrite = channel.overwrites_for(muted_role)
+                    if overwrite.view_channel is not True or overwrite.send_messages is not True:
+                        overwrite.view_channel = True
+                        overwrite.send_messages = True
+                        overwrite.read_message_history = True
+                        overwrite.attach_files = True
+                        await channel.set_permissions(muted_role, overwrite=overwrite, reason="Allow muted users in ticket support")
+            else:
+                if isinstance(channel, discord.TextChannel):
+                    overwrite = channel.overwrites_for(muted_role)
+                    if overwrite.send_messages is not False:
+                        overwrite.send_messages = False
+                        overwrite.add_reactions = False
+                        overwrite.create_public_threads = False
+                        overwrite.create_private_threads = False
+                        overwrite.send_messages_in_threads = False
+                        await channel.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted restrictions")
+                elif isinstance(channel, discord.VoiceChannel):
+                    overwrite = channel.overwrites_for(muted_role)
+                    if overwrite.speak is not False:
+                        overwrite.speak = False
+                        overwrite.stream = False
+                        await channel.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted restrictions")
+    except Exception as e:
+        logger.debug(f"Error applying channel overrides for @Muted in {guild.name}: {e}")
+
+    return muted_role
+
+
+class StrikeAppealModal(discord.ui.Modal, title="Submit Strike Appeal"):
+    reason_input = discord.ui.TextInput(
+        label="Reason for appeal",
+        style=discord.TextStyle.paragraph,
+        placeholder="Explain why your strikes/timeout should be appealed...",
+        required=True,
+        min_length=10,
+        max_length=1000
+    )
+    extra_input = discord.ui.TextInput(
+        label="Anything else to add?",
+        style=discord.TextStyle.paragraph,
+        placeholder="Any additional context, details, or explanation (optional)...",
+        required=False,
+        max_length=1000
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user = interaction.user
+        guild = interaction.guild
+
+        # If launched from DM, locate the target guild
+        if not guild:
+            for g in interaction.client.guilds:
+                if g.get_member(user.id):
+                    active_mute = await db.get_active_mute(g.id, user.id)
+                    warnings = await db.get_warnings(g.id, user.id)
+                    if active_mute or len(warnings) >= 3:
+                        guild = g
+                        break
+            if not guild and interaction.client.guilds:
+                for g in interaction.client.guilds:
+                    if g.get_member(user.id):
+                        guild = g
+                        break
+
+        if not guild:
+            await interaction.followup.send("❌ Could not find a server with active strikes to submit your appeal.", ephemeral=True)
+            return
+
+        # Check existing active ticket
+        active_ticket = await db.get_active_appeal_by_user(guild.id, user.id)
+        if active_ticket:
+            await interaction.followup.send(f"ℹ️ You already have an open appeal ticket pending review in **{guild.name}**.", ephemeral=True)
+            return
+
+        member = guild.get_member(user.id) or user
+        ticket_chan = await create_appeal_ticket_channel(guild, member, self.reason_input.value, self.extra_input.value)
+        if ticket_chan:
+            await interaction.followup.send(
+                f"✅ **Your appeal has been submitted to the {guild.name} moderation team!**\nStaff has been notified and you will receive a DM notification once your appeal is reviewed.",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send("❌ Failed to create appeal ticket. Please contact a moderator directly.", ephemeral=True)
+
+
+class DMAppealLauncherView(discord.ui.View):
+    """Persistent view attached to 3-strike DM notifications allowing in-DM appeal modal popup."""
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📩 Submit Strike Appeal", style=discord.ButtonStyle.primary, custom_id="btn_submit_dm_appeal")
+    async def open_appeal_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(StrikeAppealModal())
+
+
+class AppealReviewView(discord.ui.View):
+    """Persistent view attached to staff appeal tickets with Accept, Deny, and Close buttons."""
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not is_protected(interaction.user):
+            await interaction.response.send_message("❌ You must be a moderator or administrator to review appeals.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Accept & Unmute", style=discord.ButtonStyle.success, emoji="✅", custom_id="btn_appeal_accept")
+    async def accept_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        ticket = await db.get_appeal_ticket_by_channel(interaction.channel_id)
+        if not ticket:
+            await interaction.followup.send("⚠️ Could not find ticket record in database.", ephemeral=True)
+            return
+        if ticket.get("status") != "open":
+            await interaction.followup.send(f"ℹ️ This appeal ticket has already been marked as **{ticket.get('status')}**.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        target_uid = int(ticket["user_id"])
+        member = guild.get_member(target_uid) if guild else None
+
+        # Unmute member: remove native timeout + @Muted role
+        if member:
+            try:
+                if member.is_timed_out():
+                    await member.timeout(None, reason=f"Strike appeal accepted by {interaction.user.display_name}")
+            except Exception as te:
+                logger.warning(f"Could not remove native timeout for {target_uid}: {te}")
+            try:
+                muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", guild.roles)
+                if muted_role and muted_role in member.roles:
+                    await member.remove_roles(muted_role, reason=f"Strike appeal accepted by {interaction.user.display_name}")
+            except Exception as re:
+                logger.warning(f"Could not remove @Muted role for {target_uid}: {re}")
+
+            # Send DM to user
+            try:
+                accept_embed = discord.Embed(
+                    title="✅ Strike Appeal Accepted",
+                    description=(
+                        f"Your appeal in **{guild.name}** has been **accepted** by moderator **{interaction.user.display_name}**!\n\n"
+                        "Your 7-day timeout and muted restrictions have been completely removed.\n"
+                        "Please continue to follow server rules to prevent future penalties."
+                    ),
+                    color=discord.Color.green(),
+                    timestamp=datetime.datetime.utcnow()
+                )
+                accept_embed.set_footer(text="Your appeal was accepted, timeout removed.")
+                await member.send(content="Your appeal was accepted, timeout removed.", embed=accept_embed)
+            except Exception as dme:
+                logger.debug(f"Could not DM user {target_uid} on appeal acceptance: {dme}")
+
+        # Update DB
+        if guild:
+            await db.remove_active_mute(guild.id, target_uid)
+        await db.resolve_appeal_ticket(interaction.channel_id, "accepted", interaction.user.id)
+
+        # Update review buttons
+        for item in self.children:
+            if item.custom_id in ("btn_appeal_accept", "btn_appeal_deny"):
+                item.disabled = True
+        
+        status_embed = discord.Embed(
+            title="✅ Appeal Accepted & User Unmuted",
+            description=(
+                f"• **Reviewed by:** {interaction.user.mention} (`{interaction.user.id}`)\n"
+                f"• **Target User:** <@{target_uid}> (`{target_uid}`)\n"
+                f"• **Action Taken:** Native timeout cleared, `@Muted` role removed, and DM confirmation sent.\n"
+                f"• **Timestamp:** <t:{int(time.time())}:F>"
+            ),
+            color=discord.Color.green()
+        )
+        await interaction.message.edit(view=self)
+        await interaction.channel.send(embed=status_embed)
+        if guild:
+            await log_mod_action(guild, interaction.user, member or target_uid, "Strike Appeal Accepted", f"Accepted strike appeal for user ID {target_uid}")
+
+    @discord.ui.button(label="Deny Appeal", style=discord.ButtonStyle.danger, emoji="❌", custom_id="btn_appeal_deny")
+    async def deny_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        ticket = await db.get_appeal_ticket_by_channel(interaction.channel_id)
+        if not ticket:
+            await interaction.followup.send("⚠️ Could not find ticket record in database.", ephemeral=True)
+            return
+        if ticket.get("status") != "open":
+            await interaction.followup.send(f"ℹ️ This appeal ticket has already been marked as **{ticket.get('status')}**.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        target_uid = int(ticket["user_id"])
+        
+        # Send DM to user
+        try:
+            user = interaction.client.get_user(target_uid) or await interaction.client.fetch_user(target_uid)
+            if user:
+                deny_embed = discord.Embed(
+                    title="❌ Strike Appeal Denied",
+                    description=(
+                        f"Your appeal in **{guild.name if guild else 'the server'}** was reviewed and **denied** by the moderation team.\n\n"
+                        "Your 7-day timeout remains in effect until the expiration date."
+                    ),
+                    color=discord.Color.red(),
+                    timestamp=datetime.datetime.utcnow()
+                )
+                deny_embed.set_footer(text="Your appeal was reviewed and denied.")
+                await user.send(content="Your appeal was reviewed and denied.", embed=deny_embed)
+        except Exception as dme:
+            logger.debug(f"Could not DM user {target_uid} on appeal denial: {dme}")
+
+        # Update DB
+        await db.resolve_appeal_ticket(interaction.channel_id, "denied", interaction.user.id)
+
+        # Update review buttons
+        for item in self.children:
+            if item.custom_id in ("btn_appeal_accept", "btn_appeal_deny"):
+                item.disabled = True
+
+        status_embed = discord.Embed(
+            title="❌ Appeal Denied",
+            description=(
+                f"• **Reviewed by:** {interaction.user.mention} (`{interaction.user.id}`)\n"
+                f"• **Target User:** <@{target_uid}> (`{target_uid}`)\n"
+                f"• **Action Taken:** Appeal denied, 7-day timeout remains active, DM notification sent.\n"
+                f"• **Timestamp:** <t:{int(time.time())}:F>"
+            ),
+            color=discord.Color.red()
+        )
+        await interaction.message.edit(view=self)
+        await interaction.channel.send(embed=status_embed)
+        if guild:
+            await log_mod_action(guild, interaction.user, target_uid, "Strike Appeal Denied", f"Denied strike appeal for user ID {target_uid}")
+
+    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.secondary, emoji="🔒", custom_id="btn_appeal_close")
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🔒 **Closing and archiving appeal ticket channel in 5 seconds...**")
+        await asyncio.sleep(5)
+        try:
+            await interaction.channel.delete(reason=f"Appeal ticket closed by {interaction.user.display_name}")
+        except Exception as e:
+            logger.warning(f"Failed to delete appeal ticket channel {interaction.channel_id}: {e}")
+
+
+async def create_appeal_ticket_channel(
+    guild: discord.Guild,
+    user: Union[discord.Member, discord.User],
+    reason: str,
+    additional_info: str = ""
+) -> Optional[discord.TextChannel]:
+    """Creates a private staff-only appeal ticket channel and sends the review embed with action buttons."""
+    clean_name = re.sub(r'[^a-zA-Z0-9]', '', user.name.lower())[:15] or f"user-{user.id}"
+    channel_name = f"appeal-{clean_name}"
+
+    # Find or select Staff / Tickets category
+    target_category = None
+    for cat in guild.categories:
+        c_name = cat.name.lower()
+        if any(term in c_name for term in ["ticket", "staff", "appeal", "mod", "admin"]):
+            target_category = cat
+            break
+            
+    # Check ticket channel's parent category
+    if not target_category and TICKET_CHANNEL_ID:
+        ticket_chan = guild.get_channel(TICKET_CHANNEL_ID)
+        if ticket_chan and ticket_chan.category:
+            target_category = ticket_chan.category
+
+    # Build Overwrites: visible ONLY to bot + staff/admins
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        guild.me: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True,
+            embed_links=True,
+            attach_files=True,
+            manage_channels=True,
+            manage_messages=True
+        )
+    }
+
+    # Add staff & mod roles
+    for role in guild.roles:
+        if (role.permissions.administrator or 
+            role.permissions.manage_guild or 
+            role.permissions.moderate_members or 
+            role.permissions.ban_members or 
+            role.permissions.kick_members or 
+            any(k in role.name.lower() for k in ["admin", "moderator", "mod", "staff"])):
+            overwrites[role] = discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+                embed_links=True,
+                attach_files=True
+            )
+
+    try:
+        channel = await guild.create_text_channel(
+            name=channel_name,
+            category=target_category,
+            overwrites=overwrites,
+            topic=f"Strike Appeal Ticket for {user.name} ({user.id}) | Auto-generated by Sweety"
+        )
+    except Exception as e:
+        logger.error(f"Failed to create appeal channel in {guild.name}: {e}")
+        return None
+
+    # Save to database
+    await db.create_appeal_ticket(guild.id, user.id, channel.id, reason, additional_info)
+
+    # Fetch user's strike history
+    warnings = await db.get_warnings(guild.id, user.id)
+    history_lines = []
+    if warnings:
+        for idx, w in enumerate(warnings, 1):
+            w_reason = w.get("reason", "No reason") if isinstance(w, dict) else (w[4] if len(w) > 4 else "No reason")
+            w_time = w.get("timestamp", "") if isinstance(w, dict) else (w[5] if len(w) > 5 else "")
+            history_lines.append(f"**#{idx}** • {w_reason} *({w_time})*")
+    else:
+        history_lines.append("• No prior logged warnings found in database.")
+
+    strike_history_text = "\n".join(history_lines[:10])
+    if len(warnings) > 10:
+        strike_history_text += f"\n*...and {len(warnings)-10} more*"
+
+    embed = discord.Embed(
+        title=f"📩 Strike Appeal Ticket — {user.name}",
+        description="A member has submitted an official strike / 7-day timeout appeal for staff review.",
+        color=discord.Color.gold(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    embed.add_field(name="👤 User Information", value=f"• **Username:** {user.name} (`{user.id}`)\n• **Mention:** {user.mention}\n• **Account Created:** <t:{int(user.created_at.timestamp())}:R>", inline=False)
+    embed.add_field(name="📜 Full Strike History", value=strike_history_text, inline=False)
+    embed.add_field(name="📝 Reason for Appeal", value=reason, inline=False)
+    if additional_info:
+        embed.add_field(name="ℹ️ Additional Context", value=additional_info, inline=False)
+    embed.set_footer(text="Sweety Strike Appeal System • Click a button below to resolve")
+
+    view = AppealReviewView()
+    await channel.send(
+        content=f"🔔 **Staff Alert:** New strike appeal submitted for {user.mention} (`{user.id}`).",
+        embed=embed,
+        view=view
+    )
+    return channel
+
 
 # ── Bot Client Initialization ───────────────────────────────────────────────
 
@@ -7850,6 +8231,39 @@ class GeminiBot(commands.Bot):
 
         # 4. Register persistent UI views
         self.add_view(HubDraftButtonView())
+        self.add_view(DMAppealLauncherView())
+        self.add_view(AppealReviewView())
+
+    @tasks.loop(seconds=60)
+    async def check_expired_mutes(self):
+        """Automatically removes @Muted role and native timeout after 7 days."""
+        try:
+            now = time.time()
+            expired = await db.get_due_unmutes(now)
+            for row in expired:
+                gid = int(row["guild_id"])
+                uid = int(row["user_id"])
+                guild = self.get_guild(gid)
+                if not guild:
+                    continue
+                try:
+                    member = guild.get_member(uid) or await guild.fetch_member(uid)
+                    if member:
+                        muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", guild.roles)
+                        if muted_role and muted_role in member.roles:
+                            await member.remove_roles(muted_role, reason="7-day strike mute expired")
+                        if member.is_timed_out():
+                            await member.timeout(None, reason="7-day strike timeout expired")
+                        try:
+                            await member.send(f"ℹ️ Your 7-day strike timeout in **{guild.name}** has expired, and your permissions have been restored.")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.debug(f"Error unmuting user {uid} in guild {gid}: {e}")
+                finally:
+                    await db.remove_active_mute(gid, uid)
+        except Exception as e:
+            logger.error(f"Error in check_expired_mutes loop: {e}")
 
     @tasks.loop(minutes=10)
     async def presence_keepalive(self):
@@ -7988,6 +8402,14 @@ class GeminiBot(commands.Bot):
             logger.info("🏀 Sweety AI $15 All-Time Championship Dream Team initialized")
         except Exception as ai_team_err:
             logger.warning(f"Could not init Sweety AI Dream Team: {ai_team_err}")
+
+        # Step 9: Start check_expired_mutes loop
+        try:
+            if not self.check_expired_mutes.is_running():
+                self.check_expired_mutes.start()
+                logger.info("✅ 7-Day mute expiration background loop started")
+        except Exception as mute_loop_err:
+            logger.warning(f"Could not start check_expired_mutes loop: {mute_loop_err}")
 
 bot = GeminiBot()
 
@@ -9680,11 +10102,24 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
     if total_warns == 3:
         try:
             if not is_protected(member):
+                # 1. Native Discord Timeout (7 Days)
                 await member.timeout(datetime.timedelta(days=7), reason=f"Auto-Escalation: 3 Strikes Reached ({reason})")
+                
+                # 2. Role-Based Mute Fallback (with ticket channel access overrides)
+                muted_role = await ensure_muted_role(guild)
+                if muted_role:
+                    await member.add_roles(muted_role, reason=f"Auto-Escalation: 3 Strikes Reached (7-day role mute)")
+                
+                # 3. Database Active Mute Timer (7 days = 604800 seconds)
+                await db.add_active_mute(guild.id, member.id, time.time() + (7 * 86400))
+
             escalation_action = (
                 "\n\n🛑 **Auto-Escalation: 7-Day Timeout Applied**\n"
                 "• **Penalty:** Muted for **7 full days** (Reached 3 Strikes).\n"
-                "• **Appeal:** Please open a ticket in <#1549080000328896583> to appeal with Admins / Moderators.\n"
+                "• **Appeal Options (3 Ways):**\n"
+                "  1. 📩 Click the **Submit Strike Appeal** button attached in DM.\n"
+                "  2. 💬 Reply with `!appeal <reason>` directly in DM to Sweety.\n"
+                "  3. 🎫 Open a ticket in <#1549080000328896583>.\n"
                 "• **Warning:** Accumulating 3 more strikes (6 total) will result in a **permanent ban**."
             )
         except Exception as e:
@@ -9722,8 +10157,10 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
                 name="🛑 Penalty Applied: 7-Day Mute",
                 value=(
                     "You have reached **3 strikes** and have been **muted for 7 full days**.\n\n"
-                    "📌 **How to Appeal:**\n"
-                    "Create a ticket in the ticket channel <#1549080000328896583> in the server to appeal your strikes with Admins / Moderators.\n\n"
+                    "📌 **How to Appeal (Choose Any Method):**\n"
+                    "1️⃣ **In-DM Button:** Click the **📩 Submit Strike Appeal** button below to open the modal.\n"
+                    "2️⃣ **DM Command:** Reply to this DM with `!appeal <your reason here>`\n"
+                    "3️⃣ **Ticket Support:** Open a ticket in <#1549080000328896583> in the server.\n\n"
                     "⚠️ *Note: If you return and accumulate 3 more strikes (6 total), you will be permanently banned from the server.*"
                 ),
                 inline=False
@@ -9744,7 +10181,7 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
         dm_embed.add_field(
             name="📜 Server Strike Rules",
             value=(
-                "• **3 Strikes:** Muted for 7 full days (Appeal via ticket in <#1549080000328896583>)\n"
+                "• **3 Strikes:** Muted for 7 full days (Appeal via in-DM button, `!appeal`, or <#1549080000328896583>)\n"
                 "• **6 Strikes:** Permanent ban from the server\n\n"
                 "**Strikes are issued for:**\n"
                 "• Being critical of moderators in a public setting\n"
@@ -9757,7 +10194,12 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
             inline=False
         )
         dm_embed.set_footer(text="Please keep the community friendly and adhere to server rules.")
-        await member.send(embed=dm_embed)
+        
+        dm_view = DMAppealLauncherView() if total_warns >= 3 else None
+        if dm_view:
+            await member.send(embed=dm_embed, view=dm_view)
+        else:
+            await member.send(embed=dm_embed)
     except Exception:
         pass
 
@@ -11866,6 +12308,58 @@ async def on_message(message):
                             afk_alert_msg = await message.channel.send(embed=afk_embed)
                             asyncio.create_task(delete_after_delay(afk_alert_msg, 12))
 
+    # ── Solution 3: Direct Message !appeal Command Handling ────────────────────
+    if message.guild is None and not message.author.bot:
+        content = message.content.strip()
+        if content.lower().startswith("!appeal"):
+            appeal_reason = content[7:].strip()
+            if not appeal_reason:
+                await message.reply(
+                    "❌ **Please provide a reason for your appeal.**\n"
+                    "**Usage:** `!appeal <your reason here>`\n"
+                    "**Example:** `!appeal I apologize for my behavior and would like to appeal my strike.`"
+                )
+                return
+
+            # Find target guild where user is in and has mutes or warnings
+            target_guild = None
+            for g in bot.guilds:
+                if g.get_member(message.author.id):
+                    active_mute = await db.get_active_mute(g.id, message.author.id)
+                    warnings = await db.get_warnings(g.id, message.author.id)
+                    if active_mute or len(warnings) >= 3:
+                        target_guild = g
+                        break
+            if not target_guild and bot.guilds:
+                for g in bot.guilds:
+                    if g.get_member(message.author.id):
+                        target_guild = g
+                        break
+
+            if not target_guild:
+                await message.reply("❌ Could not find a server where you have active strikes or mutes to submit your appeal.")
+                return
+
+            active_appeal = await db.get_active_appeal_by_user(target_guild.id, message.author.id)
+            if active_appeal:
+                await message.reply(f"ℹ️ You already have an open appeal ticket pending review by staff in **{target_guild.name}**.")
+                return
+
+            target_member = target_guild.get_member(message.author.id) or message.author
+            ticket_chan = await create_appeal_ticket_channel(
+                target_guild,
+                target_member,
+                appeal_reason,
+                "Submitted via DM !appeal command"
+            )
+            if ticket_chan:
+                await message.reply(
+                    f"✅ **Your appeal has been submitted to the {target_guild.name} moderation team!**\n"
+                    f"Staff has received your appeal ticket and you will be notified here via DM once reviewed."
+                )
+            else:
+                await message.reply(f"❌ Failed to submit appeal ticket in **{target_guild.name}**. Please contact staff directly.")
+            return
 
     # Owner-only force sync check (copies global tree to guild for instant updates!)
     if message.content.strip() == "!sync":

@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import asyncio
+import time
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -318,6 +319,40 @@ class DatabaseManager:
             # Fast index for 30-day user snipe lookup
             """
             CREATE INDEX IF NOT EXISTS idx_user_snipe_lookup ON user_snipe_history(guild_id, user_id, recorded_at);
+            """,
+            # Active Scheduled Mutes Table (7-Day Role Mute Tracking)
+            """
+            CREATE TABLE IF NOT EXISTS active_mutes (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                role_id TEXT,
+                unmute_at REAL NOT NULL,
+                reason TEXT,
+                created_at REAL NOT NULL,
+                UNIQUE(guild_id, user_id)
+            );
+            """,
+            # Appeal Tickets Table
+            """
+            CREATE TABLE IF NOT EXISTS appeal_tickets (
+                id SERIAL PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                status TEXT DEFAULT 'open',
+                reason TEXT,
+                additional_info TEXT,
+                created_at REAL NOT NULL,
+                resolved_at REAL,
+                resolved_by TEXT
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_active_mutes ON active_mutes(guild_id, user_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_appeal_tickets ON appeal_tickets(channel_id, status);
             """
         ]
         
@@ -977,6 +1012,117 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error clearing user snipe history: {e}")
             return 0
+
+    # ── Active Scheduled Mutes & Fallback System ──────────────────────────────
+    async def add_active_mute(self, guild_id: Any, user_id: Any, unmute_at: float, role_id: Optional[Any] = None, reason: str = "") -> bool:
+        """Saves an active 7-day role-based mute with auto-expiration timestamp."""
+        now = time.time()
+        if not self.is_postgres:
+            query = """
+            INSERT INTO active_mutes (guild_id, user_id, role_id, unmute_at, reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                role_id = excluded.role_id,
+                unmute_at = excluded.unmute_at,
+                reason = excluded.reason,
+                created_at = excluded.created_at
+            """
+        else:
+            query = """
+            INSERT INTO active_mutes (guild_id, user_id, role_id, unmute_at, reason, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                role_id = EXCLUDED.role_id,
+                unmute_at = EXCLUDED.unmute_at,
+                reason = EXCLUDED.reason,
+                created_at = EXCLUDED.created_at
+            """
+        try:
+            await self.execute(query, str(guild_id), str(user_id), str(role_id) if role_id else None, unmute_at, reason, now)
+            return True
+        except Exception as e:
+            logger.error(f"Error adding active mute: {e}")
+            return False
+
+    async def get_active_mute(self, guild_id: Any, user_id: Any) -> Optional[Dict[str, Any]]:
+        """Fetches active mute entry for a member."""
+        if not self.is_postgres:
+            query = "SELECT * FROM active_mutes WHERE guild_id = ? AND user_id = ?"
+        else:
+            query = "SELECT * FROM active_mutes WHERE guild_id = $1 AND user_id = $2"
+        return await self.fetchrow(query, str(guild_id), str(user_id))
+
+    async def get_due_unmutes(self, current_time: float) -> List[Dict[str, Any]]:
+        """Retrieves all active mutes whose expiration timestamp has passed."""
+        if not self.is_postgres:
+            query = "SELECT * FROM active_mutes WHERE unmute_at <= ?"
+        else:
+            query = "SELECT * FROM active_mutes WHERE unmute_at <= $1"
+        return await self.fetch(query, current_time)
+
+    async def remove_active_mute(self, guild_id: Any, user_id: Any) -> bool:
+        """Deletes active mute record upon unmuting or appeal acceptance."""
+        if not self.is_postgres:
+            query = "DELETE FROM active_mutes WHERE guild_id = ? AND user_id = ?"
+        else:
+            query = "DELETE FROM active_mutes WHERE guild_id = $1 AND user_id = $2"
+        try:
+            await self.execute(query, str(guild_id), str(user_id))
+            return True
+        except Exception as e:
+            logger.error(f"Error removing active mute: {e}")
+            return False
+
+    # ── Appeal Tickets System ─────────────────────────────────────────────────
+    async def create_appeal_ticket(self, guild_id: Any, user_id: Any, channel_id: Any, reason: str, additional_info: str = "") -> bool:
+        """Records a new open appeal ticket."""
+        now = time.time()
+        if not self.is_postgres:
+            query = """
+            INSERT INTO appeal_tickets (guild_id, user_id, channel_id, status, reason, additional_info, created_at)
+            VALUES (?, ?, ?, 'open', ?, ?, ?)
+            """
+        else:
+            query = """
+            INSERT INTO appeal_tickets (guild_id, user_id, channel_id, status, reason, additional_info, created_at)
+            VALUES ($1, $2, $3, 'open', $4, $5, $6)
+            """
+        try:
+            await self.execute(query, str(guild_id), str(user_id), str(channel_id), reason, additional_info, now)
+            return True
+        except Exception as e:
+            logger.error(f"Error creating appeal ticket in DB: {e}")
+            return False
+
+    async def get_appeal_ticket_by_channel(self, channel_id: Any) -> Optional[Dict[str, Any]]:
+        """Fetches appeal ticket data for a specific channel."""
+        if not self.is_postgres:
+            query = "SELECT * FROM appeal_tickets WHERE channel_id = ?"
+        else:
+            query = "SELECT * FROM appeal_tickets WHERE channel_id = $1"
+        return await self.fetchrow(query, str(channel_id))
+
+    async def get_active_appeal_by_user(self, guild_id: Any, user_id: Any) -> Optional[Dict[str, Any]]:
+        """Checks if a user already has an open appeal ticket in this guild."""
+        if not self.is_postgres:
+            query = "SELECT * FROM appeal_tickets WHERE guild_id = ? AND user_id = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1"
+        else:
+            query = "SELECT * FROM appeal_tickets WHERE guild_id = $1 AND user_id = $2 AND status = 'open' ORDER BY created_at DESC LIMIT 1"
+        return await self.fetchrow(query, str(guild_id), str(user_id))
+
+    async def resolve_appeal_ticket(self, channel_id: Any, status: str, resolved_by: Any) -> bool:
+        """Marks an appeal ticket as accepted or denied."""
+        now = time.time()
+        if not self.is_postgres:
+            query = "UPDATE appeal_tickets SET status = ?, resolved_at = ?, resolved_by = ? WHERE channel_id = ?"
+        else:
+            query = "UPDATE appeal_tickets SET status = $1, resolved_at = $2, resolved_by = $3 WHERE channel_id = $4"
+        try:
+            await self.execute(query, status, now, str(resolved_by), str(channel_id))
+            return True
+        except Exception as e:
+            logger.error(f"Error resolving appeal ticket in DB: {e}")
+            return False
 
     async def close(self):
         """Closes all database connections."""
