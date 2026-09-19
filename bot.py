@@ -215,19 +215,82 @@ async def call_ai_generation(prompt, system_instruction, json_mode=False):
 
 # ── AI Real-Time Question Answering & Knowledge Search ─────────────────────
 
-async def answer_question_with_ai(query: str, author_name: str = "", server_name: str = "") -> str:
-    """Answers user questions using high-speed Groq AI with clean, concise responses."""
+async def auto_extract_user_memory(user_id: Any, user_text: str, guild_id: Optional[Any] = None):
+    """Passively detects and stores personal facts/preferences declared by a user in conversation."""
+    if not user_text or len(user_text) < 6:
+        return
+
+    # Trigger patterns indicating personal self-declarations / preferences
+    trigger_patterns = [
+        "my name is", "call me", "i am called", "my nickname is",
+        "i love", "i like", "my favorite", "my fav", "i prefer",
+        "i live in", "i'm from", "i am from",
+        "my birthday is", "i am a", "i work as", "my job is",
+        "my dog", "my cat", "my pet", "i play", "my main",
+        "remember that", "don't forget that", "note that", "fyi i", "just so you know"
+    ]
+    
+    lower_text = user_text.lower()
+    if not any(tp in lower_text for tp in trigger_patterns):
+        return
+
+    extract_prompt = (
+        f"Extract key personal facts, identity, or preferences that the user states about themselves from this text: \"{user_text}\"\n"
+        "Return a JSON object in this schema:\n"
+        "{\n"
+        "  \"facts\": [\n"
+        "    {\"key\": \"short_snake_case_key\", \"value\": \"concise fact value\"}\n"
+        "  ]\n"
+        "}\n"
+        "If no clear personal facts about the user are declared, return {\"facts\": []}.\n"
+        "Examples of valid keys: nickname, favorite_team, favorite_game, location, profession, pet_name, hobby, birthday."
+    )
+    system_instruction = "You are a precise entity and user fact extraction engine. Return ONLY valid JSON."
+    
+    try:
+        raw_res = await call_ai_generation(extract_prompt, system_instruction, json_mode=True)
+        if isinstance(raw_res, dict) and "facts" in raw_res:
+            facts = raw_res.get("facts", [])
+            for item in facts:
+                if isinstance(item, dict):
+                    k = str(item.get("key", "")).strip()
+                    v = str(item.get("value", "")).strip()
+                    if k and v and len(k) <= 50 and len(v) <= 300:
+                        await db.set_user_memory(user_id, k, v, guild_id=guild_id, source="auto")
+                        logger.info(f"🧠 [SWEETY MEMORY] Auto-saved memory for user {user_id}: {k} -> {v}")
+    except Exception as e:
+        logger.debug(f"Auto memory extraction skipped: {e}")
+
+
+async def answer_question_with_ai(query: str, author_name: str = "", server_name: str = "", user_id: Optional[Any] = None, guild_id: Optional[Any] = None) -> str:
+    """Answers user questions using high-speed Groq AI with clean, concise responses and personal memory."""
     server_info = f"in the Discord server '{server_name}'" if server_name else "on Discord"
     author_info = f"from {author_name}" if author_name else ""
     
+    memory_section = ""
+    if user_id:
+        try:
+            mems = await db.get_user_memories(user_id, limit=15)
+            if mems:
+                facts_list = "\n".join(f"- {m['fact_key'].replace('_', ' ').title()}: {m['fact_value']}" for m in mems)
+                memory_section = (
+                    f"\n\n=== PERSISTENT MEMORY & FACTS ABOUT {author_name.upper() if author_name else 'USER'} (ID: {user_id}) ===\n"
+                    f"{facts_list}\n"
+                    f"PERSONALIZATION INSTRUCTION:\n"
+                    f"You have an ongoing friendly relationship with {author_name or 'the user'}. Naturally weave in these known facts when relevant to the conversation (e.g. if they ask about games, food, basketball, recommendations, or friendly chat). Never list the facts mechanically like a database; talk like a close, smart friend who remembers past chats!"
+                )
+        except Exception as mem_err:
+            logger.debug(f"Error loading user memories for {user_id}: {mem_err}")
+
     system_instruction = (
-        f"You are Sweety, a quick, friendly, and smart Discord AI assistant {server_info} answering {author_info}. "
+        f"You are Sweety, a quick, friendly, highly intelligent, and charming Discord AI assistant {server_info} answering {author_info}. "
         "CRITICAL RESPONSE GUIDELINES:\n"
         "1. Give a simple, direct, and concise response according to the question asked. Never write long paragraphs or unsolicited essays.\n"
         "2. Keep everyday answers short (1-3 sentences maximum). Get straight to the answer with zero filler, pleasantries, or preamble.\n"
         "3. Only provide longer explanations or bullet points if the user explicitly asks for 'details', 'steps', 'explain in depth', or code.\n"
         "4. CREATOR RULE: If anyone asks who made you, created you, or who your developer is, state with high energy that you were created and engineered by the legendary Naraito!\n"
-        "5. Keep the tone natural, helpful, and crisp."
+        "5. Keep the tone natural, helpful, warm, and crisp."
+        f"{memory_section}"
     )
     
     return await call_ai_generation(query, system_instruction)
@@ -8303,6 +8366,93 @@ async def create_appeal_ticket_channel(
     return channel
 
 
+# ── AI User Profile Memory UI Components ─────────────────────────────────────
+
+class AddMemoryModal(discord.ui.Modal, title="🧠 Tell Sweety What to Remember"):
+    fact_key = discord.ui.TextInput(
+        label="Fact Category / Key",
+        placeholder="e.g. Favorite Team, Nickname, Birthday, Coding Language",
+        max_length=50,
+        required=True
+    )
+    fact_val = discord.ui.TextInput(
+        label="Fact Details / Value",
+        placeholder="e.g. Golden State Warriors, loves Python, lives in NYC",
+        style=discord.TextStyle.paragraph,
+        max_length=400,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        is_clean_k, clean_k = _sanitize_ai_input(self.fact_key.value)
+        is_clean_v, clean_v = _sanitize_ai_input(self.fact_val.value)
+        if not is_clean_k or not is_clean_v:
+            return await interaction.followup.send("⚠️ Input contained restricted characters.", ephemeral=True)
+            
+        success = await db.set_user_memory(
+            interaction.user.id,
+            clean_k,
+            clean_v,
+            guild_id=interaction.guild.id if interaction.guild else None,
+            source="manual"
+        )
+        if success:
+            await interaction.followup.send(
+                f"✅ **Memory Stored!** Sweety remembered:\n• **{clean_k.replace('_', ' ').title()}**: {clean_v}",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send("❌ Failed to save memory to database.", ephemeral=True)
+
+
+class DeleteMemoryModal(discord.ui.Modal, title="🗑️ Forget a Fact"):
+    fact_key = discord.ui.TextInput(
+        label="Fact Key to Forget",
+        placeholder="e.g. favorite_team, nickname, or 'all'",
+        max_length=50,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        target = self.fact_key.value.strip().lower()
+        if target in ("all", "*", "everything"):
+            await db.clear_user_memories(interaction.user.id)
+            return await interaction.followup.send("🧹 **All your stored memories have been permanently cleared!**", ephemeral=True)
+        
+        ok = await db.delete_user_memory(interaction.user.id, target)
+        if ok:
+            await interaction.followup.send(f"🗑️ **Forgotten!** Sweety has removed `{target}` from your profile memories.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"❌ Could not find fact `{target}` in your saved memories.", ephemeral=True)
+
+
+class MemoryManageView(discord.ui.View):
+    def __init__(self, target_user_id: int, author_id: int):
+        super().__init__(timeout=300)
+        self.target_user_id = target_user_id
+        self.author_id = author_id
+
+    @discord.ui.button(label="Remember Fact", style=discord.ButtonStyle.success, emoji="🧠")
+    async def add_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("❌ You cannot modify another user's memories.", ephemeral=True)
+        await interaction.response.send_modal(AddMemoryModal())
+
+    @discord.ui.button(label="Forget a Fact", style=discord.ButtonStyle.secondary, emoji="🗑️")
+    async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("❌ You cannot modify another user's memories.", ephemeral=True)
+        await interaction.response.send_modal(DeleteMemoryModal())
+
+    @discord.ui.button(label="Wipe All", style=discord.ButtonStyle.danger, emoji="🧹")
+    async def clear_all_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("❌ You cannot modify another user's memories.", ephemeral=True)
+        await db.clear_user_memories(self.author_id)
+        await interaction.response.send_message("🧹 **All your memories have been completely wiped from Sweety's database.**", ephemeral=True)
+
 
 # ── Bot Client Initialization ───────────────────────────────────────────────
 
@@ -8638,6 +8788,210 @@ async def appeal_slash_cmd(interaction: discord.Interaction, reason: Optional[st
         await interaction.response.send_modal(StrikeAppealModal())
 
 
+# ── AI User Profile Memory Commands ──────────────────────────────────────────
+
+@bot.tree.command(name="remember", description="Tell Sweety to remember a personal fact or preference about you")
+@app_commands.describe(fact="What should Sweety remember about you? (e.g. 'My favorite team is Lakers and I code in Python')")
+async def remember_slash_cmd(interaction: discord.Interaction, fact: str):
+    await interaction.response.defer(ephemeral=True)
+    is_clean, clean_fact = _sanitize_ai_input(fact)
+    if not is_clean:
+        return await interaction.followup.send("⚠️ Your input contained restricted characters or words.", ephemeral=True)
+
+    extract_prompt = (
+        f"Extract key personal facts from this user statement: \"{clean_fact}\"\n"
+        "Return a JSON object in this format:\n"
+        "{\n"
+        "  \"facts\": [\n"
+        "    {\"key\": \"short_snake_case_key\", \"value\": \"concise value\"}\n"
+        "  ]\n"
+        "}\n"
+        "Examples of valid keys: nickname, favorite_team, favorite_food, hobby, location, profession, birthday."
+    )
+    system_instruction = "You are a user preference extraction engine. Return ONLY valid JSON."
+    
+    saved = []
+    try:
+        raw_res = await call_ai_generation(extract_prompt, system_instruction, json_mode=True)
+        if isinstance(raw_res, dict) and "facts" in raw_res and raw_res["facts"]:
+            for item in raw_res["facts"]:
+                if isinstance(item, dict):
+                    k = str(item.get("key", "")).strip().lower().replace(" ", "_")[:50]
+                    v = str(item.get("value", "")).strip()[:400]
+                    if k and v:
+                        await db.set_user_memory(interaction.user.id, k, v, guild_id=interaction.guild.id if interaction.guild else None, source="manual")
+                        saved.append(f"• **{k.replace('_', ' ').title()}**: {v}")
+    except Exception as e:
+        logger.debug(f"AI extraction fallback in /remember: {e}")
+
+    if not saved:
+        k = "personal_note"
+        v = clean_fact[:300]
+        await db.set_user_memory(interaction.user.id, k, v, guild_id=interaction.guild.id if interaction.guild else None, source="manual")
+        saved.append(f"• **Personal Note**: {v}")
+
+    embed = discord.Embed(
+        title="🧠 Memory Saved!",
+        description=f"Sweety will remember the following about you, **{interaction.user.display_name}**:\n\n" + "\n".join(saved),
+        color=discord.Color.brand_green()
+    )
+    embed.set_footer(text="Use /memories to view everything Sweety knows about you or /forget to remove facts.")
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+@bot.command(name="remember")
+async def remember_prefix_cmd(ctx: commands.Context, *, fact: str = ""):
+    """Tell Sweety to remember a personal fact: !remember <fact>"""
+    if not fact:
+        return await ctx.reply("❌ Please provide a fact! Example: `!remember My favorite basketball team is Golden State Warriors`")
+    
+    is_clean, clean_fact = _sanitize_ai_input(fact)
+    if not is_clean:
+        return await ctx.reply("⚠️ Input contains restricted characters.")
+
+    extract_prompt = (
+        f"Extract key personal facts from this user statement: \"{clean_fact}\"\n"
+        "Return a JSON object in this format:\n"
+        "{\n"
+        "  \"facts\": [\n"
+        "    {\"key\": \"short_snake_case_key\", \"value\": \"concise value\"}\n"
+        "  ]\n"
+        "}\n"
+    )
+    saved = []
+    try:
+        raw_res = await call_ai_generation(extract_prompt, "Extract user facts. Return JSON.", json_mode=True)
+        if isinstance(raw_res, dict) and "facts" in raw_res and raw_res["facts"]:
+            for item in raw_res["facts"]:
+                if isinstance(item, dict):
+                    k = str(item.get("key", "")).strip().lower().replace(" ", "_")[:50]
+                    v = str(item.get("value", "")).strip()[:400]
+                    if k and v:
+                        await db.set_user_memory(ctx.author.id, k, v, guild_id=ctx.guild.id if ctx.guild else None, source="manual")
+                        saved.append(f"• **{k.replace('_', ' ').title()}**: {v}")
+    except Exception:
+        pass
+
+    if not saved:
+        await db.set_user_memory(ctx.author.id, "personal_note", clean_fact[:300], guild_id=ctx.guild.id if ctx.guild else None, source="manual")
+        saved.append(f"• **Note**: {clean_fact[:300]}")
+
+    embed = discord.Embed(
+        title="🧠 Memory Saved!",
+        description=f"Sweety will remember this about you, **{ctx.author.display_name}**:\n\n" + "\n".join(saved),
+        color=discord.Color.brand_green()
+    )
+    embed.set_footer(text="Use !memories to view all facts or !forget to delete.")
+    await ctx.reply(embed=embed, mention_author=False)
+
+
+@bot.tree.command(name="memories", description="View all personal facts and preferences Sweety has remembered about you")
+@app_commands.describe(user="The user to view memories for (Admin/Mod only to view others)")
+async def memories_slash_cmd(interaction: discord.Interaction, user: Optional[discord.User] = None):
+    target_user = user or interaction.user
+    is_self = target_user.id == interaction.user.id
+
+    if not is_self:
+        is_mod = is_admin_or_mod(interaction.user) or interaction.user.id == 719932313919684670
+        if not is_mod:
+            return await interaction.response.send_message("🚫 You can only view your own remembered facts.", ephemeral=True)
+
+    mems = await db.get_user_memories(target_user.id, limit=25)
+    if not mems:
+        subject = "You have not" if is_self else f"{target_user.name} has not"
+        empty_msg = (
+            f"ℹ️ **No stored memories yet!**\n"
+            f"{subject} saved any facts with Sweety yet.\n"
+            f"Use `/remember fact: <text>` or simply chat with `@Sweety` to let her learn about you!"
+        )
+        return await interaction.response.send_message(empty_msg, ephemeral=True)
+
+    lines = []
+    for m in mems:
+        k_disp = m["fact_key"].replace("_", " ").title()
+        v_disp = m["fact_value"]
+        src = "🤖 *Auto-learned*" if m.get("source") == "auto" else "✍️ *Manual*"
+        t_epoch = int(m.get("updated_at", time.time()))
+        lines.append(f"• **{k_disp}**: {v_disp} — {src} (<t:{t_epoch}:R>)")
+
+    embed = discord.Embed(
+        title=f"🧠 Sweety's Memory Log — {target_user.display_name}",
+        description="\n".join(lines),
+        color=discord.Color.purple()
+    )
+    embed.set_thumbnail(url=target_user.display_avatar.url)
+    embed.set_footer(text=f"Total memories: {len(mems)} • Powered by Groq AI Memory Engine")
+
+    view = MemoryManageView(target_user.id, interaction.user.id) if is_self else None
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+@bot.command(name="memories")
+async def memories_prefix_cmd(ctx: commands.Context, user: Optional[discord.Member] = None):
+    """View stored memories: !memories [user]"""
+    target_user = user or ctx.author
+    is_self = target_user.id == ctx.author.id
+    if not is_self:
+        is_mod = is_admin_or_mod(ctx.author) or ctx.author.id == 719932313919684670
+        if not is_mod:
+            return await ctx.reply("🚫 You can only view your own memories.")
+
+    mems = await db.get_user_memories(target_user.id, limit=25)
+    if not mems:
+        return await ctx.reply(f"ℹ️ No memories stored for {target_user.display_name}. Use `!remember <fact>` to save one!")
+
+    lines = []
+    for m in mems:
+        k_disp = m["fact_key"].replace("_", " ").title()
+        v_disp = m["fact_value"]
+        src = "🤖 *Auto*" if m.get("source") == "auto" else "✍️ *Manual*"
+        lines.append(f"• **{k_disp}**: {v_disp} — {src}")
+
+    embed = discord.Embed(
+        title=f"🧠 Memory Log — {target_user.display_name}",
+        description="\n".join(lines),
+        color=discord.Color.purple()
+    )
+    embed.set_thumbnail(url=target_user.display_avatar.url)
+    embed.set_footer(text=f"Total memories: {len(mems)} • Use !forget <key> to delete a fact.")
+    view = MemoryManageView(target_user.id, ctx.author.id) if is_self else None
+    await ctx.reply(embed=embed, view=view, mention_author=False)
+
+
+@bot.tree.command(name="forget", description="Tell Sweety to forget a specific fact or all facts about you")
+@app_commands.describe(key="The fact category to forget (e.g. 'favorite_team', 'birthday', or 'all')")
+async def forget_slash_cmd(interaction: discord.Interaction, key: str):
+    await interaction.response.defer(ephemeral=True)
+    target = key.strip().lower()
+    if target in ("all", "*", "everything"):
+        await db.clear_user_memories(interaction.user.id)
+        return await interaction.followup.send("🧹 **All your stored memories have been completely wiped!**", ephemeral=True)
+
+    ok = await db.delete_user_memory(interaction.user.id, target)
+    if ok:
+        await interaction.followup.send(f"🗑️ **Forgotten!** Sweety has removed `{target}` from your remembered facts.", ephemeral=True)
+    else:
+        await interaction.followup.send(f"❌ Could not find fact `{target}` in your saved memories. Use `/memories` to check your saved keys.", ephemeral=True)
+
+
+@bot.command(name="forget")
+async def forget_prefix_cmd(ctx: commands.Context, *, key: str = ""):
+    """Forget a specific fact: !forget <key> or !forget all"""
+    if not key:
+        return await ctx.reply("❌ Please specify the fact key to forget. Example: `!forget favorite_team` or `!forget all`")
+    
+    target = key.strip().lower()
+    if target in ("all", "*", "everything"):
+        await db.clear_user_memories(ctx.author.id)
+        return await ctx.reply("🧹 **All your stored memories have been completely wiped!**")
+
+    ok = await db.delete_user_memory(ctx.author.id, target)
+    if ok:
+        await ctx.reply(f"🗑️ **Forgotten!** Sweety has removed `{target}` from your memories.")
+    else:
+        await ctx.reply(f"❌ Could not find fact `{target}` in your saved memories. Check with `!memories`.")
+
+
 # ── App Slash & Prefix Help ──────────────────────────────────────────────────
 
 def make_help_embed() -> discord.Embed:
@@ -8647,9 +9001,10 @@ def make_help_embed() -> discord.Embed:
         description="An all-in-one AI Architect, Auto-Mod, Community Restorer Bot, and NBA Game Engine powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
+    embed.add_field(name="🧠 **AI Chat & Persistent Memory**", value="• `/ask <question>` — Ask Sweety any question (personalized with your memories!)\n• `/remember <fact>` / `!remember` — Tell Sweety facts about yourself to remember\n• `/memories [user]` / `!memories` — View your remembered facts with interactive controls\n• `/forget [key]` / `!forget` — Forget a specific fact or wipe all memories", inline=False)
     embed.add_field(name="🏗️ **AI Server Architect & Channels**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/createchannel <name> [category]` — Create custom text/voice channel\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
     embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View squad card, career record, win streaks & GM badges\n• `/teamqueue` / `!teamqueue` — Auto-matchmaking queue to find live opponents\n• `/teambattle <opponent>` / `!teambattle` — Footdex-style positional NBA card battle\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server\n• `/setupnbachannel [cat]` — Create dedicated arena channel in 2K Mobile Hub category", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
+    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/appeal [reason]` — Official strike / 7-day timeout appeal\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs (with instant appeal button)\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
     embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
     embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
     embed.add_field(name="💖 **Wholesome Social & Anime Actions**", value="• `/hug [user]` — Give someone or yourself a warm hug\n• `/pat [user]` — Wholesome anime headpats\n• `/highfive [user]` — Epic high five\n• `/wave [user]` — Friendly anime wave\n• `/slap [user]` — Slap someone into next week with an anime slap\n• `/punch [user]` — Deliver a super anime punch", inline=False)
@@ -12325,11 +12680,17 @@ async def ask_command(interaction: discord.Interaction, question: str):
 
     try:
         server_name = interaction.guild.name if interaction.guild else ""
+        guild_id = interaction.guild.id if interaction.guild else None
         answer = await answer_question_with_ai(
             query=clean_question,
             author_name=interaction.user.display_name,
-            server_name=server_name
+            server_name=server_name,
+            user_id=interaction.user.id,
+            guild_id=guild_id
         )
+        
+        # Passively learn preferences/facts about user in background
+        asyncio.create_task(auto_extract_user_memory(interaction.user.id, clean_question, guild_id))
         
         embed = discord.Embed(
             title=f"❓ {clean_question[:250]}",
@@ -12337,13 +12698,54 @@ async def ask_command(interaction: discord.Interaction, question: str):
             color=discord.Color.blue()
         )
         embed.set_author(name=f"Asked by {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
-        embed.set_footer(text="Powered by Groq • LPU AI Engine", icon_url=bot.user.display_avatar.url if bot.user else None)
+        embed.set_footer(text="Powered by Groq • AI Memory Engine", icon_url=bot.user.display_avatar.url if bot.user else None)
         embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         
         await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.error(f"Error in /ask command: {e}")
         await interaction.followup.send(f"❌ Failed to answer question: {e}", ephemeral=True)
+
+
+@bot.command(name="ask")
+async def ask_prefix_cmd(ctx: commands.Context, *, question: str = ""):
+    """Ask Sweety a question with personal memory: !ask <question>"""
+    if not question:
+        return await ctx.reply("❌ Please provide a question! Example: `!ask What should I build with Python?`")
+        
+    allowed, remaining = _check_user_cooldown(ctx.author.id)
+    if not allowed:
+        return await ctx.reply(f"⏳ Please wait `{remaining}s` before asking another question.")
+        
+    if ctx.guild and not _check_server_limit(ctx.guild.id):
+        return await ctx.reply("🚫 This server has reached its hourly AI limit.")
+        
+    is_clean, clean_q = _sanitize_ai_input(question)
+    if not is_clean:
+        return await ctx.reply("⚠️ Question flagged for restricted keywords.")
+        
+    try:
+        async with ctx.typing():
+            server_name = ctx.guild.name if ctx.guild else ""
+            guild_id = ctx.guild.id if ctx.guild else None
+            answer = await answer_question_with_ai(
+                query=clean_q,
+                author_name=ctx.author.display_name,
+                server_name=server_name,
+                user_id=ctx.author.id,
+                guild_id=guild_id
+            )
+            asyncio.create_task(auto_extract_user_memory(ctx.author.id, clean_q, guild_id))
+            
+            if answer:
+                if len(answer) <= 1900:
+                    await ctx.reply(answer, mention_author=False)
+                else:
+                    for i in range(0, len(answer), 1900):
+                        await ctx.send(answer[i:i+1900])
+    except Exception as e:
+        logger.error(f"Error in !ask command: {e}")
+        await ctx.reply("❌ Failed to process your question.")
 
 
 @bot.tree.command(name="setaireply", description="Configure AI Auto-Reply: set target channel and question mark mode")
@@ -12926,8 +13328,11 @@ async def on_message(message):
                                     answer = await answer_question_with_ai(
                                         query=clean_query,
                                         author_name=message.author.display_name,
-                                        server_name=message.guild.name
+                                        server_name=message.guild.name if message.guild else "",
+                                        user_id=message.author.id,
+                                        guild_id=message.guild.id if message.guild else None
                                     )
+                                    asyncio.create_task(auto_extract_user_memory(message.author.id, clean_query, message.guild.id if message.guild else None))
                                     if answer:
                                         if len(answer) <= 1900:
                                             await message.reply(answer, mention_author=True)

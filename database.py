@@ -353,6 +353,23 @@ class DatabaseManager:
             """,
             """
             CREATE INDEX IF NOT EXISTS idx_appeal_tickets ON appeal_tickets(channel_id, status);
+            """,
+            # User Memories Table (Persistent AI Memory & Personalization)
+            """
+            CREATE TABLE IF NOT EXISTS user_memories (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                guild_id TEXT,
+                fact_key TEXT NOT NULL,
+                fact_value TEXT NOT NULL,
+                source TEXT DEFAULT 'manual',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                UNIQUE(user_id, fact_key)
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_user_memories_lookup ON user_memories(user_id, updated_at);
             """
         ]
         
@@ -1122,6 +1139,81 @@ class DatabaseManager:
             return True
         except Exception as e:
             logger.error(f"Error resolving appeal ticket in DB: {e}")
+            return False
+
+    # ── User Memory System (Persistent AI Memory) ─────────────────────────
+
+    async def set_user_memory(self, user_id: Any, fact_key: str, fact_value: str, guild_id: Optional[Any] = None, source: str = "manual") -> bool:
+        """Stores or updates a remembered fact about a user."""
+        now = time.time()
+        clean_key = str(fact_key).strip().lower().replace(" ", "_")[:50]
+        clean_val = str(fact_value).strip()[:500]
+        if not clean_key or not clean_val:
+            return False
+
+        gid_str = str(guild_id) if guild_id else None
+        if not self.is_postgres:
+            query = """
+            INSERT INTO user_memories (user_id, guild_id, fact_key, fact_value, source, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, fact_key)
+            DO UPDATE SET
+                fact_value = excluded.fact_value,
+                guild_id = COALESCE(excluded.guild_id, user_memories.guild_id),
+                source = excluded.source,
+                updated_at = excluded.updated_at;
+            """
+        else:
+            query = """
+            INSERT INTO user_memories (user_id, guild_id, fact_key, fact_value, source, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT(user_id, fact_key)
+            DO UPDATE SET
+                fact_value = EXCLUDED.fact_value,
+                guild_id = COALESCE(EXCLUDED.guild_id, user_memories.guild_id),
+                source = EXCLUDED.source,
+                updated_at = EXCLUDED.updated_at;
+            """
+        try:
+            await self.execute(query, str(user_id), gid_str, clean_key, clean_val, source, now, now)
+            return True
+        except Exception as e:
+            logger.error(f"Error setting user memory in DB: {e}")
+            return False
+
+    async def get_user_memories(self, user_id: Any, limit: int = 25) -> List[Dict[str, Any]]:
+        """Retrieves all stored facts/memories for a user."""
+        if not self.is_postgres:
+            query = "SELECT fact_key, fact_value, source, updated_at FROM user_memories WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?"
+        else:
+            query = "SELECT fact_key, fact_value, source, updated_at FROM user_memories WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2"
+        return await self.fetch(query, str(user_id), limit)
+
+    async def delete_user_memory(self, user_id: Any, fact_key: str) -> bool:
+        """Deletes a specific remembered fact for a user."""
+        clean_key = str(fact_key).strip().lower().replace(" ", "_")
+        if not self.is_postgres:
+            query = "DELETE FROM user_memories WHERE user_id = ? AND fact_key = ?"
+        else:
+            query = "DELETE FROM user_memories WHERE user_id = $1 AND fact_key = $2"
+        try:
+            await self.execute(query, str(user_id), clean_key)
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting user memory in DB: {e}")
+            return False
+
+    async def clear_user_memories(self, user_id: Any) -> bool:
+        """Clears all stored memories for a user."""
+        if not self.is_postgres:
+            query = "DELETE FROM user_memories WHERE user_id = ?"
+        else:
+            query = "DELETE FROM user_memories WHERE user_id = $1"
+        try:
+            await self.execute(query, str(user_id))
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing user memories in DB: {e}")
             return False
 
     async def close(self):
