@@ -7988,7 +7988,8 @@ class StrikeAppealModal(discord.ui.Modal, title="Submit Strike Appeal"):
         ticket_chan = await create_appeal_ticket_channel(guild, member, self.reason_input.value, self.extra_input.value)
         if ticket_chan:
             await interaction.followup.send(
-                f"✅ **Your appeal has been submitted to the {guild.name} moderation team!**\nStaff has been notified and you will receive a DM notification once your appeal is reviewed.",
+                f"✅ **Your appeal ticket has been opened: {ticket_chan.mention}!**\n"
+                f"You have been granted access to view and chat directly with staff in your appeal channel. Admins and moderators have been pinged to review your appeal.",
                 ephemeral=True
             )
         else:
@@ -8119,6 +8120,20 @@ class AppealReviewView(discord.ui.View):
         except Exception as dme:
             logger.debug(f"Could not DM user {target_uid} on appeal denial: {dme}")
 
+        # Re-apply native timeout if member is in guild
+        if guild:
+            member = guild.get_member(target_uid)
+            if member:
+                try:
+                    active_mute = await db.get_active_mute(guild.id, target_uid)
+                    if active_mute:
+                        remaining_secs = max(60, int(active_mute.get("expires_at", time.time() + 7 * 86400) - time.time()))
+                        await member.timeout(datetime.timedelta(seconds=remaining_secs), reason="Strike appeal denied by staff")
+                    else:
+                        await member.timeout(datetime.timedelta(days=7), reason="Strike appeal denied by staff")
+                except Exception as te:
+                    logger.warning(f"Could not re-apply timeout for {target_uid} on appeal denial: {te}")
+
         # Update DB
         await db.resolve_appeal_ticket(interaction.channel_id, "denied", interaction.user.id)
 
@@ -8158,7 +8173,7 @@ async def create_appeal_ticket_channel(
     reason: str,
     additional_info: str = ""
 ) -> Optional[discord.TextChannel]:
-    """Creates a private staff-only appeal ticket channel and sends the review embed with action buttons."""
+    """Creates a private appeal ticket channel, grants the user talk permissions, and pings moderators/admins."""
     clean_name = re.sub(r'[^a-zA-Z0-9]', '', user.name.lower())[:15] or f"user-{user.id}"
     channel_name = f"appeal-{clean_name}"
 
@@ -8176,7 +8191,8 @@ async def create_appeal_ticket_channel(
         if ticket_chan and ticket_chan.category:
             target_category = ticket_chan.category
 
-    # Build Overwrites: visible ONLY to bot + staff/admins
+    # Build Overwrites: visible to bot, staff/admins, and the appealing user
+    target_member = guild.get_member(user.id) or user
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
         guild.me: discord.PermissionOverwrite(
@@ -8190,8 +8206,21 @@ async def create_appeal_ticket_channel(
         )
     }
 
-    # Add staff & mod roles
+    # Grant appealing member full talk & view permissions in their private appeal ticket
+    if isinstance(target_member, (discord.Member, discord.User)):
+        overwrites[target_member] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True,
+            embed_links=True,
+            attach_files=True
+        )
+
+    # Collect staff & mod roles for permissions & alert mentions
+    staff_mentions = []
     for role in guild.roles:
+        if role.is_default() or role.managed:
+            continue
         if (role.permissions.administrator or 
             role.permissions.manage_guild or 
             role.permissions.moderate_members or 
@@ -8205,6 +8234,20 @@ async def create_appeal_ticket_channel(
                 embed_links=True,
                 attach_files=True
             )
+            if role.mention not in staff_mentions:
+                staff_mentions.append(role.mention)
+
+    # Lift native Discord timeout so Discord platform allows user to send messages in this ticket channel,
+    # while @Muted role enforces restriction across all regular channels.
+    if isinstance(target_member, discord.Member):
+        try:
+            if target_member.is_timed_out():
+                muted_role = await ensure_muted_role(guild)
+                if muted_role and muted_role not in target_member.roles:
+                    await target_member.add_roles(muted_role, reason="Enforcing @Muted role during strike appeal discussion")
+                await target_member.timeout(None, reason="Lifted native timeout to allow communication in appeal ticket channel")
+        except Exception as te:
+            logger.warning(f"Could not adjust native timeout for {target_member.id}: {te}")
 
     try:
         channel = await guild.create_text_channel(
@@ -8246,11 +8289,12 @@ async def create_appeal_ticket_channel(
     embed.add_field(name="📝 Reason for Appeal", value=reason, inline=False)
     if additional_info:
         embed.add_field(name="ℹ️ Additional Context", value=additional_info, inline=False)
-    embed.set_footer(text="Sweety Strike Appeal System • Click a button below to resolve")
+    embed.set_footer(text="Sweety Strike Appeal System • Staff can use buttons below to resolve")
 
     view = AppealReviewView()
+    staff_ping_str = " ".join(staff_mentions[:4]) if staff_mentions else "🛡️ **Moderators & Admins**"
     await channel.send(
-        content=f"🔔 **Staff Alert:** New strike appeal submitted for {user.mention} (`{user.id}`).",
+        content=f"🔔 **Staff Alert:** {staff_ping_str}\n👋 {user.mention}, your private appeal ticket has been opened! You have permission to explain your appeal and discuss directly with the moderation team here.",
         embed=embed,
         view=view
     )
@@ -12627,8 +12671,8 @@ async def on_message(message):
             )
             if ticket_chan:
                 await message.reply(
-                    f"✅ **Your appeal has been submitted to the {target_guild.name} moderation team!**\n"
-                    f"Staff has received your appeal ticket and you will be notified here via DM once reviewed."
+                    f"✅ **Your appeal ticket has been opened in {target_guild.name}: {ticket_chan.mention}!**\n"
+                    f"You have been granted permission to talk directly with the moderation team in your appeal channel. Admins and moderators have been pinged to review your appeal."
                 )
             else:
                 await message.reply(f"❌ Failed to submit appeal ticket in **{target_guild.name}**. Please contact staff directly.")
