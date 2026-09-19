@@ -8303,42 +8303,6 @@ async def create_appeal_ticket_channel(
     return channel
 
 
-@bot.tree.command(name="appeal", description="Submit an official appeal for your active warnings, strikes, or timeout")
-@app_commands.describe(reason="Reason for your appeal (optional if opening interactive modal)")
-@app_commands.guild_only()
-async def appeal_slash_cmd(interaction: discord.Interaction, reason: Optional[str] = None):
-    warns = await db.get_warnings(interaction.guild.id, interaction.user.id)
-    active_mute = await db.get_active_mute(interaction.guild.id, interaction.user.id)
-
-    if not warns and not active_mute:
-        return await interaction.response.send_message(
-            "ℹ️ **You have a clean record!** You currently have 0 active warnings, strikes, or timeouts in this server.",
-            ephemeral=True
-        )
-
-    active_ticket = await db.get_active_appeal_by_user(interaction.guild.id, interaction.user.id)
-    if active_ticket:
-        chan = interaction.guild.get_channel(active_ticket.get("channel_id"))
-        chan_mention = chan.mention if chan else "your ticket channel"
-        return await interaction.response.send_message(
-            f"ℹ️ You already have an open appeal ticket pending review: {chan_mention}.",
-            ephemeral=True
-        )
-
-    if reason:
-        await interaction.response.defer(ephemeral=True)
-        ticket_chan = await create_appeal_ticket_channel(interaction.guild, interaction.user, reason, "Submitted via /appeal slash command")
-        if ticket_chan:
-            await interaction.followup.send(
-                f"✅ **Your appeal ticket has been opened: {ticket_chan.mention}!**\n"
-                f"You have been granted permission to talk directly with the moderation team in your appeal channel. Staff has been notified to review your appeal.",
-                ephemeral=True
-            )
-        else:
-            await interaction.followup.send("❌ Failed to create appeal ticket. Please contact a moderator directly.", ephemeral=True)
-    else:
-        await interaction.response.send_modal(StrikeAppealModal())
-
 
 # ── Bot Client Initialization ───────────────────────────────────────────────
 
@@ -8636,6 +8600,42 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         logger.error(f"Failed to send prefix command error: {send_err}")
 
 
+
+@bot.tree.command(name="appeal", description="Submit an official appeal for your active warnings, strikes, or timeout")
+@app_commands.describe(reason="Reason for your appeal (optional if opening interactive modal)")
+@app_commands.guild_only()
+async def appeal_slash_cmd(interaction: discord.Interaction, reason: Optional[str] = None):
+    warns = await db.get_warnings(interaction.guild.id, interaction.user.id)
+    active_mute = await db.get_active_mute(interaction.guild.id, interaction.user.id)
+
+    if not warns and not active_mute:
+        return await interaction.response.send_message(
+            "ℹ️ **You have a clean record!** You currently have 0 active warnings, strikes, or timeouts in this server.",
+            ephemeral=True
+        )
+
+    active_ticket = await db.get_active_appeal_by_user(interaction.guild.id, interaction.user.id)
+    if active_ticket:
+        chan = interaction.guild.get_channel(active_ticket.get("channel_id"))
+        chan_mention = chan.mention if chan else "your ticket channel"
+        return await interaction.response.send_message(
+            f"ℹ️ You already have an open appeal ticket pending review: {chan_mention}.",
+            ephemeral=True
+        )
+
+    if reason:
+        await interaction.response.defer(ephemeral=True)
+        ticket_chan = await create_appeal_ticket_channel(interaction.guild, interaction.user, reason, "Submitted via /appeal slash command")
+        if ticket_chan:
+            await interaction.followup.send(
+                f"✅ **Your appeal ticket has been opened: {ticket_chan.mention}!**\n"
+                f"You have been granted permission to talk directly with the moderation team in your appeal channel. Staff has been notified to review your appeal.",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send("❌ Failed to create appeal ticket. Please contact a moderator directly.", ephemeral=True)
+    else:
+        await interaction.response.send_modal(StrikeAppealModal())
 
 
 # ── App Slash & Prefix Help ──────────────────────────────────────────────────
