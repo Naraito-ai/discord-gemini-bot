@@ -8380,14 +8380,16 @@ class GeminiBot(commands.Bot):
                     except Exception as cog_err:
                         logger.error(f"[SWEETY] Failed to load cog {filename}: {cog_err}", exc_info=True)
         
-        # 3. Link bot and DB instances to FastAPI app state
-        try:
-            from api import app
-            app.state.bot = self
-            app.state.db = db
-            logger.info("FastAPI dashboard linked to live Bot client and Database.")
-        except Exception as link_err:
-            logger.debug(f"FastAPI app state link: {link_err}")
+        # 3. Start FastAPI dashboard in the same process & event loop
+        disable_api = os.getenv("DISABLE_API", "false").lower() in ("true", "1", "yes")
+        if not disable_api:
+            try:
+                from api import start_fastapi
+                port = int(os.getenv("PORT", 8080))
+                asyncio.create_task(start_fastapi(self, db, port))
+                logger.info(f"FastAPI dashboard task scheduled on port {port}.")
+            except Exception as api_err:
+                logger.warning(f"FastAPI dashboard startup error: {api_err}")
 
         # 4. Register persistent UI views
         self.add_view(HubDraftButtonView())
@@ -12950,23 +12952,6 @@ if __name__ == "__main__":
     else:
         logger.info("🔒 Security layer active: rate limiting, input sanitization, and prompt injection resistance enabled.")
         logger.info(f"🔒 Per-user AI cooldown: {_USER_COOLDOWN_SECONDS}s | Per-server hourly AI limit: {_SERVER_HOURLY_LIMIT} calls")
-        # Start early FastAPI HTTP server in dedicated daemon thread for instant Render port binding
-        disable_api = os.getenv("DISABLE_API", "false").lower() in ("true", "1", "yes")
-        if not disable_api:
-            def _start_early_api():
-                try:
-                    from api import app
-                    import uvicorn
-                    port = int(os.getenv("PORT", 8080))
-                    logger.info(f"🚀 Starting early FastAPI HTTP server on port {port} for instant Render health checks...")
-                    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
-                except Exception as api_err:
-                    logger.warning(f"Early FastAPI startup error: {api_err}")
-
-            import threading
-            api_thread = threading.Thread(target=_start_early_api, daemon=True)
-            api_thread.start()
-
         print("[OK] Starting Discord bot with Cloudflare rate limit resilience...")
         
         while True:
