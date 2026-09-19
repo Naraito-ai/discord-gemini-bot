@@ -7937,11 +7937,11 @@ async def ensure_muted_role(guild: discord.Guild) -> Optional[discord.Role]:
     return muted_role
 
 
-class StrikeAppealModal(discord.ui.Modal, title="Submit Strike Appeal"):
+class StrikeAppealModal(discord.ui.Modal, title="Submit Strike / Warning Appeal"):
     reason_input = discord.ui.TextInput(
         label="Reason for appeal",
         style=discord.TextStyle.paragraph,
-        placeholder="Explain why your strikes/timeout should be appealed...",
+        placeholder="Explain why this warning or strike should be appealed...",
         required=True,
         min_length=10,
         max_length=1000
@@ -7965,7 +7965,7 @@ class StrikeAppealModal(discord.ui.Modal, title="Submit Strike Appeal"):
                 if g.get_member(user.id):
                     active_mute = await db.get_active_mute(g.id, user.id)
                     warnings = await db.get_warnings(g.id, user.id)
-                    if active_mute or len(warnings) >= 3:
+                    if active_mute or len(warnings) >= 1:
                         guild = g
                         break
             if not guild and interaction.client.guilds:
@@ -7975,7 +7975,7 @@ class StrikeAppealModal(discord.ui.Modal, title="Submit Strike Appeal"):
                         break
 
         if not guild:
-            await interaction.followup.send("❌ Could not find a server with active strikes to submit your appeal.", ephemeral=True)
+            await interaction.followup.send("❌ Could not find a server with active strikes or warnings to submit your appeal.", ephemeral=True)
             return
 
         # Check existing active ticket
@@ -7997,7 +7997,7 @@ class StrikeAppealModal(discord.ui.Modal, title="Submit Strike Appeal"):
 
 
 class DMAppealLauncherView(discord.ui.View):
-    """Persistent view attached to 3-strike DM notifications allowing in-DM appeal modal popup."""
+    """Persistent view attached to warning and strike DM notifications allowing in-DM appeal modal popup."""
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -8017,7 +8017,7 @@ class AppealReviewView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Accept & Unmute", style=discord.ButtonStyle.success, emoji="✅", custom_id="btn_appeal_accept")
+    @discord.ui.button(label="Accept Appeal", style=discord.ButtonStyle.success, emoji="✅", custom_id="btn_appeal_accept")
     async def accept_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         ticket = await db.get_appeal_ticket_by_channel(interaction.channel_id)
@@ -8032,7 +8032,7 @@ class AppealReviewView(discord.ui.View):
         target_uid = int(ticket["user_id"])
         member = guild.get_member(target_uid) if guild else None
 
-        # Unmute member: remove native timeout + @Muted role
+        # Unmute member if muted: remove native timeout + @Muted role
         if member:
             try:
                 if member.is_timed_out():
@@ -8049,23 +8049,25 @@ class AppealReviewView(discord.ui.View):
             # Send DM to user
             try:
                 accept_embed = discord.Embed(
-                    title="✅ Strike Appeal Accepted",
+                    title="✅ Warning / Strike Appeal Accepted",
                     description=(
                         f"Your appeal in **{guild.name}** has been **accepted** by moderator **{interaction.user.display_name}**!\n\n"
-                        "Your 7-day timeout and muted restrictions have been completely removed.\n"
-                        "Please continue to follow server rules to prevent future penalties."
+                        "• **Action Taken:** Warning / strike penalty has been reviewed and cleared by staff.\n"
+                        "• **Status:** Any active timeouts or mutes have been completely removed.\n\n"
+                        "Please continue to adhere to server rules to maintain a clean record."
                     ),
                     color=discord.Color.green(),
                     timestamp=datetime.datetime.utcnow()
                 )
-                accept_embed.set_footer(text="Your appeal was accepted, timeout removed.")
-                await member.send(content="Your appeal was accepted, timeout removed.", embed=accept_embed)
+                accept_embed.set_footer(text="Your appeal was accepted by staff.")
+                await member.send(content="Your appeal was accepted by staff.", embed=accept_embed)
             except Exception as dme:
                 logger.debug(f"Could not DM user {target_uid} on appeal acceptance: {dme}")
 
-        # Update DB
+        # Update DB: remove active mute and clear 1 recent warning
         if guild:
             await db.remove_active_mute(guild.id, target_uid)
+            await db.clear_warnings(guild.id, target_uid, amount=1)
         await db.resolve_appeal_ticket(interaction.channel_id, "accepted", interaction.user.id)
 
         # Update review buttons
@@ -8074,11 +8076,11 @@ class AppealReviewView(discord.ui.View):
                 item.disabled = True
         
         status_embed = discord.Embed(
-            title="✅ Appeal Accepted & User Unmuted",
+            title="✅ Appeal Accepted & Record Updated",
             description=(
                 f"• **Reviewed by:** {interaction.user.mention} (`{interaction.user.id}`)\n"
                 f"• **Target User:** <@{target_uid}> (`{target_uid}`)\n"
-                f"• **Action Taken:** Native timeout cleared, `@Muted` role removed, and DM confirmation sent.\n"
+                f"• **Action Taken:** 1 Warning/strike cleared from DB, timeout/mute removed if active, and DM confirmation sent.\n"
                 f"• **Timestamp:** <t:{int(time.time())}:F>"
             ),
             color=discord.Color.green()
@@ -8086,7 +8088,7 @@ class AppealReviewView(discord.ui.View):
         await interaction.message.edit(view=self)
         await interaction.channel.send(embed=status_embed)
         if guild:
-            await log_mod_action(guild, interaction.user, member or target_uid, "Strike Appeal Accepted", f"Accepted strike appeal for user ID {target_uid}")
+            await log_mod_action(guild, interaction.user, member or target_uid, "Strike Appeal Accepted", f"Accepted appeal for user ID {target_uid} (1 strike cleared)")
 
     @discord.ui.button(label="Deny Appeal", style=discord.ButtonStyle.danger, emoji="❌", custom_id="btn_appeal_deny")
     async def deny_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -10420,7 +10422,22 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
         elif total_warns > 3:
             dm_embed.add_field(
                 name="🚨 High Risk Notice",
-                value=f"You currently have **{total_warns}/6 strikes**. Reaching 6 strikes results in an immediate permanent ban.",
+                value=(
+                    f"You currently have **{total_warns}/6 strikes**. Reaching 6 strikes results in an immediate permanent ban.\n\n"
+                    "📌 **How to Appeal:** Click the **📩 Submit Strike Appeal** button below or reply with `!appeal <reason>` if you have proper justification."
+                ),
+                inline=False
+            )
+        else:
+            dm_embed.add_field(
+                name="📌 How to Appeal This Warning",
+                value=(
+                    "If you believe this warning was issued in error or you have a valid explanation/proper reason, you can submit an appeal:\n"
+                    "• **In-DM Button:** Click the **📩 Submit Strike Appeal** button below.\n"
+                    "• **DM Command:** Reply to this DM with `!appeal <your reason here>`\n"
+                    "• **Support Ticket:** Open a ticket in <#1549080000328896583> in the server.\n\n"
+                    "*A private appeal channel will be created where you can discuss the warning directly with the moderation team.*"
+                ),
                 inline=False
             )
 
@@ -10441,11 +10458,9 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
         )
         dm_embed.set_footer(text="Please keep the community friendly and adhere to server rules.")
         
-        dm_view = DMAppealLauncherView() if total_warns >= 3 else None
-        if dm_view:
-            await member.send(embed=dm_embed, view=dm_view)
-        else:
-            await member.send(embed=dm_embed)
+        # Always attach the interactive appeal button so warned users can appeal with valid reasons
+        dm_view = DMAppealLauncherView()
+        await member.send(embed=dm_embed, view=dm_view)
     except Exception:
         pass
 
@@ -10483,6 +10498,14 @@ async def warn_command(interaction: discord.Interaction, member: discord.Member,
     embed.add_field(name="Total Warnings", value=f"`{total_warns}`", inline=True)
     embed.add_field(name="Reason", value=reason, inline=False)
     await interaction.followup.send(embed=embed)
+
+
+@bot.tree.command(name="strike", description="Issue a formal strike to a member with auto-escalation (alias for /warn)")
+@app_commands.describe(member="The member to strike", reason="Reason for the strike")
+@app_commands.default_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def strike_slash_cmd(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    await warn_command(interaction, member, reason)
 
 
 # ── Interactive Warning Management UI ──────────────────────────────────────────
@@ -10721,11 +10744,11 @@ async def warnlb_command(interaction: discord.Interaction, limit: Optional[int] 
 
 
 
-@bot.command(name="warn")
+@bot.command(name="warn", aliases=["strike", "strikemember"])
 @commands.has_permissions(moderate_members=True)
 @commands.guild_only()
 async def warn_prefix_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
-    """Issue a warning to a member: !warn @member [reason]"""
+    """Issue a warning or strike to a member: !warn @member [reason] or !strike @member [reason]"""
     if is_protected(member):
         await ctx.send("❌ This member is staff/immune and cannot be warned.")
         return
@@ -12644,7 +12667,7 @@ async def on_message(message):
                 if g.get_member(message.author.id):
                     active_mute = await db.get_active_mute(g.id, message.author.id)
                     warnings = await db.get_warnings(g.id, message.author.id)
-                    if active_mute or len(warnings) >= 3:
+                    if active_mute or len(warnings) >= 1:
                         target_guild = g
                         break
             if not target_guild and bot.guilds:
@@ -12654,7 +12677,7 @@ async def on_message(message):
                         break
 
             if not target_guild:
-                await message.reply("❌ Could not find a server where you have active strikes or mutes to submit your appeal.")
+                await message.reply("❌ Could not find a server where you have active strikes or warnings to submit your appeal.")
                 return
 
             active_appeal = await db.get_active_appeal_by_user(target_guild.id, message.author.id)
