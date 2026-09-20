@@ -34,6 +34,7 @@ class DatabaseManager:
                     self.db_url,
                     min_size=0,
                     max_size=5,
+                    statement_cache_size=0,
                     max_inactive_connection_lifetime=60.0,
                     command_timeout=30.0
                 )
