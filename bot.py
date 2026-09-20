@@ -10385,6 +10385,128 @@ async def help_prefix_cmd(ctx: commands.Context):
     await ctx.send(embed=embed)
 
 
+@bot.tree.command(name="ping", description="Check Sweety's latency, Supabase database response time, and connection health")
+async def ping_slash(interaction: discord.Interaction):
+    start_time = time.perf_counter()
+    await interaction.response.defer(ephemeral=False)
+    api_latency = round(bot.latency * 1000)
+    
+    # Measure DB latency
+    db_start = time.perf_counter()
+    db_ok = False
+    try:
+        if db.is_postgres and db.pg_pool:
+            async with db.pg_pool.acquire() as conn:
+                await conn.fetchval("SELECT 1;")
+            db_ok = True
+        elif db.sqlite_conn:
+            await db.sqlite_conn.execute("SELECT 1;")
+            db_ok = True
+    except Exception as e:
+        logger.error(f"DB ping failed: {e}")
+    db_latency = round((time.perf_counter() - db_start) * 1000)
+    roundtrip = round((time.perf_counter() - start_time) * 1000)
+
+    embed = discord.Embed(
+        title="🏓 Pong! • Sweety Diagnostics",
+        color=discord.Color.from_rgb(88, 101, 242),
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name="📶 Discord Gateway", value=f"`{api_latency}ms`", inline=True)
+    embed.add_field(name="⚡ Roundtrip Latency", value=f"`{roundtrip}ms`", inline=True)
+    embed.add_field(
+        name="🗄️ Database (Supabase)" if db.is_postgres else "🗄️ Database (SQLite)",
+        value=f"`{db_latency}ms` (Online 🟢)" if db_ok else "`Failed 🔴`",
+        inline=True
+    )
+    embed.set_footer(text=f"Sweety Bot • Shard {interaction.guild.shard_id if interaction.guild else 0}")
+    await interaction.followup.send(embed=embed)
+
+
+@bot.command(name="ping", aliases=["pong", "latency"])
+async def ping_prefix(ctx: commands.Context):
+    """Check Sweety's latency and database health: !ping"""
+    start_time = time.perf_counter()
+    msg = await ctx.send("🏓 Pinging...")
+    roundtrip = round((time.perf_counter() - start_time) * 1000)
+    api_latency = round(bot.latency * 1000)
+    
+    # Measure DB latency
+    db_start = time.perf_counter()
+    db_ok = False
+    try:
+        if db.is_postgres and db.pg_pool:
+            async with db.pg_pool.acquire() as conn:
+                await conn.fetchval("SELECT 1;")
+            db_ok = True
+        elif db.sqlite_conn:
+            await db.sqlite_conn.execute("SELECT 1;")
+            db_ok = True
+    except Exception as e:
+        logger.error(f"DB ping failed: {e}")
+    db_latency = round((time.perf_counter() - db_start) * 1000)
+
+    embed = discord.Embed(
+        title="🏓 Pong! • Sweety Diagnostics",
+        color=discord.Color.from_rgb(88, 101, 242),
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name="📶 Discord Gateway", value=f"`{api_latency}ms`", inline=True)
+    embed.add_field(name="⚡ Roundtrip Latency", value=f"`{roundtrip}ms`", inline=True)
+    embed.add_field(
+        name="🗄️ Database (Supabase)" if db.is_postgres else "🗄️ Database (SQLite)",
+        value=f"`{db_latency}ms` (Online 🟢)" if db_ok else "`Failed 🔴`",
+        inline=True
+    )
+    embed.set_footer(text=f"Sweety Bot • Server: {ctx.guild.name if ctx.guild else 'DM'}")
+    await msg.edit(content=None, embed=embed)
+
+
+@bot.tree.command(name="pin", description="Pin a message in the channel by Message ID or link")
+@app_commands.describe(message_id="The ID or URL of the message to pin")
+@app_commands.default_permissions(manage_messages=True)
+@app_commands.guild_only()
+async def pin_slash(interaction: discord.Interaction, message_id: str):
+    if not interaction.user.guild_permissions.manage_messages and not interaction.user.guild_permissions.administrator and interaction.user.id != getattr(interaction.guild, "owner_id", None):
+        return await interaction.response.send_message("❌ You need **Manage Messages** permission to pin messages.", ephemeral=True)
+    
+    clean_id = message_id.strip().rstrip("/").split("/")[-1]
+    if not clean_id.isdigit():
+        return await interaction.response.send_message("❌ Please provide a valid message ID or message link.", ephemeral=True)
+        
+    try:
+        msg = await interaction.channel.fetch_message(int(clean_id))
+        await msg.pin(reason=f"Pinned by {interaction.user}")
+        await interaction.response.send_message(f"📌 [Message]({msg.jump_url}) by {msg.author.mention} has been pinned to {interaction.channel.mention}!", ephemeral=False)
+    except discord.NotFound:
+        await interaction.response.send_message("❌ Message not found in this channel.", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ Bot lacks permission to pin messages in this channel.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to pin message: {e}", ephemeral=True)
+
+
+@bot.command(name="pin")
+@commands.has_permissions(manage_messages=True)
+@commands.guild_only()
+async def pin_prefix(ctx: commands.Context, message: Optional[discord.Message] = None):
+    """Pin a message by replying to it with !pin or providing message ID: !pin <message_id>"""
+    target_msg = message
+    if not target_msg and ctx.message.reference and ctx.message.reference.message_id:
+        try:
+            target_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        except Exception:
+            pass
+    if not target_msg:
+        return await ctx.send("⚠️ Reply to a message with `!pin` or pass its message ID: `!pin <message_id>`")
+    try:
+        await target_msg.pin(reason=f"Pinned by {ctx.author}")
+        await ctx.send(f"📌 [Message]({target_msg.jump_url}) by {target_msg.author.mention} has been pinned!")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to pin message: {e}")
+
+
+
 
 
 @bot.tree.command(name="setup", description="Generate a server structure preview and build it (Theme or Custom)")
