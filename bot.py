@@ -10728,7 +10728,7 @@ def make_help_embed() -> discord.Embed:
     )
     embed.add_field(
         name="💖 **Social & Roles**",
-        value="• `/hug`, `/pat`, `/kiss`, `/highfive`, `/wave`, `/slap`, `/punch`\n• `/autorole <role>` — Auto-assign role to new members\n• `/addrole` / `/removerole` / `/roleall` / `/roleallremove`",
+        value="• `/hug`, `/pat`, `/kiss`, `/highfive`, `/wave`, `/slap`, `/punch`\n• `/voicerole [action]` / `!voicerole` — Dynamic in-voice role for VC pings\n• `/autorole <role>` — Auto-assign role to new members\n• `/addrole` / `/removerole` / `/roleall` / `/roleallremove`",
         inline=False
     )
     embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq • Supabase PostgreSQL")
@@ -12236,6 +12236,231 @@ async def antiraid_command(interaction: discord.Interaction, mode: str):
         await interaction.response.send_message("🚨 **Anti-Raid Shield set to STRICT Mode**\nMaximum protection active! Sensitive join detection (3 joins/10s), gates accounts <72h old, and locks chat on mass joins.")
     else:
         await interaction.response.send_message("⚠️ **Anti-Raid Shield DISABLED**\nAutomated join-flood mitigation is now off.")
+
+
+@bot.tree.command(name="voicerole", description="Configure dynamic @Voice Channel role for in-VC member pinging")
+@app_commands.describe(
+    action="Choose action: setup default, set custom role, sync in-VC members, or disable",
+    role="Custom role to use as the voice activity role (required for 'set')"
+)
+@app_commands.choices(
+    action=[
+        app_commands.Choice(name="⚡ Setup / Auto-Create (@Voice Channel)", value="setup"),
+        app_commands.Choice(name="⚙️ Set Custom Role", value="set"),
+        app_commands.Choice(name="🔄 Sync In-Voice Members", value="sync"),
+        app_commands.Choice(name="📋 View Status & Active VC Members", value="status"),
+        app_commands.Choice(name="🔴 Disable Dynamic Voice Role", value="disable")
+    ]
+)
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+async def voicerole_slash_cmd(interaction: discord.Interaction, action: str = "status", role: Optional[discord.Role] = None):
+    if not is_protected(interaction.user) and not interaction.permissions.administrator:
+        return await interaction.response.send_message("❌ Only Server Administrators can configure the voice activity role.", ephemeral=True)
+
+    guild = interaction.guild
+    act = action.lower()
+
+    if act == "setup":
+        await interaction.response.defer()
+        await db.set_config(guild.id, "voice_activity_role_enabled", True)
+        v_role = await get_or_create_voice_role(guild)
+        if not v_role:
+            return await interaction.followup.send("❌ Could not create or find the @Voice Channel role. Please check bot role permissions.")
+        added, removed = await sync_guild_voice_roles(guild)
+        embed = discord.Embed(
+            title="🔊 Dynamic Voice Role Enabled",
+            description=(
+                f"✅ **Active Voice Role:** {v_role.mention} (`{v_role.id}`)\n\n"
+                f"• **Auto-Assignment:** Members will automatically receive {v_role.mention} when they join any voice channel.\n"
+                f"• **Auto-Removal:** The role is automatically removed when they leave voice.\n"
+                f"• **Pinging:** You can now mention {v_role.mention} in text channels to alert everyone currently in voice!\n"
+                f"• **Initial Sync:** `{added}` members assigned, `{removed}` cleaned up."
+            ),
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Configured by {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
+
+    elif act == "set":
+        if not role:
+            return await interaction.response.send_message("❌ Please specify a role: `/voicerole action:Set Custom Role role:@Role`", ephemeral=True)
+        await interaction.response.defer()
+        await db.set_config(guild.id, "voice_activity_role_enabled", True)
+        await db.set_config(guild.id, "voice_activity_role_id", role.id)
+        if not role.mentionable:
+            try:
+                await role.edit(mentionable=True, reason="Made mentionable for in-VC pinging")
+            except Exception:
+                pass
+        added, removed = await sync_guild_voice_roles(guild)
+        embed = discord.Embed(
+            title="🔊 Voice Role Configured",
+            description=(
+                f"✅ **Active Voice Role set to:** {role.mention}\n\n"
+                f"Members joining any voice channel will automatically get {role.mention} and lose it when leaving.\n"
+                f"• **Synced:** `{added}` assigned, `{removed}` cleaned up."
+            ),
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Configured by {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
+
+    elif act == "sync":
+        await interaction.response.defer()
+        added, removed = await sync_guild_voice_roles(guild)
+        v_role = await get_or_create_voice_role(guild)
+        role_str = v_role.mention if v_role else "Voice Role"
+        embed = discord.Embed(
+            title="🔄 Voice Role Re-Synced",
+            description=f"✅ Re-scanned all voice channels for {role_str}!\n• **Assigned to in-VC members:** `{added}`\n• **Removed from non-VC members:** `{removed}`",
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=embed)
+
+    elif act == "disable":
+        await db.set_config(guild.id, "voice_activity_role_enabled", False)
+        v_role = await get_or_create_voice_role(guild)
+        if v_role:
+            for m in list(v_role.members):
+                try:
+                    await m.remove_roles(v_role, reason="Disabled voice activity role system")
+                except Exception:
+                    pass
+        embed = discord.Embed(
+            title="🔴 Dynamic Voice Role Disabled",
+            description="The dynamic in-voice role assignment system has been turned off and cleaned up.",
+            color=discord.Color.orange()
+        )
+        await interaction.response.send_message(embed=embed)
+
+    else:  # status
+        is_enabled = await db.get_config(guild.id, "voice_activity_role_enabled", True)
+        v_role = await get_or_create_voice_role(guild) if is_enabled else None
+        in_vc_count = sum(len(vc.members) for vc in guild.voice_channels)
+        embed = discord.Embed(
+            title=f"🔊 Dynamic Voice Role Status — {guild.name}",
+            color=discord.Color.green() if (is_enabled and v_role) else discord.Color.gold()
+        )
+        embed.add_field(name="Status", value="🟢 **Enabled**" if is_enabled else "🔴 **Disabled**", inline=True)
+        if v_role:
+            embed.add_field(name="Voice Role", value=f"✅ {v_role.mention} (`{v_role.id}`)", inline=True)
+            embed.add_field(name="Mentionable", value="✅ Yes (Can ping in text chat)" if v_role.mentionable else "⚠️ No", inline=True)
+        else:
+            embed.add_field(name="Voice Role", value="*Not configured (Use `/voicerole setup`)*", inline=True)
+        embed.add_field(name="Active In-VC Members", value=f"🎙️ **{in_vc_count}** members currently in voice", inline=False)
+        embed.add_field(
+            name="ℹ️ How It Works",
+            value="When a member connects to any voice channel, they automatically receive this role. When they disconnect, the role is instantly removed so you can ping all active in-VC members without pinging offline or AFK members!",
+            inline=False
+        )
+        embed.set_footer(text="Use /voicerole setup to auto-configure or /voicerole set @Role to customize.")
+        await interaction.response.send_message(embed=embed)
+
+
+@bot.command(name="voicerole", aliases=["setvoicerole", "vcrole", "setvcrole", "invoicerole"])
+@commands.has_permissions(administrator=True)
+@commands.guild_only()
+async def voicerole_prefix_cmd(ctx: commands.Context, action: Optional[str] = "status", role: Optional[discord.Role] = None):
+    """Configure dynamic voice role: !voicerole setup | !voicerole set @Role | !voicerole sync | !voicerole disable | !voicerole status"""
+    guild = ctx.guild
+    act = (action or "status").lower()
+
+    if act in ("setup", "create", "enable", "on", "start"):
+        await db.set_config(guild.id, "voice_activity_role_enabled", True)
+        v_role = await get_or_create_voice_role(guild)
+        if not v_role:
+            return await ctx.send("❌ Could not create or find the @Voice Channel role. Please check bot role permissions.")
+        added, removed = await sync_guild_voice_roles(guild)
+        embed = discord.Embed(
+            title="🔊 Dynamic Voice Role Enabled",
+            description=(
+                f"✅ **Active Voice Role:** {v_role.mention} (`{v_role.id}`)\n\n"
+                f"• **Auto-Assignment:** Members will automatically receive {v_role.mention} when they join any voice channel.\n"
+                f"• **Auto-Removal:** The role is automatically removed when they leave voice.\n"
+                f"• **Pinging:** You can now mention {v_role.mention} in text channels to alert everyone currently in voice!\n"
+                f"• **Initial Sync:** `{added}` members assigned, `{removed}` cleaned up."
+            ),
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Configured by {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+
+    elif act in ("set", "add", "role"):
+        target_role = role
+        if not target_role and ctx.message.role_mentions:
+            target_role = ctx.message.role_mentions[0]
+        if not target_role:
+            return await ctx.send("❌ Please specify or mention a role: `!voicerole set @Role`")
+        await db.set_config(guild.id, "voice_activity_role_enabled", True)
+        await db.set_config(guild.id, "voice_activity_role_id", target_role.id)
+        if not target_role.mentionable:
+            try:
+                await target_role.edit(mentionable=True, reason="Made mentionable for in-VC pinging")
+            except Exception:
+                pass
+        added, removed = await sync_guild_voice_roles(guild)
+        embed = discord.Embed(
+            title="🔊 Voice Role Configured",
+            description=(
+                f"✅ **Active Voice Role set to:** {target_role.mention}\n\n"
+                f"Members joining any voice channel will automatically get {target_role.mention} and lose it when leaving.\n"
+                f"• **Synced:** `{added}` assigned, `{removed}` cleaned up."
+            ),
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Configured by {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+
+    elif act in ("sync", "resync", "refresh"):
+        added, removed = await sync_guild_voice_roles(guild)
+        v_role = await get_or_create_voice_role(guild)
+        role_str = v_role.mention if v_role else "Voice Role"
+        embed = discord.Embed(
+            title="🔄 Voice Role Re-Synced",
+            description=f"✅ Re-scanned all voice channels for {role_str}!\n• **Assigned to in-VC members:** `{added}`\n• **Removed from non-VC members:** `{removed}`",
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+
+    elif act in ("disable", "off", "remove", "clear", "delete"):
+        await db.set_config(guild.id, "voice_activity_role_enabled", False)
+        v_role = await get_or_create_voice_role(guild)
+        if v_role:
+            for m in list(v_role.members):
+                try:
+                    await m.remove_roles(v_role, reason="Disabled voice activity role system")
+                except Exception:
+                    pass
+        embed = discord.Embed(
+            title="🔴 Dynamic Voice Role Disabled",
+            description="The dynamic in-voice role assignment system has been turned off and cleaned up.",
+            color=discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
+
+    else:  # status / view
+        is_enabled = await db.get_config(guild.id, "voice_activity_role_enabled", True)
+        v_role = await get_or_create_voice_role(guild) if is_enabled else None
+        in_vc_count = sum(len(vc.members) for vc in guild.voice_channels)
+        embed = discord.Embed(
+            title=f"🔊 Dynamic Voice Role Status — {guild.name}",
+            color=discord.Color.green() if (is_enabled and v_role) else discord.Color.gold()
+        )
+        embed.add_field(name="Status", value="🟢 **Enabled**" if is_enabled else "🔴 **Disabled**", inline=True)
+        if v_role:
+            embed.add_field(name="Voice Role", value=f"✅ {v_role.mention} (`{v_role.id}`)", inline=True)
+            embed.add_field(name="Mentionable", value="✅ Yes (Can ping in text chat)" if v_role.mentionable else "⚠️ No", inline=True)
+        else:
+            embed.add_field(name="Voice Role", value="*Not configured (Use `!voicerole setup`)*", inline=True)
+        embed.add_field(name="Active In-VC Members", value=f"🎙️ **{in_vc_count}** members currently in voice", inline=False)
+        embed.add_field(
+            name="ℹ️ How It Works",
+            value="When a member connects to any voice channel, they automatically receive this role. When they disconnect, the role is instantly removed so you can ping all active in-VC members without pinging offline or AFK members!",
+            inline=False
+        )
+        embed.set_footer(text="Use !voicerole setup to auto-configure or !voicerole set @Role to customize.")
+        await ctx.send(embed=embed)
 
 
 @bot.tree.command(name="slowmode", description="Set chat slowmode to throttle raid spam")
@@ -15072,13 +15297,109 @@ async def on_guild_role_delete(role):
 
 
 
+# ── Dynamic Voice Activity Role Helpers ─────────────────────────────────────
+
+async def get_or_create_voice_role(guild: discord.Guild) -> Optional[discord.Role]:
+    """Finds or auto-creates the dynamic @Voice Channel role for in-voice member pinging."""
+    is_enabled = await db.get_config(guild.id, "voice_activity_role_enabled", True)
+    if not is_enabled:
+        return None
+
+    # 1. Check custom configured role in DB
+    role_id_raw = await db.get_config(guild.id, "voice_activity_role_id", None)
+    if role_id_raw and str(role_id_raw).lower() not in ("none", "null", "0", ""):
+        try:
+            role = guild.get_role(int(role_id_raw))
+            if role:
+                return role
+        except (ValueError, TypeError):
+            pass
+
+    # 2. Look for existing role named "Voice Channel", "In Voice", "In VC"
+    voice_role = discord.utils.find(lambda r: r.name.lower() in ("voice channel", "in voice", "in vc", "voice"), guild.roles)
+    if voice_role:
+        if not voice_role.mentionable:
+            try:
+                await voice_role.edit(mentionable=True, reason="Allow mentionable pinging for in-voice members")
+            except Exception:
+                pass
+        return voice_role
+
+    # 3. Auto-create @Voice Channel role
+    try:
+        voice_role = await guild.create_role(
+            name="Voice Channel",
+            color=discord.Color.from_rgb(46, 204, 113), # Emerald Green
+            mentionable=True,
+            reason="Auto-created dynamic Voice Channel role for in-VC member pinging"
+        )
+        await db.set_config(guild.id, "voice_activity_role_id", voice_role.id)
+        logger.info(f"Created dynamic @Voice Channel role in guild {guild.name} ({guild.id})")
+        return voice_role
+    except Exception as e:
+        logger.warning(f"Could not auto-create Voice Channel role in {guild.name}: {e}")
+        return None
+
+
+async def sync_guild_voice_roles(guild: discord.Guild) -> tuple[int, int]:
+    """Scans all voice channels in the guild, grants voice role to in-VC members, and removes it from non-VC members."""
+    voice_role = await get_or_create_voice_role(guild)
+    if not voice_role:
+        return 0, 0
+
+    added = 0
+    removed = 0
+    in_vc_member_ids = set()
+
+    for vc in guild.voice_channels:
+        for member in vc.members:
+            if not member.bot:
+                in_vc_member_ids.add(member.id)
+                if voice_role not in member.roles:
+                    try:
+                        await member.add_roles(voice_role, reason="Voice role sync: in voice channel")
+                        added += 1
+                        await asyncio.sleep(0.05)
+                    except Exception:
+                        pass
+
+    for member in voice_role.members:
+        if member.id not in in_vc_member_ids:
+            try:
+                await member.remove_roles(voice_role, reason="Voice role sync: not in voice channel")
+                removed += 1
+                await asyncio.sleep(0.05)
+            except Exception:
+                pass
+
+    return added, removed
+
+
 @bot.event
 async def on_voice_state_update(member, before, after):
-    """Event listener to handle Join-to-Create dynamic voice channels."""
+    """Event listener to handle dynamic in-voice roles and Join-to-Create voice channels."""
     guild = member.guild
+
+    # ── 1. Dynamic In-Voice Role Assignment / Removal ──────────────────────────
+    try:
+        if not member.bot:
+            voice_role = await get_or_create_voice_role(guild)
+            if voice_role:
+                # Member joined or moved between voice channels
+                if after.channel is not None:
+                    if voice_role not in member.roles:
+                        await member.add_roles(voice_role, reason=f"Joined voice channel: {after.channel.name}")
+                # Member disconnected from all voice channels
+                elif after.channel is None:
+                    if voice_role in member.roles:
+                        await member.remove_roles(voice_role, reason="Left voice channel")
+    except Exception as ve:
+        logger.debug(f"Error updating dynamic voice role for {member.id} in {guild.name}: {ve}")
+
+    # ── 2. Join-to-Create Dynamic Voice Channel System ─────────────────────────
     generator_id = await db.get_config(guild.id, "voice_generator_id")
     
-    # 1. User joins the generator channel
+    # User joins the generator channel
     if after.channel and after.channel.id == generator_id:
         category = after.channel.category
         temp_channel_name = f"🔊 {member.display_name}'s Room"
@@ -15103,7 +15424,7 @@ async def on_voice_state_update(member, before, after):
                 except Exception:
                     pass
             
-    # 2. User leaves a temporary voice channel
+    # User leaves a temporary voice channel
     if before.channel and before.channel.id in bot.temp_voice_channel_ids:
         if len(before.channel.members) == 0:
             try:
