@@ -8676,9 +8676,27 @@ async def ensure_muted_role(guild: discord.Guild) -> Optional[discord.Role]:
             logger.warning(f"Could not create @Muted role in {guild.name}: {e}")
             return None
 
-    # Apply channel overrides
-    try:
-        for channel in guild.channels:
+    # Apply category & channel overrides safely
+    for category in guild.categories:
+        try:
+            is_ticket_cat = any(term in category.name.lower() for term in ["ticket", "appeal", "support", "staff"])
+            if not is_ticket_cat:
+                overwrite = category.overwrites_for(muted_role)
+                if overwrite.send_messages is not False or overwrite.speak is not False:
+                    overwrite.send_messages = False
+                    overwrite.add_reactions = False
+                    overwrite.create_public_threads = False
+                    overwrite.create_private_threads = False
+                    overwrite.send_messages_in_threads = False
+                    overwrite.speak = False
+                    overwrite.stream = False
+                    await category.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted category restrictions")
+                    await asyncio.sleep(0.05)
+        except Exception as ce:
+            logger.debug(f"Could not apply @Muted override to category {category.name}: {ce}")
+
+    for channel in guild.channels:
+        try:
             is_ticket_channel = (
                 channel.id == TICKET_CHANNEL_ID or 
                 "ticket" in channel.name.lower() or 
@@ -8693,6 +8711,7 @@ async def ensure_muted_role(guild: discord.Guild) -> Optional[discord.Role]:
                         overwrite.read_message_history = True
                         overwrite.attach_files = True
                         await channel.set_permissions(muted_role, overwrite=overwrite, reason="Allow muted users in ticket support")
+                        await asyncio.sleep(0.05)
             else:
                 if isinstance(channel, discord.TextChannel):
                     overwrite = channel.overwrites_for(muted_role)
@@ -8703,14 +8722,16 @@ async def ensure_muted_role(guild: discord.Guild) -> Optional[discord.Role]:
                         overwrite.create_private_threads = False
                         overwrite.send_messages_in_threads = False
                         await channel.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted restrictions")
+                        await asyncio.sleep(0.05)
                 elif isinstance(channel, discord.VoiceChannel):
                     overwrite = channel.overwrites_for(muted_role)
                     if overwrite.speak is not False:
                         overwrite.speak = False
                         overwrite.stream = False
                         await channel.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted restrictions")
-    except Exception as e:
-        logger.debug(f"Error applying channel overrides for @Muted in {guild.name}: {e}")
+                        await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.debug(f"Error applying channel overrides for @Muted on channel {channel.name}: {e}")
 
     return muted_role
 
@@ -15295,36 +15316,56 @@ async def on_message(message):
     if not message.author.bot and message.guild:
         # Full Immunity for Server Owner, Admins, and Moderators
         if not is_protected(message.author):
-            # 0. Active Mute & @Muted Role Channel Isolation Enforcement
-            is_ticket_chan = (
-                message.channel.id == TICKET_CHANNEL_ID or
-                "ticket" in message.channel.name.lower() or
-                "appeal" in message.channel.name.lower()
-            )
-            if not is_ticket_chan:
-                muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", message.guild.roles)
-                has_muted_role = muted_role and muted_role in message.author.roles
-                active_mute = await db.get_active_mute(message.guild.id, message.author.id) if not has_muted_role else None
-                
-                if has_muted_role or active_mute:
+            # 0. Active Appeal & Mute Channel Isolation Enforcement
+            active_appeal = await db.get_active_appeal_by_user(message.guild.id, message.author.id)
+            if active_appeal:
+                appeal_chan_id = int(active_appeal.get("channel_id", 0))
+                if message.channel.id != appeal_chan_id:
                     try:
                         _bot_deleted_message_ids.add(message.id)
                         await message.delete()
                     except Exception:
                         pass
-                    
-                    unmute_at = int(float(active_mute.get("unmute_at", 0))) if (active_mute and isinstance(active_mute, dict)) else None
-                    mute_time_str = f" until <t:{unmute_at}:R>" if unmute_at and unmute_at > time.time() else ""
                     try:
                         warn_embed = discord.Embed(
-                            description=f"🔇 {message.author.mention}, you are currently **muted**{mute_time_str}. You may only send messages in your private appeal ticket channel!",
+                            description=f"🔇 {message.author.mention}, you currently have an open appeal pending staff review. You may **only send messages in your private appeal channel: <#{appeal_chan_id}>**!",
                             color=discord.Color.red()
                         )
                         alert = await message.channel.send(embed=warn_embed)
-                        asyncio.create_task(delete_after_delay(alert, 6))
+                        asyncio.create_task(delete_after_delay(alert, 5))
                     except Exception:
                         pass
                     return
+            else:
+                muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", message.guild.roles)
+                has_muted_role = bool(muted_role and muted_role in message.author.roles)
+                active_mute = await db.get_active_mute(message.guild.id, message.author.id)
+                
+                if has_muted_role or active_mute:
+                    is_ticket_chan = (
+                        message.channel.id == TICKET_CHANNEL_ID or
+                        "ticket" in message.channel.name.lower() or
+                        "appeal" in message.channel.name.lower()
+                    )
+                    if not is_ticket_chan:
+                        try:
+                            _bot_deleted_message_ids.add(message.id)
+                            await message.delete()
+                        except Exception:
+                            pass
+                        
+                        unmute_at = int(float(active_mute.get("unmute_at", 0))) if (active_mute and isinstance(active_mute, dict)) else None
+                        mute_time_str = f" until <t:{unmute_at}:R>" if unmute_at and unmute_at > time.time() else ""
+                        try:
+                            warn_embed = discord.Embed(
+                                description=f"🔇 {message.author.mention}, you are currently **muted**{mute_time_str}. You cannot send messages in public channels!",
+                                color=discord.Color.red()
+                            )
+                            alert = await message.channel.send(embed=warn_embed)
+                            asyncio.create_task(delete_after_delay(alert, 5))
+                        except Exception:
+                            pass
+                        return
 
             automod_enabled = await db.get_config(message.guild.id, "automod", True)
             if automod_enabled:
