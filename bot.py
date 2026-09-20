@@ -8765,8 +8765,9 @@ class StrikeAppealModal(discord.ui.Modal, title="Submit Strike / Warning Appeal"
         member = guild.get_member(user.id) or user
         ticket_chan = await create_appeal_ticket_channel(guild, member, self.reason_input.value, self.extra_input.value)
         if ticket_chan:
+            chan_link = f"https://discord.com/channels/{guild.id}/{ticket_chan.id}"
             await interaction.followup.send(
-                f"✅ **Your appeal ticket has been opened: {ticket_chan.mention}!**\n"
+                f"✅ **Your appeal ticket has been opened in {guild.name}: [{ticket_chan.name}]({chan_link}) ({ticket_chan.mention})!**\n"
                 f"You have been granted access to view and chat directly with staff in your appeal channel. Admins and moderators have been pinged to review your appeal.",
                 ephemeral=True
             )
@@ -9618,8 +9619,9 @@ async def appeal_slash_cmd(interaction: discord.Interaction, reason: Optional[st
         await interaction.response.defer(ephemeral=True)
         ticket_chan = await create_appeal_ticket_channel(interaction.guild, interaction.user, reason, "Submitted via /appeal slash command")
         if ticket_chan:
+            chan_link = f"https://discord.com/channels/{interaction.guild.id}/{ticket_chan.id}"
             await interaction.followup.send(
-                f"✅ **Your appeal ticket has been opened: {ticket_chan.mention}!**\n"
+                f"✅ **Your appeal ticket has been opened in {interaction.guild.name}: [{ticket_chan.name}]({chan_link}) ({ticket_chan.mention})!**\n"
                 f"You have been granted permission to talk directly with the moderation team in your appeal channel. Staff has been notified to review your appeal.",
                 ephemeral=True
             )
@@ -9627,6 +9629,75 @@ async def appeal_slash_cmd(interaction: discord.Interaction, reason: Optional[st
             await interaction.followup.send("❌ Failed to create appeal ticket. Please contact a moderator directly.", ephemeral=True)
     else:
         await interaction.response.send_modal(StrikeAppealModal())
+
+
+@bot.command(name="appeal", aliases=["submitappeal", "strikeappeal"])
+async def appeal_prefix_cmd(ctx: commands.Context, *, reason: Optional[str] = None):
+    """Submit an official appeal for your active warnings, strikes, or timeout: !appeal <reason>"""
+    user = ctx.author
+    guild = ctx.guild
+
+    # If launched in DM, locate target guild where user has active strikes or timeout
+    if not guild:
+        for g in ctx.bot.guilds:
+            if g.get_member(user.id):
+                active_mute = await db.get_active_mute(g.id, user.id)
+                warnings = await db.get_warnings(g.id, user.id)
+                if active_mute or len(warnings) >= 1:
+                    guild = g
+                    break
+        if not guild and ctx.bot.guilds:
+            for g in ctx.bot.guilds:
+                if g.get_member(user.id):
+                    guild = g
+                    break
+
+    if not guild:
+        return await ctx.send("❌ Could not find a server where you have active strikes, warnings, or timeouts to appeal.")
+
+    warns = await db.get_warnings(guild.id, user.id)
+    active_mute = await db.get_active_mute(guild.id, user.id)
+
+    if not warns and not active_mute:
+        return await ctx.send(f"ℹ️ **You have a clean record in {guild.name}!** You currently have 0 active warnings, strikes, or timeouts.")
+
+    active_ticket = await db.get_active_appeal_by_user(guild.id, user.id)
+    if active_ticket:
+        chan = guild.get_channel(active_ticket.get("channel_id"))
+        chan_link = f"https://discord.com/channels/{guild.id}/{active_ticket.get('channel_id')}"
+        chan_mention = f"[{chan.name}]({chan_link})" if chan else "your ticket channel"
+        return await ctx.send(f"ℹ️ You already have an open appeal ticket pending review by staff in **{guild.name}**: {chan_mention}.")
+
+    if not reason:
+        embed = discord.Embed(
+            title="📩 Submit a Strike / Timeout Appeal",
+            description=(
+                f"Please provide a reason with your appeal command for **{guild.name}**:\n\n"
+                "**Usage:** `!appeal <your explanation / reason here>`\n"
+                "**Example:** `!appeal I believe the strike was a misunderstanding because...`\n\n"
+                "Or click the button below to open the interactive appeal form!"
+            ),
+            color=discord.Color.blue()
+        )
+        view = DMAppealLauncherView()
+        return await ctx.send(embed=embed, view=view)
+
+    member = guild.get_member(user.id) or user
+    ticket_chan = await create_appeal_ticket_channel(guild, member, reason, f"Submitted via !appeal command by {user.name}")
+    if ticket_chan:
+        chan_link = f"https://discord.com/channels/{guild.id}/{ticket_chan.id}"
+        embed = discord.Embed(
+            title="✅ Strike Appeal Ticket Created",
+            description=(
+                f"Your official appeal ticket has been opened in **{guild.name}**: [{ticket_chan.name}]({chan_link}) ({ticket_chan.mention})!\n\n"
+                f"• **Status:** Staff and admins have been notified.\n"
+                f"• **Access:** You can now view and chat directly in your private appeal channel [{ticket_chan.name}]({chan_link})."
+            ),
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send(f"❌ Failed to create appeal ticket channel in **{guild.name}**. Please contact staff directly.")
 
 
 @bot.tree.command(name="appealrole", description="Configure which staff role gets pinged when a user opens an appeal ticket")
@@ -9763,21 +9834,24 @@ async def appealpanel_slash_cmd(interaction: discord.Interaction, channel: Optio
             "1️⃣ Click the **`📩 Submit Strike Appeal`** button below.\n"
             "2️⃣ Provide your reason and any relevant context in the popup form.\n"
             "3️⃣ A private ticket channel (`#appeal-username`) will be created where you can speak directly with the moderation team.\n\n"
-            "🔇 **Muted & Timed-Out Members:**\n"
-            "You **CAN** click the button and submit an appeal even while muted or timed out!"
+            "🔇 **Muted / Timed-Out Members:**\n"
+            "• *Discord's client disables button clicks inside server channels during an active timeout.*\n"
+            "• **To appeal while timed out:**\n"
+            "  👉 Check your **Direct Message (DM) from Sweety** to click the appeal button, OR\n"
+            "  👉 Send `!appeal <your reason>` directly in **DM to Sweety**!"
         ),
         color=discord.Color.blue(),
         timestamp=datetime.datetime.utcnow()
     )
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
-    embed.set_footer(text="Sweety Strike Appeal Shield • Click below to open a private appeal ticket")
+    embed.set_footer(text="Sweety Strike Appeal Shield • Click below or DM !appeal <reason> to appeal")
 
     view = DMAppealLauncherView()
     try:
         await target_channel.send(embed=embed, view=view)
         await interaction.response.send_message(
-            f"✅ **Appeal Panel posted successfully in {target_channel.mention}!**\nMembers (including muted & timed-out members) can now click the button to submit appeals.",
+            f"✅ **Appeal Panel posted successfully in {target_channel.mention}!**\nMembers can click the button, and timed-out members can appeal via DM or `!appeal`.",
             ephemeral=True
         )
     except Exception as e:
@@ -9802,15 +9876,18 @@ async def appealpanel_prefix_cmd(ctx: commands.Context, channel: Optional[discor
             "1️⃣ Click the **`📩 Submit Strike Appeal`** button below.\n"
             "2️⃣ Provide your reason and any relevant context in the popup form.\n"
             "3️⃣ A private ticket channel (`#appeal-username`) will be created where you can speak directly with the moderation team.\n\n"
-            "🔇 **Muted & Timed-Out Members:**\n"
-            "You **CAN** click the button and submit an appeal even while muted or timed out!"
+            "🔇 **Muted / Timed-Out Members:**\n"
+            "• *Discord's client disables button clicks inside server channels during an active timeout.*\n"
+            "• **To appeal while timed out:**\n"
+            "  👉 Check your **Direct Message (DM) from Sweety** to click the appeal button, OR\n"
+            "  👉 Send `!appeal <your reason>` directly in **DM to Sweety**!"
         ),
         color=discord.Color.blue(),
         timestamp=datetime.datetime.utcnow()
     )
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
-    embed.set_footer(text="Sweety Strike Appeal Shield • Click below to open a private appeal ticket")
+    embed.set_footer(text="Sweety Strike Appeal Shield • Click below or DM !appeal <reason> to appeal")
 
     view = DMAppealLauncherView()
     try:
@@ -10607,7 +10684,7 @@ def make_help_embed() -> discord.Embed:
     )
     embed.add_field(
         name="🛡️ **Strikes, Warnings & Appeals**",
-        value="• `/warn <user> [reason]` — Formally warn a member (Auto-escalates to timeout)\n• `/warnings [user]` — View active infractions & warning logs with appeal button\n• `/clearwarns <user> [amt]` — Clear warnings (all or specified amount)\n• `/delwarn <id>` — Delete a single warning by ID\n• `/warnleaderboard` — Server infractions leaderboard\n• `/appealpanel [chan]` — Post interactive appeal button panel (accessible to muted members)\n• `/appealrole [role]` — Configure pinged staff role for ticket alerts\n• `/whois [user]` — Deep audit of member profile, roles & history",
+        value="• `/appeal [reason]` / `!appeal <reason>` — Submit strike/timeout appeal ticket (DM & server)\n• `/warn <user> [reason]` — Formally warn a member (Auto-escalates to timeout)\n• `/warnings [user]` — View active infractions & warning logs with appeal button\n• `/clearwarns <user> [amt]` — Clear warnings (all or specified amount)\n• `/delwarn <id>` — Delete a single warning by ID\n• `/warnleaderboard` — Server infractions leaderboard\n• `/appealpanel [chan]` — Post interactive appeal button panel (accessible to muted members)\n• `/appealrole [role]` — Configure pinged staff role for ticket alerts\n• `/whois [user]` — Deep audit of member profile, roles & history",
         inline=False
     )
     embed.add_field(
@@ -15070,17 +15147,23 @@ async def on_message(message):
                             afk_alert_msg = await message.channel.send(embed=afk_embed)
                             asyncio.create_task(delete_after_delay(afk_alert_msg, 12))
 
-    # ── Solution 3: Direct Message !appeal Command Handling ────────────────────
+    # ── Solution 3: Direct Message !appeal Command & Appeal Assistant ──────────
     if message.guild is None and not message.author.bot:
         content = message.content.strip()
         if content.lower().startswith("!appeal"):
             appeal_reason = content[7:].strip()
             if not appeal_reason:
-                await message.reply(
-                    "❌ **Please provide a reason for your appeal.**\n"
-                    "**Usage:** `!appeal <your reason here>`\n"
-                    "**Example:** `!appeal I apologize for my behavior and would like to appeal my strike.`"
+                embed = discord.Embed(
+                    title="📩 Submit a Strike / Timeout Appeal",
+                    description=(
+                        "**Usage:** `!appeal <your reason here>`\n"
+                        "**Example:** `!appeal I apologize for the misunderstanding and would like to appeal my strike.`\n\n"
+                        "Or click the button below to open the interactive appeal form modal!"
+                    ),
+                    color=discord.Color.blue()
                 )
+                view = DMAppealLauncherView()
+                await message.reply(embed=embed, view=view)
                 return
 
             # Find target guild where user is in and has mutes or warnings
@@ -15099,12 +15182,14 @@ async def on_message(message):
                         break
 
             if not target_guild:
-                await message.reply("❌ Could not find a server where you have active strikes or warnings to submit your appeal.")
+                await message.reply("❌ Could not find a server where you have active strikes, warnings, or timeouts to submit your appeal.")
                 return
 
             active_appeal = await db.get_active_appeal_by_user(target_guild.id, message.author.id)
             if active_appeal:
-                await message.reply(f"ℹ️ You already have an open appeal ticket pending review by staff in **{target_guild.name}**.")
+                chan_id = active_appeal.get("channel_id")
+                chan_link = f"https://discord.com/channels/{target_guild.id}/{chan_id}"
+                await message.reply(f"ℹ️ You already have an open appeal ticket pending review by staff in **{target_guild.name}**: [Jump to Ticket]({chan_link}).")
                 return
 
             target_member = target_guild.get_member(message.author.id) or message.author
@@ -15115,12 +15200,35 @@ async def on_message(message):
                 "Submitted via DM !appeal command"
             )
             if ticket_chan:
-                await message.reply(
-                    f"✅ **Your appeal ticket has been opened in {target_guild.name}: {ticket_chan.mention}!**\n"
-                    f"You have been granted permission to talk directly with the moderation team in your appeal channel. Admins and moderators have been pinged to review your appeal."
+                chan_link = f"https://discord.com/channels/{target_guild.id}/{ticket_chan.id}"
+                embed = discord.Embed(
+                    title="✅ Strike Appeal Ticket Created",
+                    description=(
+                        f"Your official appeal ticket has been opened in **{target_guild.name}**: [{ticket_chan.name}]({chan_link}) ({ticket_chan.mention})!\n\n"
+                        f"• **Status:** Staff and admins have been notified.\n"
+                        f"• **Channel Access:** You have been granted permission to talk directly in your private appeal channel [{ticket_chan.name}]({chan_link})."
+                    ),
+                    color=discord.Color.green()
                 )
+                await message.reply(embed=embed)
             else:
                 await message.reply(f"❌ Failed to submit appeal ticket in **{target_guild.name}**. Please contact staff directly.")
+            return
+
+        elif not content.startswith(('!', '/', '$', '.')) and any(k in content.lower() for k in ["appeal", "unmute me", "strike appeal", "warning appeal"]):
+            embed = discord.Embed(
+                title="📩 Strike & Timeout Appeal Assistant",
+                description=(
+                    "👋 **Need to appeal a strike, warning, or 7-day timeout?**\n\n"
+                    "You can submit an official appeal right here from this DM in two easy ways:\n\n"
+                    "1️⃣ **Interactive Button:** Click the **`📩 Submit Strike Appeal`** button below to open the modal form.\n"
+                    "2️⃣ **DM Command:** Reply with `!appeal <your reason here>`\n\n"
+                    "*Once submitted, Sweety will open your private ticket channel with staff and grant you chat access so you can discuss your appeal!*"
+                ),
+                color=discord.Color.blue()
+            )
+            view = DMAppealLauncherView()
+            await message.reply(embed=embed, view=view)
             return
 
     # Owner-only force sync check (copies global tree to guild for instant updates!)
@@ -15321,76 +15429,87 @@ async def on_message(message):
             except Exception as staff_err:
                 logger.error(f"Error replying to staff query: {staff_err}")
 
-    # ── AI Auto-Reply to Questions & User Mentions ───────────────────────────
-    if not message.author.bot and message.guild:
-        # Check if bot is directly mentioned or replied to
-        is_direct = (bot.user and bot.user in message.mentions) or (
-            message.reference and 
-            message.reference.resolved and 
-            isinstance(message.reference.resolved, discord.Message) and 
-            bot.user and 
-            message.reference.resolved.author == bot.user
-        )
+    # ── AI Auto-Reply to Questions, User Mentions & Direct Messages (DMs) ────
+    if not message.author.bot:
+        is_dm = message.guild is None
+        # In DMs, do not process commands as raw AI queries (let bot.process_commands handle them)
+        if is_dm and message.content.strip().startswith(('!', '/', '$', '.')):
+            pass
+        else:
+            # Check if bot is directly mentioned or replied to in a guild
+            is_direct = (bot.user and bot.user in message.mentions) or (
+                message.reference and 
+                message.reference.resolved and 
+                isinstance(message.reference.resolved, discord.Message) and 
+                bot.user and 
+                message.reference.resolved.author == bot.user
+            )
 
-        ai_reply_enabled = await db.get_config(message.guild.id, "ai_auto_reply", False)
-        
-        # Only process AI question if explicitly tagged/replied TO OR if server enabled ai_auto_reply
-        if is_direct or ai_reply_enabled:
-            # Check configured channel lock (if any)
-            target_channel_id = await db.get_config(message.guild.id, "ai_reply_channel_id", None)
+            ai_reply_enabled = False
+            if message.guild:
+                ai_reply_enabled = await db.get_config(message.guild.id, "ai_auto_reply", False)
             
-            # Check question mark requirement (default: False)
-            require_qmark = await db.get_config(message.guild.id, "ai_reply_require_qmark", False)
+            # Process AI if in DM, explicitly tagged/replied TO, OR server enabled ai_auto_reply
+            if is_dm or is_direct or ai_reply_enabled:
+                # Check configured channel lock (if any, in guild)
+                target_channel_id = None
+                require_qmark = False
+                if message.guild:
+                    target_channel_id = await db.get_config(message.guild.id, "ai_reply_channel_id", None)
+                    require_qmark = await db.get_config(message.guild.id, "ai_reply_require_qmark", False)
 
-            # If target_channel_id is set, only auto-reply in that channel (direct mentions work everywhere)
-            if target_channel_id and message.channel.id != int(target_channel_id) and not is_direct:
-                pass
-            else:
-                is_question, query = is_question_message(message, require_qmark=require_qmark)
-                if is_question and (query or message.attachments or message.embeds):
-                    allowed, remaining = _check_user_cooldown(message.author.id)
-                    if not allowed:
-                        logger.info(f"AI question rate limited for user {message.author.id} (wait {remaining}s)")
-                    elif not _check_server_limit(message.guild.id):
-                        logger.info(f"AI question rate limited: server hourly limit reached for guild {message.guild.id}")
-                    else:
-                        is_clean, clean_query = _sanitize_ai_input(query)
-                        if is_clean:
-                            try:
-                                async with message.channel.typing():
-                                    # 1. Extract visual media (image / GIF)
-                                    media_res = await extract_visual_media(message)
-                                    media_bytes, mime_type = (media_res[0], media_res[1]) if media_res else (None, "image/png")
+                if target_channel_id and message.channel.id != int(target_channel_id) and not is_direct:
+                    pass
+                else:
+                    is_question = True
+                    query = message.content.strip()
+                    if message.guild and not is_direct:
+                        is_question, query = is_question_message(message, require_qmark=require_qmark)
+                    
+                    if (is_question or is_dm) and (query or message.attachments or message.embeds):
+                        allowed, remaining = _check_user_cooldown(message.author.id)
+                        if not allowed:
+                            logger.info(f"AI question rate limited for user {message.author.id} (wait {remaining}s)")
+                        elif message.guild and not _check_server_limit(message.guild.id):
+                            logger.info(f"AI question rate limited: server hourly limit reached for guild {message.guild.id}")
+                        else:
+                            is_clean, clean_query = _sanitize_ai_input(query)
+                            if is_clean:
+                                try:
+                                    async with message.channel.typing():
+                                        # 1. Extract visual media (image / GIF)
+                                        media_res = await extract_visual_media(message)
+                                        media_bytes, mime_type = (media_res[0], media_res[1]) if media_res else (None, "image/png")
 
-                                    # 2. Extract replied-to message context
-                                    replied_context = ""
-                                    if message.reference and message.reference.resolved and isinstance(message.reference.resolved, discord.Message):
-                                        ref_msg = message.reference.resolved
-                                        ref_author = ref_msg.author.display_name if ref_msg.author else "User"
-                                        ref_body = ref_msg.content[:400] if ref_msg.content else "[Image / Attachment / Embed]"
-                                        replied_context = f"User {ref_author} previously said: \"{ref_body}\""
+                                        # 2. Extract replied-to message context
+                                        replied_context = ""
+                                        if message.reference and message.reference.resolved and isinstance(message.reference.resolved, discord.Message):
+                                            ref_msg = message.reference.resolved
+                                            ref_author = ref_msg.author.display_name if ref_msg.author else "User"
+                                            ref_body = ref_msg.content[:400] if ref_msg.content else "[Image / Attachment / Embed]"
+                                            replied_context = f"User {ref_author} previously said: \"{ref_body}\""
 
-                                    answer = await answer_question_with_ai(
-                                        query=clean_query,
-                                        author_name=message.author.display_name,
-                                        server_name=message.guild.name if message.guild else "",
-                                        user_id=message.author.id,
-                                        guild_id=message.guild.id if message.guild else None,
-                                        media_data=media_bytes,
-                                        mime_type=mime_type,
-                                        replied_context=replied_context
-                                    )
-                                    if clean_query and len(clean_query) > 5:
-                                        asyncio.create_task(auto_extract_user_memory(message.author.id, clean_query, message.guild.id if message.guild else None))
-                                    if answer:
-                                        if len(answer) <= 1900:
-                                            await message.reply(answer, mention_author=True)
-                                        else:
-                                            for i in range(0, len(answer), 1900):
-                                                chunk = answer[i:i+1900]
-                                                await message.channel.send(chunk)
-                            except Exception as ai_err:
-                                logger.error(f"Error answering question with AI in chat: {ai_err}", exc_info=True)
+                                        answer = await answer_question_with_ai(
+                                            query=clean_query,
+                                            author_name=message.author.display_name,
+                                            server_name=message.guild.name if message.guild else "Direct Message",
+                                            user_id=message.author.id,
+                                            guild_id=message.guild.id if message.guild else None,
+                                            media_data=media_bytes,
+                                            mime_type=mime_type,
+                                            replied_context=replied_context
+                                        )
+                                        if clean_query and len(clean_query) > 5:
+                                            asyncio.create_task(auto_extract_user_memory(message.author.id, clean_query, message.guild.id if message.guild else None))
+                                        if answer:
+                                            if len(answer) <= 1900:
+                                                await message.reply(answer, mention_author=True)
+                                            else:
+                                                for i in range(0, len(answer), 1900):
+                                                    chunk = answer[i:i+1900]
+                                                    await message.channel.send(chunk)
+                                except Exception as ai_err:
+                                    logger.error(f"Error answering question with AI in chat: {ai_err}", exc_info=True)
 
     await bot.process_commands(message)
 
