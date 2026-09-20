@@ -2114,55 +2114,82 @@ def format_time_elapsed(seconds: float) -> str:
         return f"{days} day{'s' if days != 1 else ''}, {remaining_hours} hr{'s' if remaining_hours != 1 else ''}"
     return f"{days} day{'s' if days != 1 else ''}"
 
-@tasks.loop(seconds=5)
+_cached_reminders: List[Any] = []
+_reminders_last_db_fetch: float = 0.0
+
+@tasks.loop(seconds=10)
 async def reminder_delivery_loop():
-    """Background task running every 5 seconds to deliver due reminders."""
+    """Background task checking in-memory reminder queue with low database load."""
+    global _cached_reminders, _reminders_last_db_fetch
     now = time.time()
-    try:
-        due = await db.get_due_reminders(now)
-        for r in due:
-            rem_id = r["id"] if isinstance(r, dict) and "id" in r else r[0]
-            user_id = int(r["user_id"] if isinstance(r, dict) and "user_id" in r else r[1])
-            guild_id = r["guild_id"] if isinstance(r, dict) and "guild_id" in r else r[2]
-            channel_id = int(r["channel_id"] if isinstance(r, dict) and "channel_id" in r else r[3])
-            note = r["reminder_text"] if isinstance(r, dict) and "reminder_text" in r else r[4]
-            created_at = float(r["created_at"] if isinstance(r, dict) and "created_at" in r else r[6])
-            method = r.get("delivery_method", "channel") if isinstance(r, dict) else (r[7] if len(r) > 7 else "channel")
+    
+    # Sync upcoming reminders from DB every 10 minutes or on startup
+    if (now - _reminders_last_db_fetch) > 600 or not _cached_reminders:
+        try:
+            due_check = await db.get_due_reminders(now + 3600)
+            _cached_reminders = list(due_check) if due_check else []
+            _reminders_last_db_fetch = now
+        except Exception as sync_err:
+            logger.debug(f"Reminders cache sync error: {sync_err}")
 
-            delivered = False
-            created_ts = int(created_at)
+    if not _cached_reminders:
+        return
 
-            embed = discord.Embed(
-                title="⏰ Reminder Alert!",
-                description=f"Hey <@{user_id}>! Here is the reminder you scheduled <t:{created_ts}:R>:",
-                color=discord.Color.from_rgb(255, 170, 0)
-            )
-            embed.add_field(name="📝 Note", value=f">>> {note[:1000]}", inline=False)
-            embed.set_footer(text="Sweety Productivity Suite • Set more reminders with /remindme")
-            embed.timestamp = discord.utils.utcnow()
+    due = []
+    remaining = []
+    for r in _cached_reminders:
+        r_time = float(r.get("remind_at", 0) if isinstance(r, dict) else r[5])
+        if r_time <= now:
+            due.append(r)
+        else:
+            remaining.append(r)
 
-            if method == "dm":
+    _cached_reminders = remaining
+
+    for r in due:
+        rem_id = r["id"] if isinstance(r, dict) and "id" in r else r[0]
+        user_id = int(r["user_id"] if isinstance(r, dict) and "user_id" in r else r[1])
+        guild_id = r["guild_id"] if isinstance(r, dict) and "guild_id" in r else r[2]
+        channel_id = int(r["channel_id"] if isinstance(r, dict) and "channel_id" in r else r[3])
+        note = r["reminder_text"] if isinstance(r, dict) and "reminder_text" in r else r[4]
+        created_at = float(r["created_at"] if isinstance(r, dict) and "created_at" in r else r[6])
+        method = r.get("delivery_method", "channel") if isinstance(r, dict) else (r[7] if len(r) > 7 else "channel")
+
+        delivered = False
+        created_ts = int(created_at)
+
+        embed = discord.Embed(
+            title="⏰ Reminder Alert!",
+            description=f"Hey <@{user_id}>! Here is the reminder you scheduled <t:{created_ts}:R>:",
+            color=discord.Color.from_rgb(255, 170, 0)
+        )
+        embed.add_field(name="📝 Note", value=f">>> {note[:1000]}", inline=False)
+        embed.set_footer(text="Sweety Productivity Suite • Set more reminders with /remindme")
+        embed.timestamp = discord.utils.utcnow()
+
+        if method == "dm":
+            try:
+                user_obj = bot.get_user(user_id) or await bot.fetch_user(user_id)
+                if user_obj:
+                    await user_obj.send(embed=embed)
+                    delivered = True
+            except Exception as dm_err:
+                logger.warning(f"Could not DM reminder to user {user_id}: {dm_err}")
+
+        if not delivered:
+            target_chan = bot.get_channel(channel_id)
+            if target_chan and hasattr(target_chan, "send"):
                 try:
-                    user_obj = bot.get_user(user_id) or await bot.fetch_user(user_id)
-                    if user_obj:
-                        await user_obj.send(embed=embed)
-                        delivered = True
-                except Exception as dm_err:
-                    logger.warning(f"Could not DM reminder to user {user_id}: {dm_err}")
+                    alert_msg = f"🔔 <@{user_id}>, your reminder is up!" if method == "channel" else f"🔔 <@{user_id}>, your reminder is up! (Sent here because DM delivery failed)"
+                    await target_chan.send(content=alert_msg, embed=embed)
+                    delivered = True
+                except Exception as ch_err:
+                    logger.warning(f"Could not send reminder in channel {channel_id}: {ch_err}")
 
-            if not delivered:
-                target_chan = bot.get_channel(channel_id)
-                if target_chan and hasattr(target_chan, "send"):
-                    try:
-                        alert_msg = f"🔔 <@{user_id}>, your reminder is up!" if method == "channel" else f"🔔 <@{user_id}>, your reminder is up! (Sent here because DM delivery failed)"
-                        await target_chan.send(content=alert_msg, embed=embed)
-                        delivered = True
-                    except Exception as ch_err:
-                        logger.warning(f"Could not send reminder in channel {channel_id}: {ch_err}")
-
+        try:
             await db.delete_reminder(rem_id)
-    except Exception as loop_err:
-        logger.error(f"Error in reminder delivery loop: {loop_err}", exc_info=True)
+        except Exception:
+            pass
 
 # ── $15 All-Time NBA Dream Team Builder & Battle Engine ──────────────────────
 
@@ -9098,7 +9125,7 @@ class GeminiBot(commands.Bot):
         self.add_view(DMAppealLauncherView())
         self.add_view(AppealReviewView())
 
-    @tasks.loop(seconds=60)
+    @tasks.loop(minutes=5)
     async def check_expired_mutes(self):
         """Automatically removes @Muted role and native timeout after 7 days."""
         try:

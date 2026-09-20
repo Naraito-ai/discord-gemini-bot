@@ -30,7 +30,13 @@ class DatabaseManager:
             try:
                 import asyncpg
                 logger.info("Initializing PostgreSQL database connection...")
-                self.pg_pool = await asyncpg.create_pool(self.db_url, min_size=1, max_size=10)
+                self.pg_pool = await asyncpg.create_pool(
+                    self.db_url,
+                    min_size=0,
+                    max_size=5,
+                    max_inactive_connection_lifetime=60.0,
+                    command_timeout=30.0
+                )
                 logger.info("PostgreSQL connection pool created successfully.")
             except ImportError:
                 logger.error("asyncpg is not installed, falling back to SQLite!")
