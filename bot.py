@@ -9170,11 +9170,19 @@ async def create_appeal_ticket_channel(
     # Lift native Discord timeout ONLY for users who are currently timed out so Discord platform allows them to talk in appeal ticket
     if isinstance(target_member, discord.Member):
         try:
-            if target_member.is_timed_out():
+            warnings = await db.get_warnings(guild.id, target_member.id)
+            strike_count = len(warnings) if warnings else 0
+            if target_member.is_timed_out() or strike_count >= 3:
                 muted_role = await ensure_muted_role(guild)
                 if muted_role and muted_role not in target_member.roles:
                     await target_member.add_roles(muted_role, reason="Enforcing @Muted role during strike appeal discussion")
-                await target_member.timeout(None, reason="Lifted native timeout to allow communication in appeal ticket channel")
+                if target_member.is_timed_out():
+                    await target_member.timeout(None, reason="Lifted native timeout to allow communication in appeal ticket channel")
+            elif strike_count < 3:
+                # Ensure members with < 3 strikes NEVER have @Muted role
+                muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", guild.roles)
+                if muted_role and muted_role in target_member.roles:
+                    await target_member.remove_roles(muted_role, reason="Removed @Muted role on appeal ticket creation (strike count < 3)")
         except Exception as te:
             logger.warning(f"Could not adjust native timeout for {target_member.id}: {te}")
 
@@ -15317,13 +15325,24 @@ async def on_message(message):
         # Full Immunity for Server Owner, Admins, and Moderators
         if not is_protected(message.author):
             # 0. Active Mute & Timeout Channel Isolation Enforcement (ONLY applies if user is actually MUTED / TIMED OUT)
-            muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", message.guild.roles)
-            has_muted_role = bool(muted_role and muted_role in message.author.roles)
+            warnings = await db.get_warnings(message.guild.id, message.author.id)
+            strike_count = len(warnings) if warnings else 0
             active_mute = await db.get_active_mute(message.guild.id, message.author.id)
             unmute_at = float(active_mute.get("unmute_at", 0)) if (active_mute and isinstance(active_mute, dict)) else 0.0
             
-            # User is considered muted ONLY if they have @Muted role or an active unexpired mute record in database
-            is_user_muted = has_muted_role or (active_mute and unmute_at > time.time())
+            muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", message.guild.roles)
+            has_muted_role = bool(muted_role and muted_role in message.author.roles)
+
+            # Self-Healing: If member has fewer than 3 strikes and no active mute, ensure @Muted role is stripped and they are 100% unrestricted
+            if strike_count < 3 and not active_mute:
+                if has_muted_role and muted_role:
+                    try:
+                        await message.author.remove_roles(muted_role, reason="Self-healing: Removed @Muted role (strike count < 3)")
+                    except Exception:
+                        pass
+                is_user_muted = False
+            else:
+                is_user_muted = (strike_count >= 3 or (active_mute and unmute_at > time.time())) and (has_muted_role or (active_mute and unmute_at > time.time()))
 
             if is_user_muted:
                 active_appeal = await db.get_active_appeal_by_user(message.guild.id, message.author.id)
