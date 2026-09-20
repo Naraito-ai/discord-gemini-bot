@@ -8629,16 +8629,26 @@ class AppealReviewView(discord.ui.View):
         guild = interaction.guild
         target_uid = int(ticket["user_id"])
         
+        # Check if user had an active 7-day mute in DB
+        active_mute = await db.get_active_mute(guild.id, target_uid) if guild else None
+
         # Send DM to user
         try:
             user = interaction.client.get_user(target_uid) or await interaction.client.fetch_user(target_uid)
             if user:
-                deny_embed = discord.Embed(
-                    title="❌ Strike Appeal Denied",
-                    description=(
+                if active_mute:
+                    dm_desc = (
                         f"Your appeal in **{guild.name if guild else 'the server'}** was reviewed and **denied** by the moderation team.\n\n"
                         "Your 7-day timeout remains in effect until the expiration date."
-                    ),
+                    )
+                else:
+                    dm_desc = (
+                        f"Your strike appeal in **{guild.name if guild else 'the server'}** was reviewed and **denied** by the moderation team.\n\n"
+                        "Your warning strike remains on record."
+                    )
+                deny_embed = discord.Embed(
+                    title="❌ Strike Appeal Denied",
+                    description=dm_desc,
                     color=discord.Color.red(),
                     timestamp=datetime.datetime.utcnow()
                 )
@@ -8647,17 +8657,13 @@ class AppealReviewView(discord.ui.View):
         except Exception as dme:
             logger.debug(f"Could not DM user {target_uid} on appeal denial: {dme}")
 
-        # Re-apply native timeout if member is in guild
-        if guild:
+        # Re-apply native timeout ONLY IF user was already muted before opening the appeal
+        if guild and active_mute:
             member = guild.get_member(target_uid)
             if member:
                 try:
-                    active_mute = await db.get_active_mute(guild.id, target_uid)
-                    if active_mute:
-                        remaining_secs = max(60, int(active_mute.get("expires_at", time.time() + 7 * 86400) - time.time()))
-                        await member.timeout(datetime.timedelta(seconds=remaining_secs), reason="Strike appeal denied by staff")
-                    else:
-                        await member.timeout(datetime.timedelta(days=7), reason="Strike appeal denied by staff")
+                    remaining_secs = max(60, int(active_mute.get("expires_at", time.time() + 7 * 86400) - time.time()))
+                    await member.timeout(datetime.timedelta(seconds=remaining_secs), reason="Strike appeal denied by staff")
                 except Exception as te:
                     logger.warning(f"Could not re-apply timeout for {target_uid} on appeal denial: {te}")
 
@@ -8669,12 +8675,13 @@ class AppealReviewView(discord.ui.View):
             if item.custom_id in ("btn_appeal_accept", "btn_appeal_deny"):
                 item.disabled = True
 
+        status_action = "Appeal denied, 7-day timeout remains active, DM notification sent." if active_mute else "Appeal denied, warning strike remains on record, DM notification sent."
         status_embed = discord.Embed(
             title="❌ Appeal Denied",
             description=(
                 f"• **Reviewed by:** {interaction.user.mention} (`{interaction.user.id}`)\n"
                 f"• **Target User:** <@{target_uid}> (`{target_uid}`)\n"
-                f"• **Action Taken:** Appeal denied, 7-day timeout remains active, DM notification sent.\n"
+                f"• **Action Taken:** {status_action}\n"
                 f"• **Timestamp:** <t:{int(time.time())}:F>"
             ),
             color=discord.Color.red()
@@ -8764,8 +8771,28 @@ async def create_appeal_ticket_channel(
             if role.mention not in staff_mentions:
                 staff_mentions.append(role.mention)
 
-    # Lift native Discord timeout so Discord platform allows user to send messages in this ticket channel,
-    # while @Muted role enforces restriction across all regular channels.
+    # Check if a custom appeal ping role has been configured via /appealrole
+    custom_role_id_raw = await db.get_config(guild.id, "appeal_ping_role_id", None)
+    custom_ping_role = None
+    if custom_role_id_raw and str(custom_role_id_raw).lower() not in ("none", "null", "0", ""):
+        try:
+            custom_ping_role = guild.get_role(int(custom_role_id_raw))
+        except (ValueError, TypeError):
+            custom_ping_role = None
+
+    if custom_ping_role:
+        overwrites[custom_ping_role] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True,
+            embed_links=True,
+            attach_files=True
+        )
+        staff_ping_str = custom_ping_role.mention
+    else:
+        staff_ping_str = " ".join(staff_mentions[:4]) if staff_mentions else "🛡️ **Moderators & Admins**"
+
+    # Lift native Discord timeout ONLY for users who are currently timed out so Discord platform allows them to talk in appeal ticket
     if isinstance(target_member, discord.Member):
         try:
             if target_member.is_timed_out():
@@ -8807,7 +8834,7 @@ async def create_appeal_ticket_channel(
 
     embed = discord.Embed(
         title=f"📩 Strike Appeal Ticket — {user.name}",
-        description="A member has submitted an official strike / 7-day timeout appeal for staff review.",
+        description="A member has submitted an official strike / warning appeal for staff review.",
         color=discord.Color.gold(),
         timestamp=datetime.datetime.utcnow()
     )
@@ -8819,7 +8846,6 @@ async def create_appeal_ticket_channel(
     embed.set_footer(text="Sweety Strike Appeal System • Staff can use buttons below to resolve")
 
     view = AppealReviewView()
-    staff_ping_str = " ".join(staff_mentions[:4]) if staff_mentions else "🛡️ **Moderators & Admins**"
     await channel.send(
         content=f"🔔 **Staff Alert:** {staff_ping_str}\n👋 {user.mention}, your private appeal ticket has been opened! You have permission to explain your appeal and discuss directly with the moderation team here.",
         embed=embed,
@@ -9248,6 +9274,120 @@ async def appeal_slash_cmd(interaction: discord.Interaction, reason: Optional[st
             await interaction.followup.send("❌ Failed to create appeal ticket. Please contact a moderator directly.", ephemeral=True)
     else:
         await interaction.response.send_modal(StrikeAppealModal())
+
+
+@bot.tree.command(name="appealrole", description="Configure which staff role gets pinged when a user opens an appeal ticket")
+@app_commands.describe(
+    action="Choose action: set a role, view current role, or reset to default",
+    role="The staff/moderator role to ping on new appeal tickets (required for 'set')"
+)
+@app_commands.choices(
+    action=[
+        app_commands.Choice(name="⚙️ Set Role (Ping a specific role)", value="set"),
+        app_commands.Choice(name="🔄 Remove / Reset (Ping all staff & admin roles)", value="remove"),
+        app_commands.Choice(name="📋 View Current Setting", value="view")
+    ]
+)
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+async def appealrole_slash_cmd(interaction: discord.Interaction, action: str = "view", role: Optional[discord.Role] = None):
+    if not is_protected(interaction.user) and not interaction.permissions.administrator:
+        return await interaction.response.send_message("❌ Only Server Administrators can configure appeal ping roles.", ephemeral=True)
+
+    guild = interaction.guild
+    if action == "set":
+        if not role:
+            return await interaction.response.send_message("❌ Please specify a role: `/appealrole set role:@Role`", ephemeral=True)
+        await db.set_config(guild.id, "appeal_ping_role_id", role.id)
+        embed = discord.Embed(
+            title="📩 Appeal Ping Role Updated",
+            description=f"When a member submits a strike/warning appeal, {role.mention} will now be pinged and given access to the appeal ticket channel.",
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Configured by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+    elif action == "remove":
+        await db.set_config(guild.id, "appeal_ping_role_id", "None")
+        embed = discord.Embed(
+            title="🔄 Appeal Ping Role Reset",
+            description="Reset to default: All Server Administrators and Moderator roles will be pinged on new appeal tickets.",
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Configured by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+    else:  # view
+        role_id_raw = await db.get_config(guild.id, "appeal_ping_role_id", None)
+        role_obj = None
+        if role_id_raw and str(role_id_raw).lower() not in ("none", "null", "0", ""):
+            try:
+                role_obj = guild.get_role(int(role_id_raw))
+            except (ValueError, TypeError):
+                role_obj = None
+        
+        embed = discord.Embed(
+            title=f"📩 Appeal Ticket Notification Settings — {guild.name}",
+            color=discord.Color.gold()
+        )
+        if role_obj:
+            embed.add_field(name="🎭 Configured Ping Role", value=f"✅ {role_obj.mention} (`{role_obj.id}`)", inline=False)
+            embed.add_field(name="ℹ️ Behavior", value="Only members with this role will be pinged when an appeal ticket opens.", inline=False)
+        else:
+            embed.add_field(name="🎭 Configured Ping Role", value="*Default: All staff and admin roles*", inline=False)
+            embed.add_field(name="ℹ️ Behavior", value="The bot automatically pings all moderator and administrator roles.", inline=False)
+        embed.set_footer(text="Use /appealrole set @Role to customize, or /appealrole remove to reset.")
+        await interaction.response.send_message(embed=embed)
+
+
+@bot.command(name="appealrole", aliases=["setappealrole", "appealping", "setappealping"])
+@commands.has_permissions(administrator=True)
+@commands.guild_only()
+async def appealrole_prefix_cmd(ctx: commands.Context, action: Optional[str] = "view", role: Optional[discord.Role] = None):
+    """Configure which role is pinged for appeal tickets: !appealrole set @Role | !appealrole remove | !appealrole view"""
+    guild = ctx.guild
+    act = (action or "view").lower()
+    if act in ("set", "add", "enable"):
+        target_role = role
+        if not target_role and ctx.message.role_mentions:
+            target_role = ctx.message.role_mentions[0]
+        if not target_role:
+            return await ctx.send("❌ Please specify or mention a role: `!appealrole set @Role`")
+        await db.set_config(guild.id, "appeal_ping_role_id", target_role.id)
+        embed = discord.Embed(
+            title="📩 Appeal Ping Role Updated",
+            description=f"When a member submits a strike/warning appeal, {target_role.mention} will now be pinged and given access to the appeal ticket channel.",
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Configured by {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+    elif act in ("remove", "reset", "clear", "delete", "disable"):
+        await db.set_config(guild.id, "appeal_ping_role_id", "None")
+        embed = discord.Embed(
+            title="🔄 Appeal Ping Role Reset",
+            description="Reset to default: All Server Administrators and Moderator roles will be pinged on new appeal tickets.",
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Configured by {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+    else:  # view
+        role_id_raw = await db.get_config(guild.id, "appeal_ping_role_id", None)
+        role_obj = None
+        if role_id_raw and str(role_id_raw).lower() not in ("none", "null", "0", ""):
+            try:
+                role_obj = guild.get_role(int(role_id_raw))
+            except (ValueError, TypeError):
+                role_obj = None
+        embed = discord.Embed(
+            title=f"📩 Appeal Ticket Notification Settings — {guild.name}",
+            color=discord.Color.gold()
+        )
+        if role_obj:
+            embed.add_field(name="🎭 Configured Ping Role", value=f"✅ {role_obj.mention} (`{role_obj.id}`)", inline=False)
+            embed.add_field(name="ℹ️ Behavior", value="Only members with this role will be pinged when an appeal ticket opens.", inline=False)
+        else:
+            embed.add_field(name="🎭 Configured Ping Role", value="*Default: All staff and admin roles*", inline=False)
+            embed.add_field(name="ℹ️ Behavior", value="The bot automatically pings all moderator and administrator roles.", inline=False)
+        embed.set_footer(text="Use !appealrole set @Role to customize, or !appealrole remove to reset.")
+        await ctx.send(embed=embed)
 
 
 # ── AI User Profile Memory Commands ──────────────────────────────────────────
