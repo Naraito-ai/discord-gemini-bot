@@ -5,8 +5,10 @@ import logging
 import re
 import io
 import time
-import datetime
 import random
+import datetime
+from datetime import datetime, timezone
+
 import math
 import unicodedata
 import urllib.request
@@ -10441,7 +10443,7 @@ async def ping_slash(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🏓 Pong! • Sweety Diagnostics",
         color=discord.Color.from_rgb(88, 101, 242),
-        timestamp=datetime.utcnow()
+        timestamp=discord.utils.utcnow()
     )
     embed.add_field(name="📶 Discord Gateway", value=f"`{api_latency}ms`", inline=True)
     embed.add_field(name="⚡ Roundtrip Latency", value=f"`{roundtrip}ms`", inline=True)
@@ -10480,7 +10482,7 @@ async def ping_prefix(ctx: commands.Context):
     embed = discord.Embed(
         title="🏓 Pong! • Sweety Diagnostics",
         color=discord.Color.from_rgb(88, 101, 242),
-        timestamp=datetime.utcnow()
+        timestamp=discord.utils.utcnow()
     )
     embed.add_field(name="📶 Discord Gateway", value=f"`{api_latency}ms`", inline=True)
     embed.add_field(name="⚡ Roundtrip Latency", value=f"`{roundtrip}ms`", inline=True)
@@ -10490,7 +10492,8 @@ async def ping_prefix(ctx: commands.Context):
         inline=True
     )
     embed.set_footer(text=f"Sweety Bot • Server: {ctx.guild.name if ctx.guild else 'DM'}")
-    await msg.edit(content=None, embed=embed)
+    await msg.edit(content="", embed=embed)
+
 
 
 @bot.tree.command(name="pin", description="Pin a message in the channel by Message ID or link")
