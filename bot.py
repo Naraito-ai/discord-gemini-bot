@@ -10359,16 +10359,47 @@ def make_help_embed() -> discord.Embed:
         description="An all-in-one AI Architect, Auto-Mod, Community Restorer Bot, and NBA Game Engine powered by Gemini 2.5 Flash / Groq!", 
         color=discord.Color.blurple()
     )
-    embed.add_field(name="🧠 **AI Chat & Persistent Memory**", value="• `/ask <question>` — Ask Sweety any question (personalized with your memories!)\n• `/remember <fact>` / `!remember` — Tell Sweety facts about yourself to remember\n• `/memories [user]` / `!memories` — View your remembered facts with interactive controls\n• `/forget [key]` / `!forget` — Forget a specific fact or wipe all memories", inline=False)
-    embed.add_field(name="🔮 **Obsidian Vault & PKM Notes**", value="• `/obsidian [action]` / `!obsidian` — Full Obsidian sync: capture notes, daily task logs, channel clips & export .zip/.md files\n• `!note <title> | <content>` — Fast note capture to Obsidian Inbox\n• `!daily <task>` — Instant timestamped task entry to today's Daily Note", inline=False)
-    embed.add_field(name="🏗️ **AI Server Architect & Channels**", value="• `/setup [theme] [desc]` — Build full server with roles & topics\n• `/addcategory <desc>` — AI builds & adds 1 category\n• `/createchannel <name> [category]` — Create custom text/voice channel\n• `/stylechannels <style>` — Apply aesthetic styles to all text channels\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/backup` — Export server layout as a JSON file\n• `/restore <file>` — Load a backup file to restore server structure\n• `/dynamicvoice` — Setup a dynamic Join-to-Create voice system\n• `/teardown` — Delete only bot-created items", inline=False)
-    embed.add_field(name="🏀 **$15 All-Time NBA Dream Team & Battles**", value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room to build your $15 squad\n• `/myteam [user]` / `!myteam` — View squad card, career record, win streaks & GM badges\n• `/teamqueue` / `!teamqueue` — Auto-matchmaking queue to find live opponents\n• `/teambattle <opponent>` / `!teambattle` — Footdex-style positional NBA card battle\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams in the server\n• `/setupnbachannel [cat]` — Create dedicated arena channel in 2K Mobile Hub category", inline=False)
-    embed.add_field(name="🛡️ **Security & Moderation**", value="• `/whois [user]` — Deep audit of bio, roles, permissions, activity & infractions\n• `/appeal [reason]` — Official strike / 7-day timeout appeal\n• `/appealpanel [channel]` — Post interactive appeal button panel for all members (including muted)\n• `/appealrole [action]` — Configure pinged staff role for appeal tickets\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe [channel] [index]` — View recently deleted message(s)\n• `/editsnipe [channel] [index]` — View before & after of edited message(s)\n• `/clearsnipe [channel]` — Clear snipe cache for privacy/safety\n• `/warn <user> [reason]` — Formally warn a member (Auto-Escalates to timeouts)\n• `/warnings [user]` — View infraction history & warning logs (with instant appeal button)\n• `/warnleaderboard [limit]` — Server infractions & warnings leaderboard\n• `/clearwarns <user> [amount]` — Clear warnings (all or specified amount)\n• `/delwarn <warn_id>` — Delete a single warning by ID\n• `/setlogchannel <channel>` — Set moderation logging channel\n• `/automod <status> [mode]` — Configures Toxic & Scam Shield\n• `/testautomod <text>` — Evaluates a text string\n• `/lockdown <status>` — Emergency chat freeze\n• `/purge <num>` — Instant spam/chat cleaner\n• `/kick <user> [reason]` — Kick a member\n• `/ban <user> [reason]` — Ban a user\n• `/unban <user_id> [reason]` — Unban a user\n• `/mute <user> <duration> [reason]` — Timeout a member\n• `/unmute <user> [reason]` — Remove timeout\n• `/deafen <user> [reason]` — Voice deafen member\n• `/undeafen <user> [reason]` — Voice undeafen member", inline=False)
-    embed.add_field(name="🎭 **Role Management**", value="• `/autorole <status> [role]` — Automatically assign a role to new members\n• `/addrole <user> <role>` — Assign a role to a member\n• `/removerole <user> <role>` — Remove a role from a member\n• `/roleall <role>` — Add a role to EVERY member\n• `/roleallremove <role>` — Remove a role from EVERY member", inline=False)
-    embed.add_field(name="⏰ **Productivity & Utilities**", value="• `/remindme <time> <note> [dm]` — Set private timer & reminder (e.g. `10m`, `2h`, `1d`)\n• `/reminders [action]` — View or cancel active scheduled reminders (private)\n• `/afk [reason]` — Set AFK status with automatic return & mention alerts", inline=False)
-    embed.add_field(name="💖 **Wholesome Social & Anime Actions**", value="• `/hug`, `/pat`, `/kiss` *(Admins/Role)*, `/kissrole`, `/highfive`, `/wave`, `/slap`, `/punch`", inline=False)
-    embed.add_field(name="✉️ **Premium Features**", value="• `/embed <title> <desc> [color] [chan] [use_ai]` — Creates beautiful colored rich embeds (AI-enhanced!)", inline=False)
-    embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq")
+    embed.add_field(
+        name="🧠 **AI Chat & Persistent Memory**",
+        value="• `/ask <question>` — Ask Sweety any question with memory personalization\n• `/remember <fact>` / `!remember` — Save personal facts for Sweety to recall\n• `/memories [user]` / `!memories` — View your remembered facts\n• `/forget [key]` / `!forget` — Wipe specific or all saved memories",
+        inline=False
+    )
+    embed.add_field(
+        name="🔮 **Obsidian Vault & PKM Notes**",
+        value="• `/obsidian [action]` / `!obsidian` — Sync notes, daily task logs, channel clips & export .zip\n• `!note <title> | <content>` — Fast note capture to Obsidian Inbox\n• `!daily <task>` — Instant timestamped task entry in Daily Note",
+        inline=False
+    )
+    embed.add_field(
+        name="🏗️ **AI Server Architect & Channels**",
+        value="• `/setup [theme] [desc]` — Generate full server theme, categories & roles\n• `/addcategory <desc>` — AI builds and adds 1 category with channels\n• `/createchannel <name>` — Create custom text/voice channel\n• `/aiperms <target> <desc>` — Configure roles/users channel overrides using AI\n• `/dynamicvoice` — Setup dynamic Join-to-Create voice system\n• `/backup` & `/restore <file>` — Export/import server layout JSON",
+        inline=False
+    )
+    embed.add_field(
+        name="🏀 **$15 All-Time NBA Dream Team & Battles**",
+        value="• `/buildteam` / `!buildteam` — Interactive GM Draft Room ($15 cap)\n• `/myteam [user]` / `!myteam` — Squad card, win streaks & GM badges\n• `/teamqueue` / `!teamqueue` — Matchmaking queue to find live opponents\n• `/teambattle <user>` / `!teambattle` — Card battle simulator\n• `/teamleaderboard` / `!teamlb` — View top-rated Dream Teams\n• `/setupnbachannel` — Create dedicated arena channel in 2K Mobile Hub",
+        inline=False
+    )
+    embed.add_field(
+        name="🛡️ **Strikes, Warnings & Appeals**",
+        value="• `/warn <user> [reason]` — Formally warn a member (Auto-escalates to timeout)\n• `/warnings [user]` — View active infractions & warning logs with appeal button\n• `/clearwarns <user> [amt]` — Clear warnings (all or specified amount)\n• `/delwarn <id>` — Delete a single warning by ID\n• `/warnleaderboard` — Server infractions leaderboard\n• `/appealpanel [chan]` — Post interactive appeal button panel (accessible to muted members)\n• `/appealrole [role]` — Configure pinged staff role for ticket alerts\n• `/whois [user]` — Deep audit of member profile, roles & history",
+        inline=False
+    )
+    embed.add_field(
+        name="⚔️ **Moderation & Security Actions**",
+        value="• `/kick <user>` / `/ban <user>` / `/unban <id>` — Member enforcement\n• `/mute <user> <time>` / `/unmute <user>` — Timeout controls\n• `/deafen <user>` / `/undeafen <user>` — Voice channel deafen\n• `/antighostping [status]` — Auto-catch & expose deleted ghost pings\n• `/snipe` / `/editsnipe` / `/clearsnipe` — Deleted/edited message inspection\n• `/lockdown <status>` / `/purge <num>` — Emergency chat freeze and cleaner",
+        inline=False
+    )
+    embed.add_field(
+        name="⏰ **Productivity & Utilities**",
+        value="• `/ping` / `!ping` — Real-time Discord gateway & Supabase DB latency\n• `/pin <msg_id>` / `!pin` — Pin a message to the channel\n• `/remindme <time> <note>` — Set private timers & reminders\n• `/reminders` — View or cancel active scheduled reminders\n• `/afk [reason]` — Set AFK status with automatic mention alerts",
+        inline=False
+    )
+    embed.add_field(
+        name="💖 **Social & Roles**",
+        value="• `/hug`, `/pat`, `/kiss`, `/highfive`, `/wave`, `/slap`, `/punch`\n• `/autorole <role>` — Auto-assign role to new members\n• `/addrole` / `/removerole` / `/roleall` / `/roleallremove`",
+        inline=False
+    )
+    embed.set_footer(text="Powered by Google Gemini 2.5 Flash / Groq • Supabase PostgreSQL")
     return embed
 
 
