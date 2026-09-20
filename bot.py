@@ -12337,7 +12337,7 @@ async def voicerole_slash_cmd(interaction: discord.Interaction, action: str = "s
     else:  # status
         is_enabled = await db.get_config(guild.id, "voice_activity_role_enabled", True)
         v_role = await get_or_create_voice_role(guild) if is_enabled else None
-        in_vc_count = sum(len(vc.members) for vc in guild.voice_channels)
+        in_vc_count = sum(len(vc.members) for vc in list(guild.voice_channels) + list(getattr(guild, "stage_channels", [])))
         embed = discord.Embed(
             title=f"🔊 Dynamic Voice Role Status — {guild.name}",
             color=discord.Color.green() if (is_enabled and v_role) else discord.Color.gold()
@@ -12442,7 +12442,7 @@ async def voicerole_prefix_cmd(ctx: commands.Context, action: Optional[str] = "s
     else:  # status / view
         is_enabled = await db.get_config(guild.id, "voice_activity_role_enabled", True)
         v_role = await get_or_create_voice_role(guild) if is_enabled else None
-        in_vc_count = sum(len(vc.members) for vc in guild.voice_channels)
+        in_vc_count = sum(len(vc.members) for vc in list(guild.voice_channels) + list(getattr(guild, "stage_channels", [])))
         embed = discord.Embed(
             title=f"🔊 Dynamic Voice Role Status — {guild.name}",
             color=discord.Color.green() if (is_enabled and v_role) else discord.Color.gold()
@@ -15351,7 +15351,8 @@ async def sync_guild_voice_roles(guild: discord.Guild) -> tuple[int, int]:
     removed = 0
     in_vc_member_ids = set()
 
-    for vc in guild.voice_channels:
+    all_vcs = list(guild.voice_channels) + list(getattr(guild, "stage_channels", []))
+    for vc in all_vcs:
         for member in vc.members:
             if not member.bot:
                 in_vc_member_ids.add(member.id)
