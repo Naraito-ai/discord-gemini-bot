@@ -15316,32 +15316,38 @@ async def on_message(message):
     if not message.author.bot and message.guild:
         # Full Immunity for Server Owner, Admins, and Moderators
         if not is_protected(message.author):
-            # 0. Active Appeal & Mute Channel Isolation Enforcement
-            active_appeal = await db.get_active_appeal_by_user(message.guild.id, message.author.id)
-            if active_appeal:
-                appeal_chan_id = int(active_appeal.get("channel_id", 0))
-                if message.channel.id != appeal_chan_id:
-                    try:
-                        _bot_deleted_message_ids.add(message.id)
-                        await message.delete()
-                    except Exception:
-                        pass
-                    try:
-                        warn_embed = discord.Embed(
-                            description=f"🔇 {message.author.mention}, you currently have an open appeal pending staff review. You may **only send messages in your private appeal channel: <#{appeal_chan_id}>**!",
-                            color=discord.Color.red()
-                        )
-                        alert = await message.channel.send(embed=warn_embed)
-                        asyncio.create_task(delete_after_delay(alert, 5))
-                    except Exception:
-                        pass
-                    return
-            else:
-                muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", message.guild.roles)
-                has_muted_role = bool(muted_role and muted_role in message.author.roles)
-                active_mute = await db.get_active_mute(message.guild.id, message.author.id)
-                
-                if has_muted_role or active_mute:
+            # 0. Active Mute & Timeout Channel Isolation Enforcement (ONLY applies if user is actually MUTED / TIMED OUT)
+            muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", message.guild.roles)
+            has_muted_role = bool(muted_role and muted_role in message.author.roles)
+            active_mute = await db.get_active_mute(message.guild.id, message.author.id)
+            unmute_at = float(active_mute.get("unmute_at", 0)) if (active_mute and isinstance(active_mute, dict)) else 0.0
+            
+            # User is considered muted ONLY if they have @Muted role or an active unexpired mute record in database
+            is_user_muted = has_muted_role or (active_mute and unmute_at > time.time())
+
+            if is_user_muted:
+                active_appeal = await db.get_active_appeal_by_user(message.guild.id, message.author.id)
+                if active_appeal:
+                    appeal_chan_id = int(active_appeal.get("channel_id", 0))
+                    # Muted user with an open appeal may ONLY chat inside their designated appeal channel
+                    if message.channel.id != appeal_chan_id:
+                        try:
+                            _bot_deleted_message_ids.add(message.id)
+                            await message.delete()
+                        except Exception:
+                            pass
+                        try:
+                            warn_embed = discord.Embed(
+                                description=f"🔇 {message.author.mention}, you are currently **muted**. You may **only send messages in your private appeal channel: <#{appeal_chan_id}>**!",
+                                color=discord.Color.red()
+                            )
+                            alert = await message.channel.send(embed=warn_embed)
+                            asyncio.create_task(delete_after_delay(alert, 5))
+                        except Exception:
+                            pass
+                        return
+                else:
+                    # Muted user without an active appeal cannot send messages in regular public channels
                     is_ticket_chan = (
                         message.channel.id == TICKET_CHANNEL_ID or
                         "ticket" in message.channel.name.lower() or
@@ -15354,8 +15360,7 @@ async def on_message(message):
                         except Exception:
                             pass
                         
-                        unmute_at = int(float(active_mute.get("unmute_at", 0))) if (active_mute and isinstance(active_mute, dict)) else None
-                        mute_time_str = f" until <t:{unmute_at}:R>" if unmute_at and unmute_at > time.time() else ""
+                        mute_time_str = f" until <t:{int(unmute_at)}:R>" if unmute_at > time.time() else ""
                         try:
                             warn_embed = discord.Embed(
                                 description=f"🔇 {message.author.mention}, you are currently **muted**{mute_time_str}. You cannot send messages in public channels!",
