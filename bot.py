@@ -8522,13 +8522,59 @@ class StrikeAppealModal(discord.ui.Modal, title="Submit Strike / Warning Appeal"
 
 
 class DMAppealLauncherView(discord.ui.View):
-    """Persistent view attached to warning and strike DM notifications allowing in-DM appeal modal popup."""
+    """Persistent view attached to warning/strike DMs and server appeal panels."""
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="📩 Submit Strike Appeal", style=discord.ButtonStyle.primary, custom_id="btn_submit_dm_appeal")
     async def open_appeal_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(StrikeAppealModal())
+
+    @discord.ui.button(label="📜 Check My Infractions", style=discord.ButtonStyle.secondary, custom_id="btn_appeal_check_status")
+    async def check_my_status(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        user = interaction.user
+        if not guild:
+            for g in interaction.client.guilds:
+                if g.get_member(user.id):
+                    warns = await db.get_warnings(g.id, user.id)
+                    mute = await db.get_active_mute(g.id, user.id)
+                    if warns or mute:
+                        guild = g
+                        break
+        if not guild:
+            await interaction.response.send_message("ℹ️ No active infraction record found for you.", ephemeral=True)
+            return
+
+        warns = await db.get_warnings(guild.id, user.id)
+        mute = await db.get_active_mute(guild.id, user.id)
+        strike_count = len(warns) if warns else 0
+
+        embed = discord.Embed(
+            title=f"📜 Infraction Status — {user.display_name}",
+            color=discord.Color.gold() if (warns or mute) else discord.Color.green(),
+            timestamp=datetime.datetime.utcnow()
+        )
+        embed.add_field(name="⚠️ Total Warning Strikes", value=f"**`{strike_count}/6`** Strikes", inline=True)
+        
+        if mute:
+            unmute_at = int(float(mute.get("unmute_at", 0)))
+            embed.add_field(name="🔇 7-Day Timeout Status", value=f"**Active** (Expires <t:{unmute_at}:R>)", inline=True)
+        else:
+            embed.add_field(name="🔇 7-Day Timeout Status", value="*None active*", inline=True)
+
+        if warns:
+            lines = []
+            for idx, w in enumerate(warns[:5], 1):
+                reason = w.get("reason", "No reason") if isinstance(w, dict) else (w[4] if len(w) > 4 else "No reason")
+                ts = w.get("timestamp", "") if isinstance(w, dict) else (w[5] if len(w) > 5 else "")
+                lines.append(f"• **#{idx}:** {reason} *({ts})*")
+            embed.add_field(name="Recent Warnings", value="\n".join(lines), inline=False)
+        else:
+            embed.add_field(name="Record", value="✅ You currently have a clean record with 0 warnings.", inline=False)
+
+        embed.set_footer(text="Click 'Submit Strike Appeal' if you wish to appeal a strike or timeout.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 class AppealReviewView(discord.ui.View):
@@ -9442,6 +9488,85 @@ async def appealrole_prefix_cmd(ctx: commands.Context, action: Optional[str] = "
             embed.add_field(name="ℹ️ Behavior", value="The bot automatically pings all moderator and administrator roles.", inline=False)
         embed.set_footer(text="Use !appealrole set @Role to customize, or !appealrole remove to reset.")
         await ctx.send(embed=embed)
+
+
+@bot.tree.command(name="appealpanel", description="Post the official interactive strike appeal button panel in a channel")
+@app_commands.describe(channel="The channel to post the appeal panel in (defaults to current channel)")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+async def appealpanel_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
+    if not is_protected(interaction.user) and not interaction.permissions.administrator:
+        return await interaction.response.send_message("❌ Only Server Administrators can post the appeal panel.", ephemeral=True)
+
+    target_channel = channel or interaction.channel
+    guild = interaction.guild
+
+    embed = discord.Embed(
+        title=f"🛡️ {guild.name} • Official Strike Appeal Center",
+        description=(
+            "Welcome to the official Strike & Moderation Appeal Portal.\n\n"
+            "If you have received a formal warning strike or a 7-day timeout and believe it was issued in error or you have proper justification, you can open an official appeal ticket here for staff review.\n\n"
+            "📌 **How It Works:**\n"
+            "1️⃣ Click the **`📩 Submit Strike Appeal`** button below.\n"
+            "2️⃣ Provide your reason and any relevant context in the popup form.\n"
+            "3️⃣ A private ticket channel (`#appeal-username`) will be created where you can speak directly with the moderation team.\n\n"
+            "🔇 **Muted & Timed-Out Members:**\n"
+            "You **CAN** click the button and submit an appeal even while muted or timed out!"
+        ),
+        color=discord.Color.blue(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    embed.set_footer(text="Sweety Strike Appeal Shield • Click below to open a private appeal ticket")
+
+    view = DMAppealLauncherView()
+    try:
+        await target_channel.send(embed=embed, view=view)
+        await interaction.response.send_message(
+            f"✅ **Appeal Panel posted successfully in {target_channel.mention}!**\nMembers (including muted & timed-out members) can now click the button to submit appeals.",
+            ephemeral=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to post appeal panel in {target_channel.id}: {e}")
+        await interaction.response.send_message(f"❌ Failed to post appeal panel in {target_channel.mention}: {e}", ephemeral=True)
+
+
+@bot.command(name="appealpanel", aliases=["setappealpanel", "postappealpanel", "ticketpanel"])
+@commands.has_permissions(administrator=True)
+@commands.guild_only()
+async def appealpanel_prefix_cmd(ctx: commands.Context, channel: Optional[discord.TextChannel] = None):
+    """Post the official appeal button panel: !appealpanel [#channel]"""
+    target_channel = channel or ctx.channel
+    guild = ctx.guild
+
+    embed = discord.Embed(
+        title=f"🛡️ {guild.name} • Official Strike Appeal Center",
+        description=(
+            "Welcome to the official Strike & Moderation Appeal Portal.\n\n"
+            "If you have received a formal warning strike or a 7-day timeout and believe it was issued in error or you have proper justification, you can open an official appeal ticket here for staff review.\n\n"
+            "📌 **How It Works:**\n"
+            "1️⃣ Click the **`📩 Submit Strike Appeal`** button below.\n"
+            "2️⃣ Provide your reason and any relevant context in the popup form.\n"
+            "3️⃣ A private ticket channel (`#appeal-username`) will be created where you can speak directly with the moderation team.\n\n"
+            "🔇 **Muted & Timed-Out Members:**\n"
+            "You **CAN** click the button and submit an appeal even while muted or timed out!"
+        ),
+        color=discord.Color.blue(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    embed.set_footer(text="Sweety Strike Appeal Shield • Click below to open a private appeal ticket")
+
+    view = DMAppealLauncherView()
+    try:
+        await target_channel.send(embed=embed, view=view)
+        if target_channel.id != ctx.channel.id:
+            await ctx.send(f"✅ **Appeal Panel posted successfully in {target_channel.mention}!**")
+    except Exception as e:
+        logger.error(f"Failed to post appeal panel: {e}")
+        await ctx.send(f"❌ Failed to post appeal panel: {e}")
 
 
 # ── AI User Profile Memory Commands ──────────────────────────────────────────
