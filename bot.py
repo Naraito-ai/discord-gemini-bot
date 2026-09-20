@@ -8715,45 +8715,6 @@ async def ensure_muted_role(guild: discord.Guild) -> Optional[discord.Role]:
     return muted_role
 
 
-@bot.event
-async def on_guild_channel_create(channel: discord.abc.GuildChannel):
-    """Automatically applies @Muted role restrictions to newly created channels."""
-    try:
-        guild = channel.guild
-        muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", guild.roles)
-        if not muted_role:
-            return
-        is_ticket_channel = (
-            channel.id == TICKET_CHANNEL_ID or
-            "ticket" in channel.name.lower() or
-            "appeal" in channel.name.lower()
-        )
-        if is_ticket_channel:
-            if isinstance(channel, discord.TextChannel):
-                overwrite = channel.overwrites_for(muted_role)
-                overwrite.view_channel = True
-                overwrite.send_messages = True
-                overwrite.read_message_history = True
-                overwrite.attach_files = True
-                await channel.set_permissions(muted_role, overwrite=overwrite, reason="Allow muted users in ticket support")
-        else:
-            if isinstance(channel, discord.TextChannel):
-                overwrite = channel.overwrites_for(muted_role)
-                overwrite.send_messages = False
-                overwrite.add_reactions = False
-                overwrite.create_public_threads = False
-                overwrite.create_private_threads = False
-                overwrite.send_messages_in_threads = False
-                await channel.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted restrictions to new channel")
-            elif isinstance(channel, discord.VoiceChannel):
-                overwrite = channel.overwrites_for(muted_role)
-                overwrite.speak = False
-                overwrite.stream = False
-                await channel.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted restrictions to new voice channel")
-    except Exception as e:
-        logger.debug(f"Error applying @Muted overrides to new channel {channel.name}: {e}")
-
-
 class StrikeAppealModal(discord.ui.Modal, title="Submit Strike / Warning Appeal"):
     reason_input = discord.ui.TextInput(
         label="Reason for appeal",
@@ -15145,6 +15106,45 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
         record_edited_message(before, after)
     except Exception as e:
         logger.error(f"Error recording edited message for editsnipe: {e}")
+
+
+@bot.event
+async def on_guild_channel_create(channel: discord.abc.GuildChannel):
+    """Automatically applies @Muted role restrictions to newly created channels."""
+    try:
+        guild = channel.guild
+        muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", guild.roles)
+        if not muted_role:
+            return
+        is_ticket_channel = (
+            channel.id == TICKET_CHANNEL_ID or
+            "ticket" in channel.name.lower() or
+            "appeal" in channel.name.lower()
+        )
+        if is_ticket_channel:
+            if isinstance(channel, discord.TextChannel):
+                overwrite = channel.overwrites_for(muted_role)
+                overwrite.view_channel = True
+                overwrite.send_messages = True
+                overwrite.read_message_history = True
+                overwrite.attach_files = True
+                await channel.set_permissions(muted_role, overwrite=overwrite, reason="Allow muted users in ticket support")
+        else:
+            if isinstance(channel, discord.TextChannel):
+                overwrite = channel.overwrites_for(muted_role)
+                overwrite.send_messages = False
+                overwrite.add_reactions = False
+                overwrite.create_public_threads = False
+                overwrite.create_private_threads = False
+                overwrite.send_messages_in_threads = False
+                await channel.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted restrictions to new channel")
+            elif isinstance(channel, discord.VoiceChannel):
+                overwrite = channel.overwrites_for(muted_role)
+                overwrite.speak = False
+                overwrite.stream = False
+                await channel.set_permissions(muted_role, overwrite=overwrite, reason="Apply @Muted restrictions to new voice channel")
+    except Exception as e:
+        logger.debug(f"Error applying @Muted overrides to new channel {channel.name}: {e}")
 
 
 @bot.event
