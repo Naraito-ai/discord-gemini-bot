@@ -8628,23 +8628,54 @@ class AppealReviewView(discord.ui.View):
 
         guild = interaction.guild
         target_uid = int(ticket["user_id"])
+        member = guild.get_member(target_uid) if guild else None
+        now = time.time()
         
-        # Check if user had an active 7-day mute in DB
+        # Check strike count & active mute status
+        warnings = await db.get_warnings(guild.id, target_uid) if guild else []
+        strike_count = len(warnings) if warnings else 0
         active_mute = await db.get_active_mute(guild.id, target_uid) if guild else None
+
+        # Verify active mute validity: only valid if strike_count >= 3 and unmute_at > now
+        has_valid_mute = False
+        unmute_at = None
+        if active_mute:
+            unmute_at = float(active_mute.get("unmute_at", 0))
+            if unmute_at > now and strike_count >= 3:
+                has_valid_mute = True
+            else:
+                # Stale or invalid active mute entry (e.g. user had < 3 strikes or mute passed)
+                if guild:
+                    await db.remove_active_mute(guild.id, target_uid)
+                active_mute = None
+
+        # If user has fewer than 3 strikes, ensure any accidental Discord timeout or @Muted role is cleared
+        if member and strike_count < 3:
+            try:
+                if member.is_timed_out():
+                    await member.timeout(None, reason="Untimed out on appeal resolution (strike count < 3)")
+            except Exception as te:
+                logger.warning(f"Could not clear timeout for member {target_uid}: {te}")
+            try:
+                muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", guild.roles)
+                if muted_role and muted_role in member.roles:
+                    await member.remove_roles(muted_role, reason="Removed @Muted role (strike count < 3)")
+            except Exception as re:
+                logger.warning(f"Could not remove @Muted role for {target_uid}: {re}")
 
         # Send DM to user
         try:
             user = interaction.client.get_user(target_uid) or await interaction.client.fetch_user(target_uid)
             if user:
-                if active_mute:
+                if has_valid_mute and unmute_at:
                     dm_desc = (
                         f"Your appeal in **{guild.name if guild else 'the server'}** was reviewed and **denied** by the moderation team.\n\n"
-                        "Your 7-day timeout remains in effect until the expiration date."
+                        f"Your 7-day timeout remains in effect until <t:{int(unmute_at)}:F> (<t:{int(unmute_at)}:R>)."
                     )
                 else:
                     dm_desc = (
                         f"Your strike appeal in **{guild.name if guild else 'the server'}** was reviewed and **denied** by the moderation team.\n\n"
-                        "Your warning strike remains on record."
+                        f"Your warning strike remains on record ({strike_count}/6 total strikes)."
                     )
                 deny_embed = discord.Embed(
                     title="❌ Strike Appeal Denied",
@@ -8657,15 +8688,16 @@ class AppealReviewView(discord.ui.View):
         except Exception as dme:
             logger.debug(f"Could not DM user {target_uid} on appeal denial: {dme}")
 
-        # Re-apply native timeout ONLY IF user was already muted before opening the appeal
-        if guild and active_mute:
-            member = guild.get_member(target_uid)
-            if member:
-                try:
-                    remaining_secs = max(60, int(active_mute.get("expires_at", time.time() + 7 * 86400) - time.time()))
-                    await member.timeout(datetime.timedelta(seconds=remaining_secs), reason="Strike appeal denied by staff")
-                except Exception as te:
-                    logger.warning(f"Could not re-apply timeout for {target_uid} on appeal denial: {te}")
+        # Re-apply native timeout ONLY IF user had an active, valid 3-strike mute
+        if guild and member and has_valid_mute and unmute_at:
+            try:
+                remaining_secs = max(60, int(unmute_at - now))
+                await member.timeout(datetime.timedelta(seconds=remaining_secs), reason="Strike appeal denied by staff (3-strike timeout restored)")
+                muted_role = await ensure_muted_role(guild)
+                if muted_role and muted_role not in member.roles:
+                    await member.add_roles(muted_role, reason="Re-enforcing @Muted role after appeal denial")
+            except Exception as te:
+                logger.warning(f"Could not re-apply timeout for {target_uid} on appeal denial: {te}")
 
         # Update DB
         await db.resolve_appeal_ticket(interaction.channel_id, "denied", interaction.user.id)
@@ -8675,7 +8707,11 @@ class AppealReviewView(discord.ui.View):
             if item.custom_id in ("btn_appeal_accept", "btn_appeal_deny"):
                 item.disabled = True
 
-        status_action = "Appeal denied, 7-day timeout remains active, DM notification sent." if active_mute else "Appeal denied, warning strike remains on record, DM notification sent."
+        status_action = (
+            f"Appeal denied, 7-day timeout remains active (until <t:{int(unmute_at)}:R>), DM notification sent."
+            if has_valid_mute and unmute_at
+            else f"Appeal denied, warning strike remains on record ({strike_count}/6 strikes), DM notification sent."
+        )
         status_embed = discord.Embed(
             title="❌ Appeal Denied",
             description=(
@@ -12757,17 +12793,66 @@ async def unmute_command(interaction: discord.Interaction, member: discord.Membe
         await interaction.response.send_message("❌ I cannot unmute this member because they have a higher or equal role than me.", ephemeral=True)
         return
         
-    if not member.is_timed_out():
-        await interaction.response.send_message(f"ℹ️ **{member.display_name}** is not timed out.", ephemeral=True)
+    has_timeout = member.is_timed_out()
+    muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", interaction.guild.roles)
+    has_role = muted_role and muted_role in member.roles
+    active_mute = await db.get_active_mute(interaction.guild.id, member.id)
+
+    if not has_timeout and not has_role and not active_mute:
+        await interaction.response.send_message(f"ℹ️ **{member.display_name}** is not timed out or muted.", ephemeral=True)
         return
         
     try:
-        await member.timeout(None, reason=reason)
-        await interaction.response.send_message(f"✅ **{member.display_name}** is no longer timed out. (Reason: {reason})")
+        if has_timeout:
+            await member.timeout(None, reason=reason)
+        if has_role:
+            try:
+                await member.remove_roles(muted_role, reason=reason)
+            except Exception:
+                pass
+        await db.remove_active_mute(interaction.guild.id, member.id)
+        await interaction.response.send_message(f"✅ **{member.display_name}** is no longer timed out or muted. (Reason: {reason})")
         await log_mod_action(interaction.guild, interaction.user, member, "Unmute", reason)
     except Exception as e:
         logger.error(f"Unmute command failed: {e}", exc_info=True)
         await interaction.response.send_message("❌ Failed to unmute member due to an internal error.", ephemeral=True)
+
+
+@bot.command(name="unmute")
+@commands.has_permissions(moderate_members=True)
+@commands.guild_only()
+async def unmute_prefix_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
+    """Remove timeout and @Muted role from a member: !unmute @member [reason]"""
+    if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+        await ctx.send("❌ You cannot unmute this member because they have a higher or equal role than you.")
+        return
+    if member.top_role >= ctx.guild.me.top_role:
+        await ctx.send("❌ I cannot unmute this member because they have a higher or equal role than me.")
+        return
+
+    has_timeout = member.is_timed_out()
+    muted_role = discord.utils.find(lambda r: r.name.lower() == "muted", ctx.guild.roles)
+    has_role = muted_role and muted_role in member.roles
+    active_mute = await db.get_active_mute(ctx.guild.id, member.id)
+
+    if not has_timeout and not has_role and not active_mute:
+        await ctx.send(f"ℹ️ **{member.display_name}** is not timed out or muted.")
+        return
+
+    try:
+        if has_timeout:
+            await member.timeout(None, reason=reason)
+        if has_role:
+            try:
+                await member.remove_roles(muted_role, reason=reason)
+            except Exception:
+                pass
+        await db.remove_active_mute(ctx.guild.id, member.id)
+        await ctx.send(f"✅ **{member.display_name}** is no longer timed out or muted. (Reason: {reason})")
+        await log_mod_action(ctx.guild, ctx.author, member, "Unmute", reason)
+    except Exception as e:
+        logger.error(f"Prefix unmute command failed: {e}", exc_info=True)
+        await ctx.send("❌ Failed to unmute member due to an internal error.")
 
 
 @bot.tree.command(name="deafen", description="Deafen a member in a voice channel")

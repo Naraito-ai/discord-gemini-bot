@@ -1062,12 +1062,14 @@ class DatabaseManager:
             return False
 
     async def get_active_mute(self, guild_id: Any, user_id: Any) -> Optional[Dict[str, Any]]:
-        """Fetches active mute entry for a member."""
+        """Fetches active mute entry for a member (only if not expired)."""
+        now = time.time()
         if not self.is_postgres:
-            query = "SELECT * FROM active_mutes WHERE guild_id = ? AND user_id = ?"
+            query = "SELECT * FROM active_mutes WHERE guild_id = ? AND user_id = ? AND unmute_at > ?"
+            return await self.fetchrow(query, str(guild_id), str(user_id), now)
         else:
-            query = "SELECT * FROM active_mutes WHERE guild_id = $1 AND user_id = $2"
-        return await self.fetchrow(query, str(guild_id), str(user_id))
+            query = "SELECT * FROM active_mutes WHERE guild_id = $1 AND user_id = $2 AND unmute_at > $3"
+            return await self.fetchrow(query, str(guild_id), str(user_id), now)
 
     async def get_due_unmutes(self, current_time: float) -> List[Dict[str, Any]]:
         """Retrieves all active mutes whose expiration timestamp has passed."""
