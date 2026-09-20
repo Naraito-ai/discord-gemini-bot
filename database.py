@@ -370,6 +370,23 @@ class DatabaseManager:
             """,
             """
             CREATE INDEX IF NOT EXISTS idx_user_memories_lookup ON user_memories(user_id, updated_at);
+            """,
+            # Obsidian Notes Vault Table
+            """
+            CREATE TABLE IF NOT EXISTS obsidian_notes (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                guild_id TEXT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tags TEXT DEFAULT '',
+                folder TEXT DEFAULT 'Inbox',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_obsidian_notes_lookup ON obsidian_notes(user_id, folder, updated_at);
             """
         ]
         
@@ -1217,6 +1234,168 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error clearing user memories in DB: {e}")
             return False
+
+    # ── Obsidian Vault & Note-Taking System ──────────────────────────────────
+    async def create_obsidian_note(
+        self,
+        user_id: Any,
+        guild_id: Optional[Any],
+        title: str,
+        content: str,
+        tags: str = "",
+        folder: str = "Inbox"
+    ) -> Optional[int]:
+        """Saves a new note formatted for Obsidian markdown sync."""
+        now = time.time()
+        clean_folder = folder.strip().strip("/").strip("\\") or "Inbox"
+        clean_title = title.strip() or "Untitled Note"
+        if not self.is_postgres:
+            query = """
+            INSERT INTO obsidian_notes (user_id, guild_id, title, content, tags, folder, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            try:
+                await self.execute(query, str(user_id), str(guild_id) if guild_id else None, clean_title, content, tags, clean_folder, now, now)
+                row = await self.fetchrow("SELECT last_insert_rowid() as id")
+                return row["id"] if row else None
+            except Exception as e:
+                logger.error(f"Error creating obsidian note (SQLite): {e}")
+                return None
+        else:
+            query = """
+            INSERT INTO obsidian_notes (user_id, guild_id, title, content, tags, folder, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id
+            """
+            try:
+                row = await self.fetchrow(query, str(user_id), str(guild_id) if guild_id else None, clean_title, content, tags, clean_folder, now, now)
+                return row["id"] if row else None
+            except Exception as e:
+                logger.error(f"Error creating obsidian note (PostgreSQL): {e}")
+                return None
+
+    async def get_obsidian_note(self, note_id: int, user_id: Any) -> Optional[Dict[str, Any]]:
+        """Retrieves a specific note by ID for a user."""
+        if not self.is_postgres:
+            query = "SELECT * FROM obsidian_notes WHERE id = ? AND user_id = ?"
+        else:
+            query = "SELECT * FROM obsidian_notes WHERE id = $1 AND user_id = $2"
+        return await self.fetchrow(query, int(note_id), str(user_id))
+
+    async def get_user_obsidian_notes(self, user_id: Any, folder: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Retrieves all notes for a user, optionally filtered by folder."""
+        if folder:
+            if not self.is_postgres:
+                query = "SELECT * FROM obsidian_notes WHERE user_id = ? AND folder = ? ORDER BY updated_at DESC LIMIT ?"
+                return await self.fetch(query, str(user_id), folder, limit)
+            else:
+                query = "SELECT * FROM obsidian_notes WHERE user_id = $1 AND folder = $2 ORDER BY updated_at DESC LIMIT $3"
+                return await self.fetch(query, str(user_id), folder, limit)
+        else:
+            if not self.is_postgres:
+                query = "SELECT * FROM obsidian_notes WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?"
+                return await self.fetch(query, str(user_id), limit)
+            else:
+                query = "SELECT * FROM obsidian_notes WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2"
+                return await self.fetch(query, str(user_id), limit)
+
+    async def search_obsidian_notes(self, user_id: Any, search_term: str, limit: int = 15) -> List[Dict[str, Any]]:
+        """Searches notes by title, content, tags, or folder."""
+        pattern = f"%{search_term.strip()}%"
+        if not self.is_postgres:
+            query = """
+            SELECT * FROM obsidian_notes 
+            WHERE user_id = ? AND (title LIKE ? OR content LIKE ? OR tags LIKE ? OR folder LIKE ?)
+            ORDER BY updated_at DESC LIMIT ?
+            """
+            return await self.fetch(query, str(user_id), pattern, pattern, pattern, pattern, limit)
+        else:
+            query = """
+            SELECT * FROM obsidian_notes 
+            WHERE user_id = $1 AND (title ILIKE $2 OR content ILIKE $2 OR tags ILIKE $2 OR folder ILIKE $2)
+            ORDER BY updated_at DESC LIMIT $3
+            """
+            return await self.fetch(query, str(user_id), pattern, limit)
+
+    async def append_daily_obsidian_note(self, user_id: Any, guild_id: Optional[Any], entry: str) -> Dict[str, Any]:
+        """Appends a bullet/task entry to today's Daily Note (YYYY-MM-DD.md)."""
+        import datetime
+        now = time.time()
+        today_str = datetime.date.today().isoformat()
+        daily_title = f"Daily Note {today_str}"
+        daily_folder = "Daily"
+        
+        # Check if today's note already exists
+        if not self.is_postgres:
+            query_find = "SELECT * FROM obsidian_notes WHERE user_id = ? AND folder = 'Daily' AND title = ?"
+            existing = await self.fetchrow(query_find, str(user_id), daily_title)
+        else:
+            query_find = "SELECT * FROM obsidian_notes WHERE user_id = $1 AND folder = 'Daily' AND title = $2"
+            existing = await self.fetchrow(query_find, str(user_id), daily_title)
+
+        time_str = datetime.datetime.now().strftime("%H:%M")
+        formatted_entry = f"- [ ] **{time_str}** — {entry.strip()}"
+
+        if existing:
+            new_content = f"{existing['content']}\n{formatted_entry}"
+            if not self.is_postgres:
+                update_q = "UPDATE obsidian_notes SET content = ?, updated_at = ? WHERE id = ?"
+                await self.execute(update_q, new_content, now, existing["id"])
+            else:
+                update_q = "UPDATE obsidian_notes SET content = $1, updated_at = $2 WHERE id = $3"
+                await self.execute(update_q, new_content, now, existing["id"])
+            existing["content"] = new_content
+            existing["updated_at"] = now
+            return existing
+        else:
+            initial_content = f"# 📅 Daily Note: {today_str}\n\n## Log & Tasks\n{formatted_entry}"
+            note_id = await self.create_obsidian_note(
+                user_id=user_id,
+                guild_id=guild_id,
+                title=daily_title,
+                content=initial_content,
+                tags="daily, log, tasks",
+                folder=daily_folder
+            )
+            return {
+                "id": note_id,
+                "user_id": str(user_id),
+                "guild_id": str(guild_id) if guild_id else None,
+                "title": daily_title,
+                "content": initial_content,
+                "tags": "daily, log, tasks",
+                "folder": daily_folder,
+                "created_at": now,
+                "updated_at": now
+            }
+
+    async def delete_obsidian_note(self, note_id: int, user_id: Any) -> bool:
+        """Deletes a specific note for a user."""
+        if not self.is_postgres:
+            query = "DELETE FROM obsidian_notes WHERE id = ? AND user_id = ?"
+        else:
+            query = "DELETE FROM obsidian_notes WHERE id = $1 AND user_id = $2"
+        try:
+            await self.execute(query, int(note_id), str(user_id))
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting obsidian note in DB: {e}")
+            return False
+
+    async def clear_user_obsidian_notes(self, user_id: Any) -> int:
+        """Deletes all notes belonging to a user and returns count deleted."""
+        notes = await self.get_user_obsidian_notes(user_id, limit=5000)
+        count = len(notes)
+        if not self.is_postgres:
+            query = "DELETE FROM obsidian_notes WHERE user_id = ?"
+        else:
+            query = "DELETE FROM obsidian_notes WHERE user_id = $1"
+        try:
+            await self.execute(query, str(user_id))
+            return count
+        except Exception as e:
+            logger.error(f"Error clearing obsidian notes in DB: {e}")
+            return 0
 
     async def close(self):
         """Closes all database connections."""
