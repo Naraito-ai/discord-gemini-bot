@@ -8786,26 +8786,18 @@ async def create_appeal_ticket_channel(
             attach_files=True
         )
 
-    # Collect staff & mod roles for permissions & alert mentions
-    staff_mentions = []
-    for role in guild.roles:
-        if role.is_default() or role.managed:
-            continue
-        if (role.permissions.administrator or 
-            role.permissions.manage_guild or 
-            role.permissions.moderate_members or 
-            role.permissions.ban_members or 
-            role.permissions.kick_members or 
-            any(k in role.name.lower() for k in ["admin", "moderator", "mod", "staff"])):
-            overwrites[role] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True,
-                embed_links=True,
-                attach_files=True
-            )
-            if role.mention not in staff_mentions:
-                staff_mentions.append(role.mention)
+    def is_bot_or_excluded_role(r: discord.Role) -> bool:
+        """Filters out bot roles, integration roles, and excluded honorary roles."""
+        if r.is_default() or r.managed:
+            return True
+        if hasattr(r, 'tags') and r.tags and (r.tags.bot_id or r.tags.is_bot_managed()):
+            return True
+        r_name = r.name.lower()
+        if any(b in r_name for b in ["bot", "sapphire", "ticket king", "jockie", "tourney", "invite tracker", "mee6", "dyno", "carl", "honorary", "buildmaster"]):
+            return True
+        if r.members and all(m.bot for m in r.members):
+            return True
+        return False
 
     # Check if a custom appeal ping role has been configured via /appealrole
     custom_role_id_raw = await db.get_config(guild.id, "appeal_ping_role_id", None)
@@ -8825,8 +8817,34 @@ async def create_appeal_ticket_channel(
             attach_files=True
         )
         staff_ping_str = custom_ping_role.mention
+
+        # Also grant access to true human Administrator roles
+        for role in guild.roles:
+            if is_bot_or_excluded_role(role):
+                continue
+            if (role.permissions.administrator or role.name.lower() in ["admin", "administrator", "space admins"]) and role.id != custom_ping_role.id:
+                overwrites[role] = discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True,
+                    embed_links=True,
+                    attach_files=True
+                )
     else:
-        staff_ping_str = " ".join(staff_mentions[:4]) if staff_mentions else "🛡️ **Moderators & Admins**"
+        # Fallback: grant access ONLY to human Administrator / Space Admins roles
+        admin_roles = [
+            r for r in guild.roles 
+            if not is_bot_or_excluded_role(r) and (r.permissions.administrator or r.name.lower() in ["admin", "administrator", "space admins"])
+        ]
+        for role in admin_roles:
+            overwrites[role] = discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+                embed_links=True,
+                attach_files=True
+            )
+        staff_ping_str = " ".join([r.mention for r in admin_roles[:3]]) if admin_roles else "🛡️ **Admins**"
 
     # Lift native Discord timeout ONLY for users who are currently timed out so Discord platform allows them to talk in appeal ticket
     if isinstance(target_member, discord.Member):
