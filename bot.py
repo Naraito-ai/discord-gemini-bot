@@ -9808,6 +9808,125 @@ async def blacklist_list_cmd(interaction: discord.Interaction):
 bot.tree.add_command(blacklist_group)
 
 
+# ── Creator Fleet Visibility & Remote Server Management ─────────────────────
+
+@bot.tree.command(name="servers", description="List all Discord servers Sweety is currently active in (Creator only)")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: i.user.id)
+async def servers_slash_cmd(interaction: discord.Interaction):
+    """Creator-only dashboard providing full visibility into all connected guilds."""
+    if not is_creator(interaction.user):
+        return await interaction.response.send_message("❌ This command is restricted to the Bot Creator.", ephemeral=True)
+
+    guilds = list(bot.guilds)
+    total_members = sum(g.member_count or 0 for g in guilds)
+
+    embed = discord.Embed(
+        title=f"🌐 Sweety Guild Network ({len(guilds)} Servers • {total_members:,} Members)",
+        color=discord.Color.blue(),
+        timestamp=discord.utils.utcnow()
+    )
+
+    if not guilds:
+        embed.description = "ℹ️ Sweety is currently not in any servers."
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # Sort by member count descending
+    guilds_sorted = sorted(guilds, key=lambda g: g.member_count or 0, reverse=True)
+    lines = []
+    for idx, g in enumerate(guilds_sorted[:30], 1):
+        owner_str = f"Owner: <@{g.owner_id}> (`{g.owner_id}`)" if g.owner_id else "Owner: Unknown"
+        lines.append(f"**{idx}. {g.name}**\n• **ID:** `{g.id}` • **Members:** `{g.member_count:,}`\n• {owner_str}")
+
+    embed.description = "\n\n".join(lines)[:4000]
+    if len(guilds_sorted) > 30:
+        embed.set_footer(text=f"Showing top 30 of {len(guilds_sorted)} servers • Use /leaveserver <id> to leave a server")
+    else:
+        embed.set_footer(text="Sweety Server Management • Use /leaveserver <id> to leave a server")
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="leaveserver", description="Remotely make Sweety leave a specific server (Creator only)")
+@app_commands.describe(guild_id="The numerical ID of the server to leave")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: i.user.id)
+async def leaveserver_slash_cmd(interaction: discord.Interaction, guild_id: str):
+    """Creator-only tool to remotely disconnect Sweety from a problematic or abusive server."""
+    if not is_creator(interaction.user):
+        return await interaction.response.send_message("❌ This command is restricted to the Bot Creator.", ephemeral=True)
+
+    try:
+        gid = int(guild_id.strip())
+    except ValueError:
+        return await interaction.response.send_message("❌ Please provide a valid numerical Guild ID.", ephemeral=True)
+
+    guild = bot.get_guild(gid)
+    if not guild:
+        return await interaction.response.send_message(f"❌ Server with ID `{gid}` was not found in active guild cache.", ephemeral=True)
+
+    guild_name = guild.name
+    member_count = guild.member_count or 0
+    try:
+        await guild.leave()
+        await interaction.response.send_message(
+            f"✅ **Successfully left server:** **{guild_name}** (`{gid}`) with `{member_count:,}` members.",
+            ephemeral=True
+        )
+        logger.info(f"Creator {interaction.user} remotely triggered leave for guild '{guild_name}' ({gid})")
+    except Exception as e:
+        logger.error(f"Error leaving guild {gid}: {e}")
+        await interaction.response.send_message(f"❌ Failed to leave server: {e}", ephemeral=True)
+
+
+@bot.command(name="servers", aliases=["guilds", "guildlist"])
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+async def servers_prefix_cmd(ctx: commands.Context):
+    """Creator-only command to list all servers: !servers"""
+    if not is_creator(ctx.author):
+        return
+
+    guilds = list(bot.guilds)
+    total_members = sum(g.member_count or 0 for g in guilds)
+    guilds_sorted = sorted(guilds, key=lambda g: g.member_count or 0, reverse=True)
+
+    embed = discord.Embed(
+        title=f"🌐 Sweety Guild Network ({len(guilds)} Servers • {total_members:,} Members)",
+        color=discord.Color.blue(),
+        timestamp=discord.utils.utcnow()
+    )
+
+    lines = []
+    for idx, g in enumerate(guilds_sorted[:25], 1):
+        lines.append(f"`{idx}.` **{g.name}** (`{g.id}`) — `{g.member_count:,}` members")
+
+    embed.description = "\n".join(lines)[:4000]
+    embed.set_footer(text="Use !leaveserver <id> to make Sweety leave a server")
+    await ctx.reply(embed=embed, mention_author=False)
+
+
+@bot.command(name="leaveserver", aliases=["leaveguild", "forceleave"])
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+async def leaveserver_prefix_cmd(ctx: commands.Context, guild_id: str):
+    """Creator-only command to remotely leave a server: !leaveserver <guild_id>"""
+    if not is_creator(ctx.author):
+        return
+
+    try:
+        gid = int(guild_id.strip())
+    except ValueError:
+        return await ctx.reply("❌ Invalid numerical Guild ID.", mention_author=False)
+
+    guild = bot.get_guild(gid)
+    if not guild:
+        return await ctx.reply(f"❌ Server `{gid}` not found.", mention_author=False)
+
+    guild_name = guild.name
+    try:
+        await guild.leave()
+        await ctx.reply(f"✅ Left server **{guild_name}** (`{gid}`).", mention_author=False)
+    except Exception as e:
+        await ctx.reply(f"❌ Error leaving server: {e}", mention_author=False)
+
+
 
 @bot.tree.command(name="appeal", description="Submit an official appeal for your active warnings, strikes, or timeout")
 @app_commands.describe(reason="Reason for your appeal (optional if opening interactive modal)")
