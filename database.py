@@ -433,6 +433,8 @@ class DatabaseManager:
         else:
             async with self._sqlite_lock:
                 sqlite_query = query
+                if re.search(r'\$\d+', sqlite_query):
+                    sqlite_query = re.sub(r'\$\d+', '?', sqlite_query)
                 if "SERIAL PRIMARY KEY" in sqlite_query:
                     sqlite_query = sqlite_query.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
                 await self.sqlite_conn.execute(sqlite_query, args)
@@ -451,6 +453,8 @@ class DatabaseManager:
         else:
             async with self._sqlite_lock:
                 sqlite_query = query
+                if re.search(r'\$\d+', sqlite_query):
+                    sqlite_query = re.sub(r'\$\d+', '?', sqlite_query)
                 if "SERIAL PRIMARY KEY" in sqlite_query:
                     sqlite_query = sqlite_query.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
                 async with self.sqlite_conn.execute(sqlite_query, args) as cursor:
@@ -486,6 +490,25 @@ class DatabaseManager:
         """Deletes all tracked resource records for a guild from the database."""
         query = "DELETE FROM guild_resources WHERE guild_id = ?"
         await self.execute(query, str(guild_id))
+
+    async def delete_resources_by_type(self, guild_id: Any, resource_type: str):
+        """Deletes all tracked resource records of a specific type for a guild."""
+        query = "DELETE FROM guild_resources WHERE guild_id = ? AND resource_type = ?"
+        await self.execute(query, str(guild_id), str(resource_type))
+
+    async def delete_resource_by_id(self, resource_id: Any):
+        """Deletes all tracked resource records matching a resource_id."""
+        query = "DELETE FROM guild_resources WHERE resource_id = ?"
+        await self.execute(query, int(resource_id))
+
+    async def delete_resource(self, guild_id: Any, resource_id: Any):
+        """Deletes a specific resource record in a guild."""
+        query = "DELETE FROM guild_resources WHERE guild_id = ? AND resource_id = ?"
+        await self.execute(query, str(guild_id), int(resource_id))
+
+    async def get_temp_voice_resources(self) -> List[Dict[str, Any]]:
+        """Fetches all temporary voice channel resource IDs."""
+        return await self.fetch("SELECT resource_id FROM guild_resources WHERE resource_type IN ('temp_voice', 'temp_voice_channels')")
 
     # ── Guild Configuration Queries ──────────────────────────────────────────
 
@@ -621,6 +644,18 @@ class DatabaseManager:
         """
         return await self.fetch(query, str(guild_id), int(limit))
 
+    async def get_member_moderation_stats(self, guild_id: Any, user_id: Any) -> Dict[str, int]:
+        """Fetches counts of warnings, timeouts, and commands for a user in a guild."""
+        gid = str(guild_id)
+        uid = str(user_id)
+        w_rows = await self.fetch("SELECT COUNT(*) as c FROM warnings WHERE guild_id = ? AND user_id = ?", gid, uid)
+        t_rows = await self.fetch("SELECT COUNT(*) as c FROM timeouts WHERE guild_id = ? AND user_id = ?", gid, uid)
+        c_rows = await self.fetch("SELECT COUNT(*) as c FROM commands WHERE guild_id = ? AND user_id = ?", gid, uid)
+        w_cnt = w_rows[0]['c'] if (w_rows and 'c' in w_rows[0]) else (w_rows[0][0] if w_rows else 0)
+        t_cnt = t_rows[0]['c'] if (t_rows and 'c' in t_rows[0]) else (t_rows[0][0] if t_rows else 0)
+        c_cnt = c_rows[0]['c'] if (c_rows and 'c' in c_rows[0]) else (c_rows[0][0] if c_rows else 0)
+        return {"warnings": int(w_cnt or 0), "timeouts": int(t_cnt or 0), "commands": int(c_cnt or 0)}
+
     async def add_timeout(self, guild_id: Any, user_id: Any, moderator_id: Any, duration_seconds: int, reason: str):
         """Logs a member timeout."""
         query = "INSERT INTO timeouts (guild_id, user_id, moderator_id, duration_seconds, reason) VALUES (?, ?, ?, ?, ?)"
@@ -668,6 +703,12 @@ class DatabaseManager:
             "SELECT id, guild_id, channel_id, reminder_text, remind_at, created_at, delivery_method FROM reminders WHERE user_id = ? ORDER BY remind_at ASC",
             str(user_id)
         )
+
+    async def update_reminder_delivery(self, reminder_id: str, delivery_method: str = "channel") -> bool:
+        """Updates the delivery method for a reminder."""
+        query = "UPDATE reminders SET delivery_method = ? WHERE id = ?"
+        await self.execute(query, str(delivery_method), str(reminder_id))
+        return True
 
     # ── AFK System Methods ──────────────────────────────────────────────────
     async def set_afk(self, user_id: Any, guild_id: Any, reason: str, afk_since: float) -> bool:

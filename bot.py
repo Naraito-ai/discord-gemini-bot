@@ -9482,10 +9482,8 @@ class GeminiBot(commands.Bot):
         
         # Step 3: Restore temp voice channel cache
         try:
-            rows = await db.fetch(
-                "SELECT resource_id FROM guild_resources WHERE resource_type = 'temp_voice_channels'"
-            )
-            self.temp_voice_channel_ids = {int(r["resource_id"]) for r in rows}
+            rows = await db.get_temp_voice_resources()
+            self.temp_voice_channel_ids = {int(r["resource_id"]) for r in rows if "resource_id" in r or (isinstance(r, (list, tuple)) and len(r) > 0)}
             logger.info(f"✅ Loaded {len(self.temp_voice_channel_ids)} temp voice channels")
         except Exception as e:
             logger.error(f"❌ Cache load failed: {e}")
@@ -9627,6 +9625,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
 
 @bot.tree.command(name="appeal", description="Submit an official appeal for your active warnings, strikes, or timeout")
 @app_commands.describe(reason="Reason for your appeal (optional if opening interactive modal)")
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def appeal_slash_cmd(interaction: discord.Interaction, reason: Optional[str] = None):
     warns = await db.get_warnings(interaction.guild.id, interaction.user.id)
@@ -9664,6 +9663,7 @@ async def appeal_slash_cmd(interaction: discord.Interaction, reason: Optional[st
 
 
 @bot.command(name="appeal", aliases=["submitappeal", "strikeappeal"])
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def appeal_prefix_cmd(ctx: commands.Context, *, reason: Optional[str] = None):
     """Submit an official appeal for your active warnings, strikes, or timeout: !appeal <reason>"""
     user = ctx.author
@@ -9745,6 +9745,7 @@ async def appeal_prefix_cmd(ctx: commands.Context, *, reason: Optional[str] = No
     ]
 )
 @app_commands.default_permissions(administrator=True)
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def appealrole_slash_cmd(interaction: discord.Interaction, action: str = "view", role: Optional[discord.Role] = None):
     if not is_protected(interaction.user) and not interaction.permissions.administrator:
@@ -9796,6 +9797,7 @@ async def appealrole_slash_cmd(interaction: discord.Interaction, action: str = "
 
 @bot.command(name="appealrole", aliases=["setappealrole", "appealping", "setappealping"])
 @commands.has_permissions(administrator=True)
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 @commands.guild_only()
 async def appealrole_prefix_cmd(ctx: commands.Context, action: Optional[str] = "view", role: Optional[discord.Role] = None):
     """Configure which role is pinged for appeal tickets: !appealrole set @Role | !appealrole remove | !appealrole view"""
@@ -9849,6 +9851,7 @@ async def appealrole_prefix_cmd(ctx: commands.Context, action: Optional[str] = "
 @bot.tree.command(name="appealpanel", description="Post the official interactive strike appeal button panel in a channel")
 @app_commands.describe(channel="The channel to post the appeal panel in (defaults to current channel)")
 @app_commands.default_permissions(administrator=True)
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def appealpanel_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
     if not is_protected(interaction.user) and not interaction.permissions.administrator:
@@ -9893,6 +9896,7 @@ async def appealpanel_slash_cmd(interaction: discord.Interaction, channel: Optio
 
 @bot.command(name="appealpanel", aliases=["setappealpanel", "postappealpanel", "ticketpanel"])
 @commands.has_permissions(administrator=True)
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 @commands.guild_only()
 async def appealpanel_prefix_cmd(ctx: commands.Context, channel: Optional[discord.TextChannel] = None):
     """Post the official appeal button panel: !appealpanel [#channel]"""
@@ -9935,6 +9939,8 @@ async def appealpanel_prefix_cmd(ctx: commands.Context, channel: Optional[discor
 
 @bot.tree.command(name="remember", description="Tell Sweety to remember a personal fact or preference about you")
 @app_commands.describe(fact="What should Sweety remember about you? (e.g. 'My favorite team is Lakers and I code in Python')")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def remember_slash_cmd(interaction: discord.Interaction, fact: str):
     await interaction.response.defer(ephemeral=True)
     is_clean, clean_fact = _sanitize_ai_input(fact)
@@ -9983,6 +9989,8 @@ async def remember_slash_cmd(interaction: discord.Interaction, fact: str):
 
 
 @bot.command(name="remember")
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+@commands.guild_only()
 async def remember_prefix_cmd(ctx: commands.Context, *, fact: str = ""):
     """Tell Sweety to remember a personal fact: !remember <fact>"""
     if not fact:
@@ -10030,6 +10038,8 @@ async def remember_prefix_cmd(ctx: commands.Context, *, fact: str = ""):
 
 @bot.tree.command(name="memories", description="View all personal facts and preferences Sweety has remembered about you")
 @app_commands.describe(user="The user to view memories for (Admin/Mod only to view others)")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def memories_slash_cmd(interaction: discord.Interaction, user: Optional[discord.User] = None):
     target_user = user or interaction.user
     is_self = target_user.id == interaction.user.id
@@ -10070,6 +10080,8 @@ async def memories_slash_cmd(interaction: discord.Interaction, user: Optional[di
 
 
 @bot.command(name="memories")
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+@commands.guild_only()
 async def memories_prefix_cmd(ctx: commands.Context, user: Optional[discord.Member] = None):
     """View stored memories: !memories [user]"""
     target_user = user or ctx.author
@@ -10103,6 +10115,8 @@ async def memories_prefix_cmd(ctx: commands.Context, user: Optional[discord.Memb
 
 @bot.tree.command(name="forget", description="Tell Sweety to forget a specific fact or all facts about you")
 @app_commands.describe(key="The fact category to forget (e.g. 'favorite_team', 'birthday', or 'all')")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def forget_slash_cmd(interaction: discord.Interaction, key: str):
     await interaction.response.defer(ephemeral=True)
     target = key.strip().lower()
@@ -10118,6 +10132,8 @@ async def forget_slash_cmd(interaction: discord.Interaction, key: str):
 
 
 @bot.command(name="forget")
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+@commands.guild_only()
 async def forget_prefix_cmd(ctx: commands.Context, *, key: str = ""):
     """Forget a specific fact: !forget <key> or !forget all"""
     if not key:
@@ -10233,6 +10249,8 @@ class ObsidianNoteView(discord.ui.View):
     app_commands.Choice(name="📦 Export Vault (.zip of all Markdown files)", value="export"),
     app_commands.Choice(name="ℹ️ Obsidian Help & Setup Guide", value="help")
 ])
+@app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def obsidian_slash_cmd(
     interaction: discord.Interaction,
     action: str,
@@ -10508,6 +10526,8 @@ async def obsidian_slash_cmd(
 # ── Prefix Obsidian Commands ───────────────────────────────────────────────
 
 @bot.command(name="obsidian")
+@commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def obsidian_prefix_cmd(ctx: commands.Context, action: Optional[str] = "help", *, args: Optional[str] = ""):
     """Obsidian vault commands: !obsidian note | !obsidian daily | !obsidian search | !obsidian export"""
     act = (action or "help").lower()
@@ -10674,12 +10694,16 @@ async def obsidian_prefix_cmd(ctx: commands.Context, action: Optional[str] = "he
 
 
 @bot.command(name="note")
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+@commands.guild_only()
 async def note_prefix_alias(ctx: commands.Context, *, args: str = ""):
     """Quick shortcut to create an Obsidian note: !note <Title> | <Content> [| tags]"""
     await obsidian_prefix_cmd(ctx, action="note", args=args)
 
 
 @bot.command(name="daily")
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+@commands.guild_only()
 async def daily_prefix_alias(ctx: commands.Context, *, entry: str = ""):
     """Quick shortcut to log an entry in today's Obsidian Daily Note: !daily <entry>"""
     await obsidian_prefix_cmd(ctx, action="daily", args=entry)
@@ -10739,12 +10763,14 @@ def make_help_embed() -> discord.Embed:
 
 
 @bot.tree.command(name="help", description="Show all available commands and help options")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def help_command(interaction: discord.Interaction):
     embed = make_help_embed()
     await interaction.response.send_message(embed=embed)
 
 
 @bot.command(name="help")
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def help_prefix_cmd(ctx: commands.Context):
     """Show all available commands and help options: !help"""
     embed = make_help_embed()
@@ -10752,6 +10778,8 @@ async def help_prefix_cmd(ctx: commands.Context):
 
 
 @bot.tree.command(name="ping", description="Check Sweety's latency, Supabase database response time, and connection health")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def ping_slash(interaction: discord.Interaction):
     start_time = time.perf_counter()
     await interaction.response.defer(ephemeral=False)
@@ -10790,6 +10818,8 @@ async def ping_slash(interaction: discord.Interaction):
 
 
 @bot.command(name="ping", aliases=["pong", "latency"])
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+@commands.guild_only()
 async def ping_prefix(ctx: commands.Context):
     """Check Sweety's latency and database health: !ping"""
     start_time = time.perf_counter()
@@ -10832,6 +10862,7 @@ async def ping_prefix(ctx: commands.Context):
 @bot.tree.command(name="pin", description="Pin a message in the channel by Message ID or link")
 @app_commands.describe(message_id="The ID or URL of the message to pin")
 @app_commands.default_permissions(manage_messages=True)
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def pin_slash(interaction: discord.Interaction, message_id: str):
     if not interaction.user.guild_permissions.manage_messages and not interaction.user.guild_permissions.administrator and interaction.user.id != getattr(interaction.guild, "owner_id", None):
@@ -10855,6 +10886,7 @@ async def pin_slash(interaction: discord.Interaction, message_id: str):
 
 @bot.command(name="pin")
 @commands.has_permissions(manage_messages=True)
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 @commands.guild_only()
 async def pin_prefix(ctx: commands.Context, message: Optional[discord.Message] = None):
     """Pin a message by replying to it with !pin or providing message ID: !pin <message_id>"""
@@ -10891,6 +10923,7 @@ async def pin_prefix(ctx: commands.Context, message: Optional[discord.Message] =
     ]
 )
 @app_commands.default_permissions(administrator=True)
+@app_commands.checks.cooldown(1, 10.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def setup_command(interaction: discord.Interaction, theme: str = None, description: str = None):
     # Runtime Administrator Guard
@@ -11030,6 +11063,7 @@ async def setup_command(interaction: discord.Interaction, theme: str = None, des
 )
 @app_commands.default_permissions(manage_channels=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 20.0, key=lambda i: (i.guild_id, i.user.id))
 async def stylechannels_command(interaction: discord.Interaction, style: str):
     await interaction.response.defer(thinking=True)
     success_count = 0
@@ -11067,6 +11101,7 @@ async def stylechannels_command(interaction: discord.Interaction, style: str):
 @bot.tree.command(name="backup", description="Export the current server structure (roles, categories, channels) as a JSON template")
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 30.0, key=lambda i: (i.guild_id, i.user.id))
 async def backup_command(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=False)
     guild = interaction.guild
@@ -11186,6 +11221,7 @@ async def backup_command(interaction: discord.Interaction):
 @app_commands.describe(file="The backup JSON file generated by the /backup command")
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
 async def restore_command(interaction: discord.Interaction, file: discord.Attachment):
     if not file.filename.endswith(".json"):
         await interaction.response.send_message("❌ Please upload a valid JSON template file (.json).", ephemeral=True)
@@ -11236,6 +11272,7 @@ async def restore_command(interaction: discord.Interaction, file: discord.Attach
 
 @bot.tree.command(name="dynamicvoice", description="Set up a dynamic Join-to-Create voice channel system")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def dynamicvoice_command(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
@@ -11262,6 +11299,7 @@ async def dynamicvoice_command(interaction: discord.Interaction):
 @bot.tree.command(name="setlogchannel", description="Set the channel where all moderation logs and Auto-Mod flags will be sent")
 @app_commands.describe(channel="The text channel for moderation logs")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def setlogchannel_command(interaction: discord.Interaction, channel: discord.TextChannel):
     permissions = channel.permissions_for(interaction.guild.me)
@@ -11289,6 +11327,7 @@ async def setlogchannel_command(interaction: discord.Interaction, channel: disco
     ]
 )
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def automod_command(interaction: discord.Interaction, status: str, mode: str = "local"):
     if status == "on":
@@ -11313,6 +11352,7 @@ async def automod_command(interaction: discord.Interaction, status: str, mode: s
 @bot.tree.command(name="testautomod", description="Test how the AI Auto-Mod rates a specific text block")
 @app_commands.describe(text="The message content to test")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def testautomod_command(interaction: discord.Interaction, text: str):
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
@@ -11344,6 +11384,7 @@ async def testautomod_command(interaction: discord.Interaction, text: str):
     ]
 )
 @app_commands.default_permissions(manage_channels=True)
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def lockdown_command(interaction: discord.Interaction, status: str):
     await interaction.response.defer(thinking=True)
@@ -11377,7 +11418,7 @@ async def lockdown_command(interaction: discord.Interaction, status: str):
                     await asyncio.sleep(0.2)  # Avoid rate limiting
                 except Exception:
                     pass
-        await db.execute("DELETE FROM guild_resources WHERE guild_id = ? AND resource_type = 'locked_channels'", str(guild.id))
+        await db.delete_resources_by_type(guild.id, "locked_channels")
         await interaction.followup.send(f"🔓 **LOCKDOWN LIFTED!** Unlocked `{unlocked}` channels. Public chat is reopened.")
 
 
@@ -11385,6 +11426,7 @@ async def lockdown_command(interaction: discord.Interaction, status: str):
 @app_commands.describe(amount="Number of messages to delete (max 100)")
 @app_commands.default_permissions(manage_messages=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def purge_command(interaction: discord.Interaction, amount: int):
     amount = max(1, min(amount, 100))
     await interaction.response.defer(ephemeral=True)
@@ -11403,6 +11445,7 @@ async def purge_command(interaction: discord.Interaction, amount: int):
     channel="Target channel to snipe from (defaults to current channel)",
     index="Snipe history index (1 = most recent, 2 = 2nd most recent, etc.)"
 )
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def snipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, index: Optional[int] = 1):
     everyone_role = interaction.guild.default_role
@@ -11425,6 +11468,7 @@ async def snipe_slash_cmd(interaction: discord.Interaction, channel: Optional[di
     channel="Target channel to editsnipe from (defaults to current channel)",
     index="Edit history index (1 = most recent, 2 = 2nd most recent, etc.)"
 )
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def editsnipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, index: Optional[int] = 1):
     everyone_role = interaction.guild.default_role
@@ -11448,6 +11492,7 @@ async def editsnipe_slash_cmd(interaction: discord.Interaction, channel: Optiona
     user="Optional member whose 30-day persistent history to purge"
 )
 @app_commands.default_permissions(manage_messages=True)
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def clearsnipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, user: Optional[discord.Member] = None):
     if not is_protected(interaction.user) and not interaction.permissions.manage_messages:
@@ -11482,6 +11527,7 @@ async def clearsnipe_slash_cmd(interaction: discord.Interaction, channel: Option
         app_commands.Choice(name="✏️ Edited Messages Only", value="edited")
     ]
 )
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def usersnipe_slash_cmd(
     interaction: discord.Interaction,
@@ -11534,6 +11580,7 @@ async def usersnipe_slash_cmd(
     ]
 )
 @app_commands.default_permissions(administrator=True)
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def antighostping_command(interaction: discord.Interaction, status: str):
     if not is_protected(interaction.user) and not interaction.permissions.administrator:
@@ -11578,6 +11625,7 @@ async def antighostping_command(interaction: discord.Interaction, status: str):
     dm="Whether to deliver the reminder via Direct Message (default: true / private DM)"
 )
 @app_commands.rename(time_arg="time")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def remindme_slash_cmd(interaction: discord.Interaction, time_arg: str, note: str, dm: Optional[bool] = True):
     seconds = parse_duration_string(time_arg)
@@ -11658,6 +11706,7 @@ async def remindme_slash_cmd(interaction: discord.Interaction, time_arg: str, no
         app_commands.Choice(name="🗑️ Clear / Cancel All Reminders", value="clear")
     ]
 )
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def reminders_slash_cmd(interaction: discord.Interaction, action: Optional[str] = "list"):
     if action == "clear":
@@ -11702,6 +11751,7 @@ async def reminders_slash_cmd(interaction: discord.Interaction, action: Optional
 
 @bot.tree.command(name="afk", description="Set your AFK status so Sweety notifies anyone who pings you while you are away")
 @app_commands.describe(reason="Reason for going AFK (e.g. 'Eating lunch', 'Studying', 'Sleeping')")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def afk_slash_cmd(interaction: discord.Interaction, reason: Optional[str] = "AFK (Away From Keyboard)"):
     reason = (reason or "AFK (Away From Keyboard)").strip()[:200]
@@ -11725,6 +11775,7 @@ async def afk_slash_cmd(interaction: discord.Interaction, reason: Optional[str] 
 
 @bot.tree.command(name="buildteam", description="🏀 Open the interactive GM Draft Room to build your $15 All-Time NBA Starting 5")
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def buildteam_slash_cmd(interaction: discord.Interaction):
     view = BuildTeamView(author_id=interaction.user.id)
     embed = view.make_draft_embed()
@@ -11766,6 +11817,7 @@ async def myteam_slash_cmd(interaction: discord.Interaction, user: Optional[disc
 
 
 @bot.tree.command(name="teamqueue", description="⚔️ Join the live matchmaking queue to battle another member's $15 Dream Team")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def teamqueue_slash_cmd(interaction: discord.Interaction):
     await handle_team_queue(interaction=interaction)
@@ -11815,6 +11867,7 @@ async def battlecard_slash_cmd(interaction: discord.Interaction, opponent: disco
 @bot.tree.command(name="teambattle", description="⚔️ Challenge another member's $15 Dream Team to a tactical live NBA card battle!")
 @app_commands.describe(opponent="The member whose dream team you want to challenge")
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: discord.Member):
     if opponent.id == interaction.user.id:
         await interaction.response.send_message("❌ You cannot battle your own team! Challenge another server member or `@Sweety`.", ephemeral=True)
@@ -11905,6 +11958,7 @@ async def teambattle_slash_cmd(interaction: discord.Interaction, opponent: disco
 
 
 @bot.tree.command(name="teamleaderboard", description="🏀 View the server leaderboard of highest-rated $15 Dream Teams")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def teamleaderboard_slash_cmd(interaction: discord.Interaction):
     rows = await db.get_top_dream_teams(10)
@@ -11916,6 +11970,7 @@ async def teamleaderboard_slash_cmd(interaction: discord.Interaction):
 @app_commands.describe(category_name="Name of the category to place the channel in (defaults to '2K Mobile Hub')")
 @app_commands.default_permissions(manage_channels=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 10.0, key=lambda i: (i.guild_id, i.user.id))
 async def setupnbachannel_slash_cmd(interaction: discord.Interaction, category_name: Optional[str] = "2K Mobile Hub"):
     if not is_protected(interaction.user) and not interaction.permissions.manage_channels:
         await interaction.response.send_message("❌ You lack `Manage Channels` permission.", ephemeral=True)
@@ -11942,6 +11997,7 @@ async def setupnbachannel_slash_cmd(interaction: discord.Interaction, category_n
 
 @bot.tree.command(name="teamstats", description="🏀 View a member's NBA GM profile, rank ladder, career record, and badges")
 @app_commands.describe(user="The member whose GM profile you want to view (defaults to yourself)")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def teamstats_slash_cmd(interaction: discord.Interaction, user: Optional[discord.Member] = None):
     target = user or interaction.user
@@ -11963,6 +12019,7 @@ async def teamstats_slash_cmd(interaction: discord.Interaction, user: Optional[d
     app_commands.Choice(name="Top 20", value=20),
     app_commands.Choice(name="Top 25", value=25),
 ])
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def teamtop_slash_cmd(interaction: discord.Interaction, limit: Optional[int] = 10):
     lim = max(1, min(limit or 10, 25))
@@ -11973,6 +12030,7 @@ async def teamtop_slash_cmd(interaction: discord.Interaction, limit: Optional[in
 
 @bot.tree.command(name="dailynba", description="🏀 Face today's $15 Daily Boss team to earn daily GM wins")
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def dailynba_slash_cmd(interaction: discord.Interaction):
     boss_data = get_daily_challenge_lineup()
     row = await db.get_dream_team(interaction.user.id)
@@ -11998,6 +12056,7 @@ async def dailynba_slash_cmd(interaction: discord.Interaction):
     ]
 )
 @app_commands.default_permissions(manage_channels=True)
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def createchannel_slash_cmd(
     interaction: discord.Interaction, 
@@ -12057,6 +12116,7 @@ async def createchannel_slash_cmd(
 
 @bot.tree.command(name="hug", description="Give a warm, wholesome hug to someone or yourself")
 @app_commands.describe(member="The member you want to hug (leave blank to hug yourself)")
+@app_commands.checks.cooldown(1, 2.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def hug_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
@@ -12066,6 +12126,7 @@ async def hug_slash_cmd(interaction: discord.Interaction, member: Optional[disco
 
 @bot.tree.command(name="pat", description="Give gentle, wholesome headpats to someone")
 @app_commands.describe(member="The member you want to pat")
+@app_commands.checks.cooldown(1, 2.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def pat_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
@@ -12075,6 +12136,7 @@ async def pat_slash_cmd(interaction: discord.Interaction, member: Optional[disco
 
 @bot.tree.command(name="highfive", description="Share an epic, high-energy celebration high-five with someone")
 @app_commands.describe(member="The member you want to high-five")
+@app_commands.checks.cooldown(1, 2.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def highfive_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
@@ -12084,6 +12146,7 @@ async def highfive_slash_cmd(interaction: discord.Interaction, member: Optional[
 
 @bot.tree.command(name="wave", description="Wave hello or goodbye with a cheerful anime wave")
 @app_commands.describe(member="The member you want to wave at")
+@app_commands.checks.cooldown(1, 2.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def wave_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
@@ -12093,6 +12156,7 @@ async def wave_slash_cmd(interaction: discord.Interaction, member: Optional[disc
 
 @bot.tree.command(name="slap", description="Deliver a comedic cartoon/anime comedy slapstick")
 @app_commands.describe(member="The member you want to slap")
+@app_commands.checks.cooldown(1, 2.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def slap_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
@@ -12102,6 +12166,7 @@ async def slap_slash_cmd(interaction: discord.Interaction, member: Optional[disc
 
 @bot.tree.command(name="punch", description="Deliver a comedic superhero punch")
 @app_commands.describe(member="The member you want to punch")
+@app_commands.checks.cooldown(1, 2.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def punch_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
@@ -12111,6 +12176,7 @@ async def punch_slash_cmd(interaction: discord.Interaction, member: Optional[dis
 
 @bot.tree.command(name="kiss", description="Give a romantic anime kiss (Admins/Owner or authorized role only)")
 @app_commands.describe(member="The member you want to kiss")
+@app_commands.checks.cooldown(1, 2.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def kiss_slash_cmd(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     is_allowed, allowed_role_id = await can_use_kiss_command(interaction.guild, interaction.user)
@@ -12140,6 +12206,7 @@ async def kiss_slash_cmd(interaction: discord.Interaction, member: Optional[disc
     ]
 )
 @app_commands.default_permissions(administrator=True)
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def kissrole_slash_cmd(interaction: discord.Interaction, action: str = "view", role: Optional[discord.Role] = None):
     if not can_manage_kiss_role(interaction.guild, interaction.user):
@@ -12208,6 +12275,7 @@ async def kissrole_slash_cmd(interaction: discord.Interaction, action: str = "vi
     ]
 )
 @app_commands.default_permissions(administrator=True)
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def antiraid_command(interaction: discord.Interaction, mode: str):
     guild = interaction.guild
@@ -12257,6 +12325,7 @@ async def antiraid_command(interaction: discord.Interaction, mode: str):
 )
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 10.0, key=lambda i: (i.guild_id, i.user.id))
 async def voicerole_slash_cmd(interaction: discord.Interaction, action: str = "status", role: Optional[discord.Role] = None):
     if not is_protected(interaction.user) and not interaction.permissions.administrator:
         return await interaction.response.send_message("❌ Only Server Administrators can configure the voice activity role.", ephemeral=True)
@@ -12264,105 +12333,113 @@ async def voicerole_slash_cmd(interaction: discord.Interaction, action: str = "s
     guild = interaction.guild
     act = action.lower()
 
-    if act == "setup":
-        await interaction.response.defer()
-        await db.set_config(guild.id, "voice_activity_role_enabled", True)
-        v_role = await get_or_create_voice_role(guild)
-        if not v_role:
-            return await interaction.followup.send("❌ Could not create or find the @Voice Channel role. Please check bot role permissions.")
-        added, removed = await sync_guild_voice_roles(guild)
-        embed = discord.Embed(
-            title="🔊 Dynamic Voice Role Enabled",
-            description=(
-                f"✅ **Active Voice Role:** {v_role.mention} (`{v_role.id}`)\n\n"
-                f"• **Auto-Assignment:** Members will automatically receive {v_role.mention} when they join any voice channel.\n"
-                f"• **Auto-Removal:** The role is automatically removed when they leave voice.\n"
-                f"• **Pinging:** You can now mention {v_role.mention} in text channels to alert everyone currently in voice!\n"
-                f"• **Initial Sync:** `{added}` members assigned, `{removed}` cleaned up."
-            ),
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"Configured by {interaction.user.display_name}")
-        await interaction.followup.send(embed=embed)
+    try:
+        if act == "setup":
+            await interaction.response.defer()
+            await db.set_config(guild.id, "voice_activity_role_enabled", True)
+            v_role = await get_or_create_voice_role(guild)
+            if not v_role:
+                return await interaction.followup.send("❌ Could not create or find the @Voice Channel role. Please check bot role permissions.")
+            added, removed = await sync_guild_voice_roles(guild)
+            embed = discord.Embed(
+                title="🔊 Dynamic Voice Role Enabled",
+                description=(
+                    f"✅ **Active Voice Role:** {v_role.mention} (`{v_role.id}`)\n\n"
+                    f"• **Auto-Assignment:** Members will automatically receive {v_role.mention} when they join any voice channel.\n"
+                    f"• **Auto-Removal:** The role is automatically removed when they leave voice.\n"
+                    f"• **Pinging:** You can now mention {v_role.mention} in text channels to alert everyone currently in voice!\n"
+                    f"• **Initial Sync:** `{added}` members assigned, `{removed}` cleaned up."
+                ),
+                color=discord.Color.green()
+            )
+            embed.set_footer(text=f"Configured by {interaction.user.display_name}")
+            await interaction.followup.send(embed=embed)
 
-    elif act == "set":
-        if not role:
-            return await interaction.response.send_message("❌ Please specify a role: `/voicerole action:Set Custom Role role:@Role`", ephemeral=True)
-        await interaction.response.defer()
-        await db.set_config(guild.id, "voice_activity_role_enabled", True)
-        await db.set_config(guild.id, "voice_activity_role_id", role.id)
-        if not role.mentionable:
-            try:
-                await role.edit(mentionable=True, reason="Made mentionable for in-VC pinging")
-            except Exception:
-                pass
-        added, removed = await sync_guild_voice_roles(guild)
-        embed = discord.Embed(
-            title="🔊 Voice Role Configured",
-            description=(
-                f"✅ **Active Voice Role set to:** {role.mention}\n\n"
-                f"Members joining any voice channel will automatically get {role.mention} and lose it when leaving.\n"
-                f"• **Synced:** `{added}` assigned, `{removed}` cleaned up."
-            ),
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"Configured by {interaction.user.display_name}")
-        await interaction.followup.send(embed=embed)
-
-    elif act == "sync":
-        await interaction.response.defer()
-        added, removed = await sync_guild_voice_roles(guild)
-        v_role = await get_or_create_voice_role(guild)
-        role_str = v_role.mention if v_role else "Voice Role"
-        embed = discord.Embed(
-            title="🔄 Voice Role Re-Synced",
-            description=f"✅ Re-scanned all voice channels for {role_str}!\n• **Assigned to in-VC members:** `{added}`\n• **Removed from non-VC members:** `{removed}`",
-            color=discord.Color.blue()
-        )
-        await interaction.followup.send(embed=embed)
-
-    elif act == "disable":
-        await db.set_config(guild.id, "voice_activity_role_enabled", False)
-        v_role = await get_or_create_voice_role(guild)
-        if v_role:
-            for m in list(v_role.members):
+        elif act == "set":
+            if not role:
+                return await interaction.response.send_message("❌ Please specify a role: `/voicerole action:Set Custom Role role:@Role`", ephemeral=True)
+            await interaction.response.defer()
+            await db.set_config(guild.id, "voice_activity_role_enabled", True)
+            await db.set_config(guild.id, "voice_activity_role_id", role.id)
+            if not role.mentionable:
                 try:
-                    await m.remove_roles(v_role, reason="Disabled voice activity role system")
+                    await role.edit(mentionable=True, reason="Made mentionable for in-VC pinging")
                 except Exception:
                     pass
-        embed = discord.Embed(
-            title="🔴 Dynamic Voice Role Disabled",
-            description="The dynamic in-voice role assignment system has been turned off and cleaned up.",
-            color=discord.Color.orange()
-        )
-        await interaction.response.send_message(embed=embed)
+            added, removed = await sync_guild_voice_roles(guild)
+            embed = discord.Embed(
+                title="🔊 Voice Role Configured",
+                description=(
+                    f"✅ **Active Voice Role set to:** {role.mention}\n\n"
+                    f"Members joining any voice channel will automatically get {role.mention} and lose it when leaving.\n"
+                    f"• **Synced:** `{added}` assigned, `{removed}` cleaned up."
+                ),
+                color=discord.Color.green()
+            )
+            embed.set_footer(text=f"Configured by {interaction.user.display_name}")
+            await interaction.followup.send(embed=embed)
 
-    else:  # status
-        is_enabled = await db.get_config(guild.id, "voice_activity_role_enabled", True)
-        v_role = await get_or_create_voice_role(guild) if is_enabled else None
-        in_vc_count = sum(len(vc.members) for vc in list(guild.voice_channels) + list(getattr(guild, "stage_channels", [])))
-        embed = discord.Embed(
-            title=f"🔊 Dynamic Voice Role Status — {guild.name}",
-            color=discord.Color.green() if (is_enabled and v_role) else discord.Color.gold()
-        )
-        embed.add_field(name="Status", value="🟢 **Enabled**" if is_enabled else "🔴 **Disabled**", inline=True)
-        if v_role:
-            embed.add_field(name="Voice Role", value=f"✅ {v_role.mention} (`{v_role.id}`)", inline=True)
-            embed.add_field(name="Mentionable", value="✅ Yes (Can ping in text chat)" if v_role.mentionable else "⚠️ No", inline=True)
+        elif act == "sync":
+            await interaction.response.defer()
+            added, removed = await sync_guild_voice_roles(guild)
+            v_role = await get_or_create_voice_role(guild)
+            role_str = v_role.mention if v_role else "Voice Role"
+            embed = discord.Embed(
+                title="🔄 Voice Role Re-Synced",
+                description=f"✅ Re-scanned all voice channels for {role_str}!\n• **Assigned to in-VC members:** `{added}`\n• **Removed from non-VC members:** `{removed}`",
+                color=discord.Color.blue()
+            )
+            await interaction.followup.send(embed=embed)
+
+        elif act == "disable":
+            await db.set_config(guild.id, "voice_activity_role_enabled", False)
+            v_role = await get_or_create_voice_role(guild)
+            if v_role:
+                for m in list(v_role.members):
+                    try:
+                        await m.remove_roles(v_role, reason="Disabled voice activity role system")
+                    except Exception:
+                        pass
+            embed = discord.Embed(
+                title="🔴 Dynamic Voice Role Disabled",
+                description="The dynamic in-voice role assignment system has been turned off and cleaned up.",
+                color=discord.Color.orange()
+            )
+            await interaction.response.send_message(embed=embed)
+
+        else:  # status
+            is_enabled = await db.get_config(guild.id, "voice_activity_role_enabled", True)
+            v_role = await get_or_create_voice_role(guild) if is_enabled else None
+            in_vc_count = sum(len(vc.members) for vc in list(guild.voice_channels) + list(getattr(guild, "stage_channels", [])))
+            embed = discord.Embed(
+                title=f"🔊 Dynamic Voice Role Status — {guild.name}",
+                color=discord.Color.green() if (is_enabled and v_role) else discord.Color.gold()
+            )
+            embed.add_field(name="Status", value="🟢 **Enabled**" if is_enabled else "🔴 **Disabled**", inline=True)
+            if v_role:
+                embed.add_field(name="Voice Role", value=f"✅ {v_role.mention} (`{v_role.id}`)", inline=True)
+                embed.add_field(name="Mentionable", value="✅ Yes (Can ping in text chat)" if v_role.mentionable else "⚠️ No", inline=True)
+            else:
+                embed.add_field(name="Voice Role", value="*Not configured (Use `/voicerole setup`)*", inline=True)
+            embed.add_field(name="Active In-VC Members", value=f"🎙️ **{in_vc_count}** members currently in voice", inline=False)
+            embed.add_field(
+                name="ℹ️ How It Works",
+                value="When a member connects to any voice channel, they automatically receive this role. When they disconnect, the role is instantly removed so you can ping all active in-VC members without pinging offline or AFK members!",
+                inline=False
+            )
+            embed.set_footer(text="Use /voicerole setup to auto-configure or /voicerole set @Role to customize.")
+            await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        logger.error(f"Error in /voicerole: {e}", exc_info=True)
+        if interaction.response.is_done():
+            await interaction.followup.send(f"❌ Failed to configure voice role: {e}", ephemeral=True)
         else:
-            embed.add_field(name="Voice Role", value="*Not configured (Use `/voicerole setup`)*", inline=True)
-        embed.add_field(name="Active In-VC Members", value=f"🎙️ **{in_vc_count}** members currently in voice", inline=False)
-        embed.add_field(
-            name="ℹ️ How It Works",
-            value="When a member connects to any voice channel, they automatically receive this role. When they disconnect, the role is instantly removed so you can ping all active in-VC members without pinging offline or AFK members!",
-            inline=False
-        )
-        embed.set_footer(text="Use /voicerole setup to auto-configure or /voicerole set @Role to customize.")
-        await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(f"❌ Failed to configure voice role: {e}", ephemeral=True)
 
 
 @bot.command(name="voicerole", aliases=["setvoicerole", "vcrole", "setvcrole", "invoicerole"])
 @commands.has_permissions(administrator=True)
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 @commands.guild_only()
 async def voicerole_prefix_cmd(ctx: commands.Context, action: Optional[str] = "status", role: Optional[discord.Role] = None):
     """Configure dynamic voice role: !voicerole setup | !voicerole set @Role | !voicerole sync | !voicerole disable | !voicerole status"""
@@ -12470,6 +12547,7 @@ async def voicerole_prefix_cmd(ctx: commands.Context, action: Optional[str] = "s
 @app_commands.describe(seconds="Slowmode delay in seconds (0 to turn off, max 21600)", channel="Optional target channel")
 @app_commands.default_permissions(manage_channels=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def slowmode_command(interaction: discord.Interaction, seconds: int, channel: discord.TextChannel = None):
     target = channel or interaction.channel
     seconds = max(0, min(seconds, 21600))
@@ -12486,6 +12564,7 @@ async def slowmode_command(interaction: discord.Interaction, seconds: int, chann
 @bot.tree.command(name="panic", description="🚨 EMERGENCY: 1-click instant server lockdown, slowmode, and raid cleanup")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 30.0, key=lambda i: (i.guild_id, i.user.id))
 async def panic_command(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     guild = interaction.guild
@@ -12544,6 +12623,7 @@ async def panic_command(interaction: discord.Interaction):
 @app_commands.describe(description="Description of the category (e.g. 'VIP anime lounge with 4k stream rooms')")
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 10.0, key=lambda i: (i.guild_id, i.user.id))
 async def addcategory_command(interaction: discord.Interaction, description: str):
     # ── Layer 1: Rate limit (user cooldown) ────────────────────────────────
     allowed, remaining = _check_user_cooldown(interaction.user.id)
@@ -12600,6 +12680,7 @@ async def addcategory_command(interaction: discord.Interaction, description: str
 )
 @app_commands.default_permissions(manage_permissions=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 10.0, key=lambda i: (i.guild_id, i.user.id))
 async def aiperms_command(interaction: discord.Interaction, target: discord.abc.GuildChannel, description: str):
     # Rate limit (user cooldown)
     allowed, remaining = _check_user_cooldown(interaction.user.id)
@@ -12748,6 +12829,7 @@ async def aiperms_command(interaction: discord.Interaction, target: discord.abc.
 @bot.tree.command(name="teardown", description="Delete only the roles, categories, and channels created by this bot")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
 async def teardown_command(interaction: discord.Interaction):
     # Runtime Administrator Guard
     if not interaction.user.guild_permissions.administrator and interaction.user.id != getattr(interaction.guild, "owner_id", None) and interaction.user.id != 719932313919684670:
@@ -12793,6 +12875,7 @@ async def teardown_command(interaction: discord.Interaction):
 @app_commands.describe(member="The member to kick", reason="The reason for kicking")
 @app_commands.default_permissions(kick_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def kick_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be kicked.", ephemeral=True)
@@ -12833,6 +12916,7 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
 )
 @app_commands.default_permissions(ban_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def ban_command(interaction: discord.Interaction, member: discord.User, reason: str = "No reason provided", delete_message_days: int = 0):
     guild_member = interaction.guild.get_member(member.id)
     if is_protected(guild_member or member):
@@ -12866,6 +12950,7 @@ async def ban_command(interaction: discord.Interaction, member: discord.User, re
 @app_commands.describe(user_id="The Discord ID of the user to unban", reason="The reason for unbanning")
 @app_commands.default_permissions(ban_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def unban_command(interaction: discord.Interaction, user_id: str, reason: str = "No reason provided"):
     try:
         uid = int(user_id)
@@ -13027,6 +13112,7 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
 @app_commands.describe(member="The member to warn", reason="Reason for the warning")
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def warn_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be warned.", ephemeral=True)
@@ -13057,6 +13143,7 @@ async def warn_command(interaction: discord.Interaction, member: discord.Member,
 @app_commands.describe(member="The member to strike", reason="Reason for the strike")
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def strike_slash_cmd(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     await warn_command(interaction, member, reason)
 
@@ -13100,6 +13187,7 @@ class WarningActionView(discord.ui.View):
 @bot.tree.command(name="warnings", description="View all active warnings and infraction history for a member")
 @app_commands.describe(member="The member to check (defaults to yourself)")
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def warnings_command(interaction: discord.Interaction, member: discord.Member = None):
     target = member or interaction.user
     await interaction.response.defer()
@@ -13161,6 +13249,7 @@ async def warnings_command(interaction: discord.Interaction, member: discord.Mem
 ])
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def clearwarns_command(interaction: discord.Interaction, member: discord.Member, amount: Optional[int] = None):
     # Staff / Mod Permission Check
     if not is_protected(interaction.user):
@@ -13204,6 +13293,7 @@ async def clearwarns_command(interaction: discord.Interaction, member: discord.M
 @app_commands.describe(warn_id="The ID of the warning to delete (found using /warnings)")
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def delwarn_command(interaction: discord.Interaction, warn_id: int):
     if not is_protected(interaction.user):
         await interaction.response.send_message("❌ You do not have permission to delete warnings.", ephemeral=True)
@@ -13234,6 +13324,7 @@ async def delwarn_command(interaction: discord.Interaction, warn_id: int):
     app_commands.Choice(name="Top 25", value=25),
 ])
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def warnleaderboard_command(interaction: discord.Interaction, limit: Optional[int] = 10):
     await interaction.response.defer()
     limit = max(1, min(limit or 10, 25))
@@ -13291,6 +13382,7 @@ async def warnleaderboard_command(interaction: discord.Interaction, limit: Optio
     app_commands.Choice(name="Top 25", value=25),
 ])
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def warnlb_command(interaction: discord.Interaction, limit: Optional[int] = 10):
     await warnleaderboard_command(interaction, limit=limit)
 
@@ -13302,6 +13394,7 @@ async def warnlb_command(interaction: discord.Interaction, limit: Optional[int] 
 @bot.command(name="warn", aliases=["strike", "strikemember"])
 @commands.has_permissions(moderate_members=True)
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def warn_prefix_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
     """Issue a warning or strike to a member: !warn @member [reason] or !strike @member [reason]"""
     if is_protected(member):
@@ -13329,6 +13422,7 @@ async def warn_prefix_cmd(ctx: commands.Context, member: discord.Member, *, reas
 
 @bot.command(name="warnings", aliases=["warns"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def warnings_prefix_cmd(ctx: commands.Context, member: discord.Member = None):
     """Check active warnings for a member: !warnings [@member]"""
     target = member or ctx.author
@@ -13357,6 +13451,7 @@ async def warnings_prefix_cmd(ctx: commands.Context, member: discord.Member = No
 
 @bot.command(name="clearwarns", aliases=["clearwarnings", "removewarn"])
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def clearwarns_prefix_cmd(ctx: commands.Context, member: discord.Member, amount: Optional[int] = None):
     """Clear warnings for a member: !clearwarns @member [amount]"""
     if not is_protected(ctx.author):
@@ -13386,6 +13481,7 @@ async def clearwarns_prefix_cmd(ctx: commands.Context, member: discord.Member, a
 
 @bot.command(name="delwarn")
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def delwarn_prefix_cmd(ctx: commands.Context, warn_id: int):
     """Delete a specific warning by ID: !delwarn <id>"""
     if not is_protected(ctx.author):
@@ -13402,6 +13498,7 @@ async def delwarn_prefix_cmd(ctx: commands.Context, warn_id: int):
 
 @bot.command(name="warnleaderboard", aliases=["warnlb", "warnslb", "warningslb", "warningsleaderboard"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def warnleaderboard_prefix_cmd(ctx: commands.Context, limit: Optional[int] = 10):
     """View the server warnings leaderboard: !warnlb [limit]"""
     limit = max(1, min(limit or 10, 25))
@@ -13451,6 +13548,7 @@ async def warnleaderboard_prefix_cmd(ctx: commands.Context, limit: Optional[int]
 @bot.tree.command(name="sync", description="Purge duplicate slash commands and re-sync all commands cleanly")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 10.0, key=lambda i: (i.guild_id, i.user.id))
 async def sync_slash_cmd(interaction: discord.Interaction):
     """Slash command to purge duplicates and cleanly sync all global commands."""
     if not is_protected(interaction.user) and not interaction.permissions.administrator and interaction.user.id != 719932313919684670:
@@ -13483,6 +13581,7 @@ async def sync_slash_cmd(interaction: discord.Interaction):
 
 @bot.command(name="sync")
 @commands.guild_only()
+@commands.cooldown(1, 10.0, commands.BucketType.user)
 async def sync_prefix_cmd(ctx: commands.Context):
     """Instantly purges duplicate commands and syncs all slash commands cleanly: !sync"""
     if not is_protected(ctx.author) and not ctx.author.guild_permissions.administrator and ctx.author.id != 719932313919684670:
@@ -13510,6 +13609,7 @@ async def sync_prefix_cmd(ctx: commands.Context):
 
 @bot.command(name="snipe")
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def snipe_prefix_cmd(ctx: commands.Context, *args):
     """View recently deleted messages: !snipe [channel] [index]"""
     channel, index = parse_snipe_args(ctx, args)
@@ -13522,6 +13622,7 @@ async def snipe_prefix_cmd(ctx: commands.Context, *args):
 
 @bot.command(name="editsnipe", aliases=["esnipe"])
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def editsnipe_prefix_cmd(ctx: commands.Context, *args):
     """View recently edited messages: !editsnipe [channel] [index] (or !esnipe)"""
     channel, index = parse_snipe_args(ctx, args)
@@ -13534,6 +13635,7 @@ async def editsnipe_prefix_cmd(ctx: commands.Context, *args):
 
 @bot.command(name="clearsnipe", aliases=["csnipe", "clearsnipes"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def clearsnipe_prefix_cmd(ctx: commands.Context, channel: Optional[discord.TextChannel] = None, user: Optional[discord.Member] = None):
     """Clear deleted & edited snipe history: !clearsnipe [#channel] [@user] (or !csnipe)"""
     if not is_protected(ctx.author) and not ctx.author.guild_permissions.manage_messages:
@@ -13557,6 +13659,7 @@ async def clearsnipe_prefix_cmd(ctx: commands.Context, channel: Optional[discord
 
 @bot.command(name="usersnipe", aliases=["snipeuser", "usnipe", "userhistory", "usersnipes"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def usersnipe_prefix_cmd(ctx: commands.Context, user: Optional[discord.Member] = None, days: Optional[int] = 30):
     """View up to 30 days of deleted & edited message history for a specific user: !usersnipe @user [days=30]"""
     target_user = user or ctx.author
@@ -13581,6 +13684,7 @@ async def usersnipe_prefix_cmd(ctx: commands.Context, user: Optional[discord.Mem
 
 @bot.command(name="antighostping", aliases=["agp", "ghostping"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def antighostping_prefix_cmd(ctx: commands.Context, status: Optional[str] = "status"):
     """Configure or check Anti-Ghost-Ping shield: !antighostping [enable/disable/status]"""
     if not is_protected(ctx.author) and not ctx.author.guild_permissions.administrator:
@@ -13618,6 +13722,7 @@ async def antighostping_prefix_cmd(ctx: commands.Context, status: Optional[str] 
 
 @bot.command(name="remindme", aliases=["remind", "timer"])
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def remindme_prefix_cmd(ctx: commands.Context, time_arg: str, *, note: str = "Reminder"):
     """Set a private reminder: !remindme <time> <note> (e.g. !remindme 30m check oven)"""
     try:
@@ -13702,13 +13807,14 @@ async def remindme_prefix_cmd(ctx: commands.Context, time_arg: str, *, note: str
     else:
         try:
             await ctx.send(f"⚠️ {ctx.author.mention} Your DMs are closed! I scheduled your reminder, but will alert you in this channel.", delete_after=8)
-            await db.execute("UPDATE reminders SET delivery_method = 'channel' WHERE id = ?", rem_id)
+            await db.update_reminder_delivery(rem_id, "channel")
         except Exception:
             pass
 
 
 @bot.command(name="reminders", aliases=["timers"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def reminders_prefix_cmd(ctx: commands.Context, action: Optional[str] = "list"):
     """View active reminders privately: !reminders [list/clear]"""
     try:
@@ -13780,6 +13886,7 @@ async def reminders_prefix_cmd(ctx: commands.Context, action: Optional[str] = "l
 
 @bot.command(name="afk")
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def afk_prefix_cmd(ctx: commands.Context, *, reason: str = "AFK (Away From Keyboard)"):
     """Set your AFK status: !afk [reason]"""
     reason = reason.strip()[:200]
@@ -13803,6 +13910,7 @@ async def afk_prefix_cmd(ctx: commands.Context, *, reason: str = "AFK (Away From
 
 @bot.command(name="hug")
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def hug_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """Give a warm hug to someone: !hug [@user]"""
     target = member or ctx.author
@@ -13812,6 +13920,7 @@ async def hug_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member]
 
 @bot.command(name="pat", aliases=["headpat", "pats"])
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def pat_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """Give gentle headpats: !pat [@user]"""
     target = member or ctx.author
@@ -13821,6 +13930,7 @@ async def pat_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member]
 
 @bot.command(name="highfive", aliases=["h5", "high-five"])
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def highfive_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """Share an epic high five: !highfive [@user] or !h5 [@user]"""
     target = member or ctx.author
@@ -13830,6 +13940,7 @@ async def highfive_prefix_cmd(ctx: commands.Context, member: Optional[discord.Me
 
 @bot.command(name="wave", aliases=["hi", "hello", "bye"])
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def wave_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """Wave hello or goodbye: !wave [@user]"""
     target = member or ctx.author
@@ -13839,6 +13950,7 @@ async def wave_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member
 
 @bot.command(name="slap")
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def slap_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """Slap someone with comedic anime slapstick: !slap [@user]"""
     target = member or ctx.author
@@ -13848,6 +13960,7 @@ async def slap_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member
 
 @bot.command(name="punch")
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def punch_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """Deliver a superhero punch: !punch [@user]"""
     target = member or ctx.author
@@ -13857,6 +13970,7 @@ async def punch_prefix_cmd(ctx: commands.Context, member: Optional[discord.Membe
 
 @bot.command(name="kiss", aliases=["smooch", "kisses"])
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def kiss_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """Give a sweet anime kiss: !kiss [@user] (Admins, Owner, or configured role only)"""
     is_allowed, allowed_role_id = await can_use_kiss_command(ctx.guild, ctx.author)
@@ -13875,6 +13989,7 @@ async def kiss_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member
 
 @bot.command(name="kissrole", aliases=["setkissrole", "kissroles", "kisspermission"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def kissrole_prefix_cmd(ctx: commands.Context, action: Optional[str] = None, role: Optional[discord.Role] = None):
     """Configure permissions for the kiss command: !kissrole set @Role | !kissrole remove | !kissrole view"""
     if not can_manage_kiss_role(ctx.guild, ctx.author):
@@ -13941,6 +14056,7 @@ async def kissrole_prefix_cmd(ctx: commands.Context, action: Optional[str] = Non
 
 @bot.command(name="buildteam", aliases=["draftteam", "nbadraft"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def buildteam_prefix_cmd(ctx: commands.Context):
     """Open the interactive GM Draft Room to build your $15 All-Time NBA Starting 5: !buildteam"""
     view = BuildTeamView(author_id=ctx.author.id)
@@ -13980,6 +14096,7 @@ async def myteam_prefix_cmd(ctx: commands.Context, member: Optional[discord.Memb
 
 @bot.command(name="teamqueue", aliases=["matchmaking", "queue", "findmatch"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def teamqueue_prefix_cmd(ctx: commands.Context):
     """Join the live matchmaking queue to battle another member's $15 Dream Team: !teamqueue"""
     await handle_team_queue(ctx=ctx)
@@ -14024,6 +14141,7 @@ async def battlecard_prefix_cmd(ctx: commands.Context, opponent: discord.Member)
 
 @bot.command(name="teambattle", aliases=["finals", "nbabattle", "squadbattle"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member):
     """Challenge another member's $15 Dream Team to a tactical live NBA card battle: !teambattle @user"""
     if opponent.id == ctx.author.id:
@@ -14113,6 +14231,7 @@ async def teambattle_prefix_cmd(ctx: commands.Context, opponent: discord.Member)
 
 @bot.command(name="teamleaderboard", aliases=["teamlb", "nbaleaderboard", "nbalb"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def teamleaderboard_prefix_cmd(ctx: commands.Context):
     """View the server leaderboard of highest-rated $15 Dream Teams: !teamleaderboard or !teamlb"""
     rows = await db.get_top_dream_teams(10)
@@ -14122,6 +14241,7 @@ async def teamleaderboard_prefix_cmd(ctx: commands.Context):
 
 @bot.command(name="setupnbachannel", aliases=["setupdreamteam", "nbachannel"])
 @commands.guild_only()
+@commands.cooldown(1, 10.0, commands.BucketType.user)
 async def setupnbachannel_prefix_cmd(ctx: commands.Context, *, category_name: Optional[str] = "2K Mobile Hub"):
     """Create a dedicated NBA Dream Team channel in the 2K Mobile Hub category: !setupnbachannel [category_name]"""
     if not is_protected(ctx.author) and not ctx.author.guild_permissions.manage_channels:
@@ -14148,6 +14268,7 @@ async def setupnbachannel_prefix_cmd(ctx: commands.Context, *, category_name: Op
 
 @bot.command(name="teamstats", aliases=["gmstats", "mycareer", "nba_stats"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def teamstats_prefix_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     """View a member's NBA GM profile, rank ladder, career record, and badges: !teamstats [@user]"""
     target = member or ctx.author
@@ -14162,6 +14283,7 @@ async def teamstats_prefix_cmd(ctx: commands.Context, member: Optional[discord.M
 
 @bot.command(name="teamtop", aliases=["gmtop", "topgms", "gmlb"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def teamtop_prefix_cmd(ctx: commands.Context, limit: Optional[int] = 10):
     """View the top General Manager leaderboard ranked by career wins and rank tiers: !teamtop [limit]"""
     lim = max(1, min(limit or 10, 25))
@@ -14172,6 +14294,7 @@ async def teamtop_prefix_cmd(ctx: commands.Context, limit: Optional[int] = 10):
 
 @bot.command(name="dailynba", aliases=["dailyboss", "nbadaily", "dailygame"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def dailynba_prefix_cmd(ctx: commands.Context):
     """Face today's $15 Daily Boss team to earn daily GM wins: !dailynba"""
     boss_data = get_daily_challenge_lineup()
@@ -14186,6 +14309,7 @@ async def dailynba_prefix_cmd(ctx: commands.Context):
 
 @bot.command(name="createchannel", aliases=["addchannel", "makechannel"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def createchannel_prefix_cmd(ctx: commands.Context, name: str, category_name: Optional[str] = None):
     """Create a new channel inside a category: !createchannel <channel_name> [category_name]"""
     if not is_protected(ctx.author) and not ctx.author.guild_permissions.manage_channels:
@@ -14234,6 +14358,7 @@ async def createchannel_prefix_cmd(ctx: commands.Context, name: str, category_na
 )
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def mute_command(interaction: discord.Interaction, member: discord.Member, duration_minutes: int, reason: str = "No reason provided"):
     if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be muted.", ephemeral=True)
@@ -14263,6 +14388,7 @@ async def mute_command(interaction: discord.Interaction, member: discord.Member,
 @app_commands.describe(member="The member to unmute", reason="The reason for unmuting")
 @app_commands.default_permissions(moderate_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def unmute_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot unmute this member because they have a higher or equal role than you.", ephemeral=True)
@@ -14299,6 +14425,7 @@ async def unmute_command(interaction: discord.Interaction, member: discord.Membe
 @bot.command(name="unmute")
 @commands.has_permissions(moderate_members=True)
 @commands.guild_only()
+@commands.cooldown(1, 3.0, commands.BucketType.user)
 async def unmute_prefix_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
     """Remove timeout and @Muted role from a member: !unmute @member [reason]"""
     if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
@@ -14337,6 +14464,7 @@ async def unmute_prefix_cmd(ctx: commands.Context, member: discord.Member, *, re
 @app_commands.describe(member="The member to deafen", reason="The reason for deafening")
 @app_commands.default_permissions(deafen_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def deafen_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot deafen this member because they have a higher or equal role than you.", ephemeral=True)
@@ -14362,6 +14490,7 @@ async def deafen_command(interaction: discord.Interaction, member: discord.Membe
 @app_commands.describe(member="The member to undeafen", reason="The reason for undeafening")
 @app_commands.default_permissions(deafen_members=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def undeafen_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot undeafen this member because they have a higher or equal role than you.", ephemeral=True)
@@ -14399,6 +14528,7 @@ async def undeafen_command(interaction: discord.Interaction, member: discord.Mem
 )
 @app_commands.default_permissions(manage_roles=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def autorole_command(interaction: discord.Interaction, status: str, role: discord.Role = None):
     if status == "on":
         if not role:
@@ -14424,6 +14554,7 @@ async def autorole_command(interaction: discord.Interaction, status: str, role: 
 @app_commands.describe(member="The member to assign the role to", role="The role to assign")
 @app_commands.default_permissions(manage_roles=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def addrole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
     await interaction.response.defer(ephemeral=True)
     if role.managed:
@@ -14449,6 +14580,7 @@ async def addrole_command(interaction: discord.Interaction, member: discord.Memb
 @app_commands.describe(member="The member to remove the role from", role="The role to remove")
 @app_commands.default_permissions(manage_roles=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def removerole_command(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
     await interaction.response.defer(ephemeral=True)
     if role.managed:
@@ -14474,6 +14606,7 @@ async def removerole_command(interaction: discord.Interaction, member: discord.M
 @app_commands.describe(role="The role to assign to everyone")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 30.0, key=lambda i: (i.guild_id, i.user.id))
 async def roleall_command(interaction: discord.Interaction, role: discord.Role):
     if role.managed:
         await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually assigned.", ephemeral=True)
@@ -14530,6 +14663,7 @@ async def roleall_command(interaction: discord.Interaction, role: discord.Role):
 @bot.tree.command(name="roleallremove", description="Remove a role from every member in the server")
 @app_commands.describe(role="The role to remove from everyone")
 @app_commands.default_permissions(administrator=True)
+@app_commands.checks.cooldown(1, 30.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def roleallremove_command(interaction: discord.Interaction, role: discord.Role):
     if role.managed:
@@ -14593,6 +14727,7 @@ class UserProfileView(discord.ui.View):
 @bot.tree.command(name="whois", description="🔍 Deep audit of a member — bio, roles, permissions, activity & moderation history")
 @app_commands.describe(member="The server member to inspect (defaults to yourself)")
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def whois_command(interaction: discord.Interaction, member: discord.Member = None):
     target = member or interaction.user
     await interaction.response.defer(thinking=True)
@@ -14646,17 +14781,10 @@ async def whois_command(interaction: discord.Interaction, member: discord.Member
     timeout_count = 0
     cmd_count = 0
     try:
-        w_row = await db.fetch("SELECT COUNT(*) as c FROM warnings WHERE guild_id = $1 AND user_id = $2", str(interaction.guild.id), str(target.id))
-        if w_row:
-            warn_count = w_row[0]['c'] if isinstance(w_row[0], dict) else w_row[0][0]
-            
-        t_row = await db.fetch("SELECT COUNT(*) as c FROM timeouts WHERE guild_id = $1 AND user_id = $2", str(interaction.guild.id), str(target.id))
-        if t_row:
-            timeout_count = t_row[0]['c'] if isinstance(t_row[0], dict) else t_row[0][0]
-
-        c_row = await db.fetch("SELECT COUNT(*) as c FROM commands WHERE guild_id = $1 AND user_id = $2", str(interaction.guild.id), str(target.id))
-        if c_row:
-            cmd_count = c_row[0]['c'] if isinstance(c_row[0], dict) else c_row[0][0]
+        stats = await db.get_member_moderation_stats(interaction.guild.id, target.id)
+        warn_count = stats.get("warnings", 0)
+        timeout_count = stats.get("timeouts", 0)
+        cmd_count = stats.get("commands", 0)
     except Exception as db_err:
         logger.warning(f"Error fetching DB stats for whois: {db_err}")
 
@@ -14759,12 +14887,14 @@ async def whois_command(interaction: discord.Interaction, member: discord.Member
 @bot.tree.command(name="userinfo", description="🔍 Comprehensive member profile, roles, permissions & server audit")
 @app_commands.describe(member="The member to inspect (defaults to yourself)")
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def userinfo_command(interaction: discord.Interaction, member: discord.Member = None):
     await whois_command(interaction, member)
 
 
 @bot.command(name="whois", aliases=["userinfo", "profile", "user"])
 @commands.guild_only()
+@commands.cooldown(1, 5.0, commands.BucketType.user)
 async def whois_prefix_cmd(ctx: commands.Context, member: discord.Member = None):
     """Deep audit and profile information for a member: !whois [@member]"""
     target = member or ctx.author
@@ -14809,15 +14939,10 @@ async def whois_prefix_cmd(ctx: commands.Context, member: discord.Member = None)
         timeout_count = 0
         cmd_count = 0
         try:
-            w_row = await db.fetch("SELECT COUNT(*) as c FROM warnings WHERE guild_id = $1 AND user_id = $2", str(ctx.guild.id), str(target.id))
-            if w_row:
-                warn_count = w_row[0]['c'] if isinstance(w_row[0], dict) else w_row[0][0]
-            t_row = await db.fetch("SELECT COUNT(*) as c FROM timeouts WHERE guild_id = $1 AND user_id = $2", str(ctx.guild.id), str(target.id))
-            if t_row:
-                timeout_count = t_row[0]['c'] if isinstance(t_row[0], dict) else t_row[0][0]
-            c_row = await db.fetch("SELECT COUNT(*) as c FROM commands WHERE guild_id = $1 AND user_id = $2", str(ctx.guild.id), str(target.id))
-            if c_row:
-                cmd_count = c_row[0]['c'] if isinstance(c_row[0], dict) else c_row[0][0]
+            stats = await db.get_member_moderation_stats(ctx.guild.id, target.id)
+            warn_count = stats.get("warnings", 0)
+            timeout_count = stats.get("timeouts", 0)
+            cmd_count = stats.get("commands", 0)
         except Exception:
             pass
 
@@ -14903,6 +15028,7 @@ async def whois_prefix_cmd(ctx: commands.Context, member: discord.Member = None)
 )
 @app_commands.default_permissions(manage_messages=True)
 @app_commands.guild_only()
+@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id))
 async def embed_command(
     interaction: discord.Interaction, 
     title: str, 
@@ -14987,6 +15113,8 @@ async def embed_command(
     question="The question or prompt you want to ask Sweety",
     image="Optional image or GIF attachment for Sweety to analyze"
 )
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def ask_command(interaction: discord.Interaction, question: str, image: Optional[discord.Attachment] = None):
     await interaction.response.defer(thinking=True)
     
@@ -15057,6 +15185,8 @@ async def ask_command(interaction: discord.Interaction, question: str, image: Op
 
 
 @bot.command(name="ask")
+@commands.cooldown(1, 3.0, commands.BucketType.user)
+@commands.guild_only()
 async def ask_prefix_cmd(ctx: commands.Context, *, question: str = ""):
     """Ask Sweety a question with personal memory: !ask <question>"""
     # Check if image attached to message
@@ -15106,7 +15236,6 @@ async def ask_prefix_cmd(ctx: commands.Context, *, question: str = ""):
 
 
 @bot.tree.command(name="setaireply", description="Configure AI Auto-Reply: set target channel and question mark mode")
-
 @app_commands.describe(
     enabled="Turn AI Auto-Reply on or off",
     channel="Channel to restrict AI replies to (leave blank to allow all channels)",
@@ -15114,6 +15243,8 @@ async def ask_prefix_cmd(ctx: commands.Context, *, question: str = ""):
     reset_channel="Set to True to remove channel lock and allow in all channels"
 )
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def set_ai_reply_command(
     interaction: discord.Interaction,
     enabled: bool = None,
@@ -15157,6 +15288,8 @@ async def set_ai_reply_command(
 
 
 @bot.tree.command(name="showaireply", description="View current AI Auto-Reply channel & question mark settings")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def show_ai_reply_command(interaction: discord.Interaction):
     guild_id = interaction.guild.id
     is_enabled = await db.get_config(guild_id, "ai_auto_reply", False)
@@ -15182,6 +15315,8 @@ async def show_ai_reply_command(interaction: discord.Interaction):
 
 @bot.tree.command(name="toggleaireply", description="Quick toggle automatic AI answers in server chat")
 @app_commands.default_permissions(manage_guild=True)
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def toggle_ai_reply_command(interaction: discord.Interaction):
     current = await db.get_config(interaction.guild.id, "ai_auto_reply", False)
     new_state = not current
@@ -15191,6 +15326,7 @@ async def toggle_ai_reply_command(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="creator", description="Discover who created and engineered this bot")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def creator_command(interaction: discord.Interaction):
     embed = check_creator_query("who made you")
     if embed:
@@ -15200,6 +15336,8 @@ async def creator_command(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="staff", description="Display the complete server staff team (Owner, Admins, Mods)")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def staff_command(interaction: discord.Interaction):
     embed = check_staff_query("who is staff", interaction.guild)
     if embed:
@@ -15209,6 +15347,8 @@ async def staff_command(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="owner", description="Show the server owner and founder")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def owner_command(interaction: discord.Interaction):
     embed = check_staff_query("who is owner", interaction.guild)
     if embed:
@@ -15218,6 +15358,8 @@ async def owner_command(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="admins", description="List all server administrators")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def admins_command(interaction: discord.Interaction):
     embed = check_staff_query("who is admin", interaction.guild)
     if embed:
@@ -15227,6 +15369,8 @@ async def admins_command(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="mods", description="List all server moderators and staff")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
+@app_commands.guild_only()
 async def mods_command(interaction: discord.Interaction):
     embed = check_staff_query("who is moderator", interaction.guild)
     if embed:
@@ -15327,7 +15471,7 @@ async def on_member_join(member):
 async def on_guild_channel_delete(channel):
     """Clean up references to manually deleted channels from database resources."""
     try:
-        await db.execute("DELETE FROM guild_resources WHERE resource_id = ?", channel.id)
+        await db.delete_resource_by_id(channel.id)
         logger.info(f"Cleaned up manually deleted channel {channel.name} ({channel.id}) from database.")
     except Exception as e:
         logger.error(f"Error cleaning up deleted channel {channel.id}: {e}")
@@ -15336,7 +15480,7 @@ async def on_guild_channel_delete(channel):
 async def on_guild_role_delete(role):
     """Clean up references to manually deleted roles from database resources."""
     try:
-        await db.execute("DELETE FROM guild_resources WHERE resource_id = ?", role.id)
+        await db.delete_resource_by_id(role.id)
         logger.info(f"Cleaned up manually deleted role {role.name} ({role.id}) from database.")
     except Exception as e:
         logger.error(f"Error cleaning up deleted role {role.id}: {e}")
@@ -15466,7 +15610,7 @@ async def on_voice_state_update(member, before, after):
             if temp_channel:
                 try:
                     await temp_channel.delete(reason="Failed to move creator to temporary channel")
-                    await db.execute("DELETE FROM guild_resources WHERE guild_id = ? AND resource_id = ?", str(guild.id), temp_channel.id)
+                    await db.delete_resource(guild.id, temp_channel.id)
                     bot.temp_voice_channel_ids.discard(temp_channel.id)
                 except Exception:
                     pass
@@ -15476,7 +15620,7 @@ async def on_voice_state_update(member, before, after):
         if len(before.channel.members) == 0:
             try:
                 await before.channel.delete(reason="Temporary voice channel empty")
-                await db.execute("DELETE FROM guild_resources WHERE guild_id = ? AND resource_id = ?", str(guild.id), before.channel.id)
+                await db.delete_resource(guild.id, before.channel.id)
                 bot.temp_voice_channel_ids.discard(before.channel.id)
             except Exception as e:
                 logger.error(f"Error deleting empty temp channel: {e}")
