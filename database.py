@@ -394,6 +394,15 @@ class DatabaseManager:
             """,
             """
             CREATE INDEX IF NOT EXISTS idx_obsidian_notes_lookup ON obsidian_notes(user_id, folder, updated_at);
+            """,
+            # Permanent User Blacklist Table
+            """
+            CREATE TABLE IF NOT EXISTS blacklisted_users (
+                user_id TEXT PRIMARY KEY,
+                reason TEXT DEFAULT 'No reason provided',
+                blacklisted_by TEXT,
+                blacklisted_at REAL NOT NULL
+            );
             """
         ]
         
@@ -1444,6 +1453,59 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error clearing obsidian notes in DB: {e}")
             return 0
+
+    async def add_blacklist_user(self, user_id: Any, reason: str = "No reason provided", blacklisted_by: Any = None) -> bool:
+        """Adds a user to the permanent global blacklist."""
+        now = time.time()
+        if not self.is_postgres:
+            query = "INSERT OR REPLACE INTO blacklisted_users (user_id, reason, blacklisted_by, blacklisted_at) VALUES (?, ?, ?, ?)"
+        else:
+            query = """
+            INSERT INTO blacklisted_users (user_id, reason, blacklisted_by, blacklisted_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (user_id) DO UPDATE SET reason = EXCLUDED.reason, blacklisted_by = EXCLUDED.blacklisted_by, blacklisted_at = EXCLUDED.blacklisted_at;
+            """
+        try:
+            await self.execute(query, str(user_id), str(reason)[:500], str(blacklisted_by) if blacklisted_by else None, now)
+            return True
+        except Exception as e:
+            logger.error(f"Error adding user to blacklist in DB: {e}")
+            return False
+
+    async def remove_blacklist_user(self, user_id: Any) -> bool:
+        """Removes a user from the global blacklist."""
+        if not self.is_postgres:
+            query = "DELETE FROM blacklisted_users WHERE user_id = ?"
+        else:
+            query = "DELETE FROM blacklisted_users WHERE user_id = $1"
+        try:
+            await self.execute(query, str(user_id))
+            return True
+        except Exception as e:
+            logger.error(f"Error removing user from blacklist in DB: {e}")
+            return False
+
+    async def is_user_blacklisted(self, user_id: Any) -> bool:
+        """Checks if a user is currently blacklisted."""
+        if not self.is_postgres:
+            query = "SELECT user_id FROM blacklisted_users WHERE user_id = ? LIMIT 1"
+        else:
+            query = "SELECT user_id FROM blacklisted_users WHERE user_id = $1 LIMIT 1"
+        try:
+            rows = await self.fetch(query, str(user_id))
+            return len(rows) > 0
+        except Exception as e:
+            logger.error(f"Error checking blacklist status in DB: {e}")
+            return False
+
+    async def get_blacklisted_users(self) -> List[Dict[str, Any]]:
+        """Returns all currently blacklisted users."""
+        query = "SELECT * FROM blacklisted_users ORDER BY blacklisted_at DESC"
+        try:
+            return await self.fetch(query)
+        except Exception as e:
+            logger.error(f"Error fetching blacklisted users from DB: {e}")
+            return []
 
     async def close(self):
         """Closes all database connections."""

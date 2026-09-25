@@ -23,6 +23,18 @@ from typing import Optional, Union, List, Dict, Any, Tuple
 from PIL import Image, ImageDraw, ImageFont
 from database import db
 
+# Load environment variables from .env
+load_dotenv()
+
+# ── Security: Guild Whitelist Configuration ────────────────────────────────
+ALLOWED_GUILD_IDS_RAW = os.getenv("ALLOWED_GUILD_IDS", "").strip()
+ALLOWED_GUILDS: set[int] = set()
+if ALLOWED_GUILD_IDS_RAW:
+    for _gid in ALLOWED_GUILD_IDS_RAW.split(","):
+        _gid = _gid.strip()
+        if _gid.isdigit():
+            ALLOWED_GUILDS.add(int(_gid))
+
 # ── Security: Rate Limit Trackers ──────────────────────────────────────────
 _USER_COOLDOWN_SECONDS = 5
 _SERVER_HOURLY_LIMIT = 100
@@ -1357,6 +1369,16 @@ def is_staff_or_immune(member) -> bool:
     """Alias for backwards compatibility — delegates 100% to is_protected."""
     return is_protected(member)
 
+def is_creator(user: Union[discord.Member, discord.User, int, None]) -> bool:
+    """Returns True if user is the Bot Creator/Owner (ID: 719932313919684670)."""
+    if user is None:
+        return False
+    uid = getattr(user, "id", user)
+    try:
+        return int(uid) == 719932313919684670
+    except (ValueError, TypeError):
+        return False
+
 
 async def auto_mute_user(member: discord.Member, guild: discord.Guild, channel: discord.TextChannel, reason: str, message_content: str, duration_minutes: int = 20):
     """Automatically times out (mutes) a user for duration_minutes. Server owner, admins, and mods are 100% immune."""
@@ -1811,12 +1833,13 @@ class UserSnipePaginationView(discord.ui.View):
         if is_deleted:
             content = entry.get("content", "")
             if content:
-                embed.add_field(name="💬 Message Content", value=f">>> {content[:1000]}", inline=False)
+                safe_content = discord.utils.escape_mentions(content)
+                embed.add_field(name="💬 Message Content", value=f">>> {safe_content[:1000]}", inline=False)
             else:
                 embed.add_field(name="💬 Message Content", value="*[No text content]*", inline=False)
         else:
-            b_cnt = entry.get("before_content", "") or "*[No text]*"
-            a_cnt = entry.get("after_content", "") or "*[No text]*"
+            b_cnt = discord.utils.escape_mentions(entry.get("before_content", "") or "*[No text]*")
+            a_cnt = discord.utils.escape_mentions(entry.get("after_content", "") or "*[No text]*")
             embed.add_field(name="🔴 Before Edit", value=f">>> {b_cnt[:950]}", inline=False)
             embed.add_field(name="🟢 After Edit", value=f">>> {a_cnt[:950]}", inline=False)
 
@@ -1959,17 +1982,18 @@ def create_snipe_embed(channel: Union[discord.TextChannel, discord.Thread, disco
 
     # 1. Main Deleted Message Content
     if content:
-        if len(content) > 2000:
-            embed.description = f">>> {content[:1990]}..."
+        safe_content = discord.utils.escape_mentions(content)
+        if len(safe_content) > 2000:
+            embed.description = f">>> {safe_content[:1990]}..."
         else:
-            embed.description = f">>> {content}"
+            embed.description = f">>> {safe_content}"
     else:
         embed.description = "*[No text content — Media / Attachment only]*"
 
     # 2. Reply Context (if replying to another message)
     if reply_info:
         if "author_display" in reply_info:
-            reply_text = f"↩️ Replying to **{reply_info['author_display']}** (<@{reply_info['author_id']}>):\n> {reply_info['content']}"
+            reply_text = f"↩️ Replying to **{reply_info['author_display']}** (<@{reply_info['author_id']}>):\n> {discord.utils.escape_mentions(reply_info['content'])}"
             if reply_info.get("jump_url"):
                 reply_text += f" • [Jump to Original]({reply_info['jump_url']})"
             embed.add_field(name="💬 Context", value=reply_text[:1000], inline=False)
@@ -1980,7 +2004,7 @@ def create_snipe_embed(channel: Union[discord.TextChannel, discord.Thread, disco
     if mentions:
         embed.add_field(
             name=f"👥 Mentions & Pings ({len(mentions)})",
-            value=", ".join(mentions[:10])[:1000],
+            value=discord.utils.escape_mentions(", ".join(mentions[:10]))[:1000],
             inline=False
         )
 
@@ -2094,12 +2118,12 @@ def create_editsnipe_embed(channel: Union[discord.TextChannel, discord.Thread, d
 
     embed.add_field(
         name="🔴 Original Content (Before Edit)",
-        value=f">>> {before_content[:950]}" if before_content else "*[Empty]*",
+        value=f">>> {discord.utils.escape_mentions(before_content[:950])}" if before_content else "*[Empty]*",
         inline=False
     )
     embed.add_field(
         name="🟢 Modified Content (After Edit)",
-        value=f">>> {after_content[:950]}" if after_content else "*[Empty]*",
+        value=f">>> {discord.utils.escape_mentions(after_content[:950])}" if after_content else "*[Empty]*",
         inline=False
     )
 
@@ -2238,8 +2262,10 @@ async def handle_ghost_ping_detection(message: discord.Message):
         content = (message.content or "").strip()
         if not content:
             content = "*[No text content / File Attachment]*"
-        elif len(content) > 1000:
-            content = content[:990] + "..."
+        else:
+            content = discord.utils.escape_mentions(content)
+            if len(content) > 1000:
+                content = content[:990] + "..."
 
         embed.add_field(
             name="💬 Original Message Content",
@@ -2345,77 +2371,83 @@ _reminders_last_db_fetch: float = 0.0
 
 @tasks.loop(seconds=10)
 async def reminder_delivery_loop():
-    """Background task checking in-memory reminder queue with low database load."""
-    global _cached_reminders, _reminders_last_db_fetch
-    now = time.time()
-    
-    # Sync upcoming reminders from DB every 10 minutes or on startup
-    if (now - _reminders_last_db_fetch) > 600 or not _cached_reminders:
-        try:
-            due_check = await db.get_due_reminders(now + 3600)
-            _cached_reminders = list(due_check) if due_check else []
-            _reminders_last_db_fetch = now
-        except Exception as sync_err:
-            logger.debug(f"Reminders cache sync error: {sync_err}")
-
-    if not _cached_reminders:
-        return
-
-    due = []
-    remaining = []
-    for r in _cached_reminders:
-        r_time = float(r.get("remind_at", 0) if isinstance(r, dict) else r[5])
-        if r_time <= now:
-            due.append(r)
-        else:
-            remaining.append(r)
-
-    _cached_reminders = remaining
-
-    for r in due:
-        rem_id = r["id"] if isinstance(r, dict) and "id" in r else r[0]
-        user_id = int(r["user_id"] if isinstance(r, dict) and "user_id" in r else r[1])
-        guild_id = r["guild_id"] if isinstance(r, dict) and "guild_id" in r else r[2]
-        channel_id = int(r["channel_id"] if isinstance(r, dict) and "channel_id" in r else r[3])
-        note = r["reminder_text"] if isinstance(r, dict) and "reminder_text" in r else r[4]
-        created_at = float(r["created_at"] if isinstance(r, dict) and "created_at" in r else r[6])
-        method = r.get("delivery_method", "channel") if isinstance(r, dict) else (r[7] if len(r) > 7 else "channel")
-
-        delivered = False
-        created_ts = int(created_at)
-
-        embed = discord.Embed(
-            title="⏰ Reminder Alert!",
-            description=f"Hey <@{user_id}>! Here is the reminder you scheduled <t:{created_ts}:R>:",
-            color=discord.Color.from_rgb(255, 170, 0)
-        )
-        embed.add_field(name="📝 Note", value=f">>> {note[:1000]}", inline=False)
-        embed.set_footer(text="Sweety Productivity Suite • Set more reminders with /remindme")
-        embed.timestamp = discord.utils.utcnow()
-
-        if method == "dm":
+    """Background task checking in-memory reminder queue with crash-proof isolation."""
+    try:
+        global _cached_reminders, _reminders_last_db_fetch
+        now = time.time()
+        
+        # Sync upcoming reminders from DB every 10 minutes or on startup
+        if (now - _reminders_last_db_fetch) > 600 or not _cached_reminders:
             try:
-                user_obj = bot.get_user(user_id) or await bot.fetch_user(user_id)
-                if user_obj:
-                    await user_obj.send(embed=embed)
-                    delivered = True
-            except Exception as dm_err:
-                logger.warning(f"Could not DM reminder to user {user_id}: {dm_err}")
+                due_check = await db.get_due_reminders(now + 3600)
+                _cached_reminders = list(due_check) if due_check else []
+                _reminders_last_db_fetch = now
+            except Exception as sync_err:
+                logger.debug(f"Reminders cache sync error: {sync_err}")
 
-        if not delivered:
-            target_chan = bot.get_channel(channel_id)
-            if target_chan and hasattr(target_chan, "send"):
+        if not _cached_reminders:
+            return
+
+        due = []
+        remaining = []
+        for r in _cached_reminders:
+            r_time = float(r.get("remind_at", 0) if isinstance(r, dict) else r[5])
+            if r_time <= now:
+                due.append(r)
+            else:
+                remaining.append(r)
+
+        _cached_reminders = remaining
+
+        for r in due:
+            try:
+                rem_id = r["id"] if isinstance(r, dict) and "id" in r else r[0]
+                user_id = int(r["user_id"] if isinstance(r, dict) and "user_id" in r else r[1])
+                guild_id = r["guild_id"] if isinstance(r, dict) and "guild_id" in r else r[2]
+                channel_id = int(r["channel_id"] if isinstance(r, dict) and "channel_id" in r else r[3])
+                note = r["reminder_text"] if isinstance(r, dict) and "reminder_text" in r else r[4]
+                created_at = float(r["created_at"] if isinstance(r, dict) and "created_at" in r else r[6])
+                method = r.get("delivery_method", "channel") if isinstance(r, dict) else (r[7] if len(r) > 7 else "channel")
+
+                delivered = False
+                created_ts = int(created_at)
+
+                embed = discord.Embed(
+                    title="⏰ Reminder Alert!",
+                    description=f"Hey <@{user_id}>! Here is the reminder you scheduled <t:{created_ts}:R>:",
+                    color=discord.Color.from_rgb(255, 170, 0)
+                )
+                embed.add_field(name="📝 Note", value=f">>> {discord.utils.escape_mentions(note[:1000])}", inline=False)
+                embed.set_footer(text="Sweety Productivity Suite • Set more reminders with /remindme")
+                embed.timestamp = discord.utils.utcnow()
+
+                if method == "dm":
+                    try:
+                        user_obj = bot.get_user(user_id) or await bot.fetch_user(user_id)
+                        if user_obj:
+                            await user_obj.send(embed=embed)
+                            delivered = True
+                    except Exception as dm_err:
+                        logger.warning(f"Could not DM reminder to user {user_id}: {dm_err}")
+
+                if not delivered:
+                    target_chan = bot.get_channel(channel_id)
+                    if target_chan and hasattr(target_chan, "send"):
+                        try:
+                            alert_msg = f"🔔 <@{user_id}>, your reminder is up!" if method == "channel" else f"🔔 <@{user_id}>, your reminder is up! (Sent here because DM delivery failed)"
+                            await target_chan.send(content=alert_msg, embed=embed)
+                            delivered = True
+                        except Exception as ch_err:
+                            logger.warning(f"Could not send reminder in channel {channel_id}: {ch_err}")
+
                 try:
-                    alert_msg = f"🔔 <@{user_id}>, your reminder is up!" if method == "channel" else f"🔔 <@{user_id}>, your reminder is up! (Sent here because DM delivery failed)"
-                    await target_chan.send(content=alert_msg, embed=embed)
-                    delivered = True
-                except Exception as ch_err:
-                    logger.warning(f"Could not send reminder in channel {channel_id}: {ch_err}")
-
-        try:
-            await db.delete_reminder(rem_id)
-        except Exception:
-            pass
+                    await db.delete_reminder(rem_id)
+                except Exception:
+                    pass
+            except Exception as single_rem_err:
+                logger.error(f"Error delivering individual reminder: {single_rem_err}")
+    except Exception as e:
+        logger.error(f"Error in reminder_delivery_loop: {e}", exc_info=True)
 
 # ── $15 All-Time NBA Dream Team Builder & Battle Engine ──────────────────────
 
@@ -8320,6 +8352,7 @@ async def teardown_guild(guild):
 # ── Security & Rate Limit Helpers for Production Hardening ────────────────
 _image_render_timestamps: dict[int, list[float]] = {}
 _roleall_cooldowns: dict[int, float] = {}
+_roleall_active_locks: set[int] = set()
 
 def check_image_render_limit(guild_id: int, max_renders: int = 5, window: int = 60) -> bool:
     """Returns True if within rate limit (max 5 image renders per minute per server)."""
@@ -9559,7 +9592,84 @@ class GeminiBot(commands.Bot):
         except Exception as mute_loop_err:
             logger.warning(f"Could not start check_expired_mutes loop: {mute_loop_err}")
 
+        # Step 10: Whitelist Verification on Startup
+        if ALLOWED_GUILDS:
+            for g in list(self.guilds):
+                if g.id not in ALLOWED_GUILDS:
+                    logger.warning(f"🚫 Startup Whitelist Sweep: Leaving unauthorized guild '{g.name}' (ID: {g.id})")
+                    try:
+                        await g.leave()
+                    except Exception as gle:
+                        logger.error(f"Failed to leave unauthorized guild {g.id}: {gle}")
+
 bot = GeminiBot()
+
+# ── Discord Error Logging Channel Helper ───────────────────────────────────
+ERROR_LOG_CHANNEL_ID = os.getenv("ERROR_LOG_CHANNEL_ID", "").strip()
+
+async def log_error_to_channel(command_name: str, error: Exception, guild: Optional[discord.Guild] = None, user: Optional[Union[discord.User, discord.Member]] = None):
+    """Dispatches unhandled command exceptions to a dedicated Discord error log channel or mod log."""
+    try:
+        target_channel = None
+        if ERROR_LOG_CHANNEL_ID and ERROR_LOG_CHANNEL_ID.isdigit():
+            target_channel = bot.get_channel(int(ERROR_LOG_CHANNEL_ID))
+        
+        if not target_channel and guild:
+            target_channel = await get_mod_log_channel(guild)
+
+        if target_channel:
+            embed = discord.Embed(
+                title="⚠️ Command Exception Error",
+                color=discord.Color.red(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="Command", value=f"`{command_name}`", inline=True)
+            if user:
+                embed.add_field(name="User", value=f"{user.mention} (`{user.id}`)", inline=True)
+            if guild:
+                embed.add_field(name="Guild", value=f"**{guild.name}** (`{guild.id}`)", inline=True)
+            else:
+                embed.add_field(name="Context", value="Direct Message (DM)", inline=True)
+            
+            err_str = str(error) or type(error).__name__
+            embed.add_field(name="Error Detail", value=f"```{err_str[:1000]}```", inline=False)
+            await target_channel.send(embed=embed)
+    except Exception as log_err:
+        logger.debug(f"Could not dispatch error to Discord channel: {log_err}")
+
+# ── Global User Blacklist Guards ───────────────────────────────────────────
+@bot.check
+async def globally_block_blacklisted_users_prefix(ctx: commands.Context) -> bool:
+    """Global check that blocks blacklisted users from running prefix commands."""
+    try:
+        if await db.is_user_blacklisted(ctx.author.id):
+            try:
+                await ctx.reply("🚫 **Access Denied:** Your account has been globally blacklisted from using Sweety.", mention_author=False)
+            except Exception:
+                pass
+            return False
+    except Exception as e:
+        logger.debug(f"Error checking user blacklist in prefix check: {e}")
+    return True
+
+async def globally_block_blacklisted_users_interaction(interaction: discord.Interaction) -> bool:
+    """Global interaction check that blocks blacklisted users from running slash commands or UI components."""
+    try:
+        if await db.is_user_blacklisted(interaction.user.id):
+            msg = "🚫 **Access Denied:** Your account has been globally blacklisted from using Sweety."
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(msg, ephemeral=True)
+                else:
+                    await interaction.response.send_message(msg, ephemeral=True)
+            except Exception:
+                pass
+            return False
+    except Exception as e:
+        logger.debug(f"Error checking user blacklist in interaction check: {e}")
+    return True
+
+bot.tree.interaction_check = globally_block_blacklisted_users_interaction
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -9578,7 +9688,8 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     elif isinstance(error, app_commands.CheckFailure):
         msg = f"🚫 You do not have permission or meet the requirements to run `/{cmd_name}`."
     else:
-        msg = f"❌ An error occurred while executing `/{cmd_name}`: {error}"
+        msg = f"❌ An error occurred while executing `/{cmd_name}`. Our developers have been notified."
+        asyncio.create_task(log_error_to_channel(f"/{cmd_name}", error, interaction.guild, interaction.user))
 
     try:
         if interaction.response.is_done():
@@ -9592,7 +9703,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 @bot.event
 async def on_command_error(ctx: commands.Context, error: commands.CommandError):
     """Global handler for prefix command errors (e.g. !help, !remindme)."""
-    # Ignore commands that don't exist to prevent bot spam
     if isinstance(error, commands.CommandNotFound):
         return
 
@@ -9615,11 +9725,87 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         msg = f"🚫 You do not meet the permission requirements to run `!{cmd_name}`."
     else:
         msg = f"❌ An error occurred while executing `!{cmd_name}`."
+        asyncio.create_task(log_error_to_channel(f"!{cmd_name}", error, ctx.guild, ctx.author))
 
     try:
         await ctx.reply(msg, mention_author=False)
     except Exception as send_err:
         logger.error(f"Failed to send prefix command error: {send_err}")
+
+
+
+# ── Global User Blacklist Administration (Creator Only) ────────────────────
+blacklist_group = app_commands.Group(
+    name="blacklist",
+    description="Manage global blacklisted users (Creator/Owner only)"
+)
+
+@blacklist_group.command(name="add", description="Add a user to the global blacklist")
+@app_commands.describe(user="The user to blacklist", reason="Reason for blacklisting")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: i.user.id)
+async def blacklist_add_cmd(interaction: discord.Interaction, user: discord.User, reason: str = "Violating bot usage policies"):
+    if not is_creator(interaction.user):
+        return await interaction.response.send_message("❌ This command is restricted to the Bot Creator.", ephemeral=True)
+    if is_creator(user):
+        return await interaction.response.send_message("❌ You cannot blacklist the Bot Creator!", ephemeral=True)
+    
+    await interaction.response.defer(ephemeral=True)
+    clean_reason = discord.utils.escape_mentions(reason[:500])
+    success = await db.add_blacklist_user(user.id, reason=clean_reason, blacklisted_by=interaction.user.id)
+    if success:
+        embed = discord.Embed(
+            title="🚫 User Blacklisted Globally",
+            description=f"**{user.mention}** (`{user.id}`) has been added to the global blacklist.\nThey can no longer invoke any Sweety commands.",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="Reason", value=clean_reason, inline=False)
+        embed.timestamp = discord.utils.utcnow()
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    else:
+        await interaction.followup.send("❌ Failed to add user to blacklist database.", ephemeral=True)
+
+@blacklist_group.command(name="remove", description="Remove a user from the global blacklist")
+@app_commands.describe(user="The user to unblacklist")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: i.user.id)
+async def blacklist_remove_cmd(interaction: discord.Interaction, user: discord.User):
+    if not is_creator(interaction.user):
+        return await interaction.response.send_message("❌ This command is restricted to the Bot Creator.", ephemeral=True)
+    
+    await interaction.response.defer(ephemeral=True)
+    success = await db.remove_blacklist_user(user.id)
+    if success:
+        await interaction.followup.send(f"✅ **{user.mention}** (`{user.id}`) has been removed from the global blacklist.", ephemeral=True)
+    else:
+        await interaction.followup.send("❌ Failed to remove user from blacklist database.", ephemeral=True)
+
+@blacklist_group.command(name="list", description="List all globally blacklisted users")
+@app_commands.checks.cooldown(1, 3.0, key=lambda i: i.user.id)
+async def blacklist_list_cmd(interaction: discord.Interaction):
+    if not is_creator(interaction.user):
+        return await interaction.response.send_message("❌ This command is restricted to the Bot Creator.", ephemeral=True)
+    
+    await interaction.response.defer(ephemeral=True)
+    records = await db.get_blacklisted_users()
+    if not records:
+        return await interaction.followup.send("ℹ️ No users are currently blacklisted globally.", ephemeral=True)
+    
+    embed = discord.Embed(
+        title=f"🚫 Global Blacklisted Users ({len(records)})",
+        color=discord.Color.dark_red(),
+        timestamp=discord.utils.utcnow()
+    )
+    lines = []
+    for r in records[:25]:
+        uid = r.get("user_id") if isinstance(r, dict) and "user_id" in r else r[0]
+        rsn = r.get("reason", "No reason") if isinstance(r, dict) and "reason" in r else (r[1] if len(r) > 1 else "No reason")
+        ts = int(r.get("blacklisted_at", 0) if isinstance(r, dict) and "blacklisted_at" in r else (r[3] if len(r) > 3 else 0))
+        time_str = f"<t:{ts}:R>" if ts else "N/A"
+        lines.append(f"• <@{uid}> (`{uid}`) — *{discord.utils.escape_mentions(str(rsn)[:80])}* ({time_str})")
+    
+    embed.description = "\n".join(lines)[:4000]
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+bot.tree.add_command(blacklist_group)
 
 
 
@@ -12877,6 +13063,11 @@ async def teardown_command(interaction: discord.Interaction):
 @app_commands.guild_only()
 @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def kick_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member is None:
+        return await interaction.response.send_message("❌ That member is not in this server or has already left.", ephemeral=True)
+    if not interaction.guild.me.guild_permissions.kick_members:
+        return await interaction.response.send_message("❌ I lack the `Kick Members` permission in this server.", ephemeral=True)
+
     if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be kicked.", ephemeral=True)
         return
@@ -12892,10 +13083,11 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
         await interaction.response.send_message("❌ I cannot kick this member because they have a higher or equal role than me.", ephemeral=True)
         return
         
+    clean_reason = discord.utils.escape_mentions(reason[:500])
     try:
-        await member.kick(reason=reason)
-        await interaction.response.send_message(f"✅ **{member.display_name}** has been kicked from the server. (Reason: {reason})")
-        await log_mod_action(interaction.guild, interaction.user, member, "Kick", reason)
+        await member.kick(reason=clean_reason)
+        await interaction.response.send_message(f"✅ **{member.display_name}** has been kicked from the server. (Reason: {clean_reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Kick", clean_reason)
     except Exception as e:
         logger.error(f"Kick command failed: {e}", exc_info=True)
         await interaction.response.send_message("❌ Failed to kick member due to an internal error.", ephemeral=True)
@@ -12918,6 +13110,9 @@ async def kick_command(interaction: discord.Interaction, member: discord.Member,
 @app_commands.guild_only()
 @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def ban_command(interaction: discord.Interaction, member: discord.User, reason: str = "No reason provided", delete_message_days: int = 0):
+    if not interaction.guild.me.guild_permissions.ban_members:
+        return await interaction.response.send_message("❌ I lack the `Ban Members` permission in this server.", ephemeral=True)
+
     guild_member = interaction.guild.get_member(member.id)
     if is_protected(guild_member or member):
         await interaction.response.send_message("❌ This user is staff/immune and cannot be banned.", ephemeral=True)
@@ -12927,7 +13122,6 @@ async def ban_command(interaction: discord.Interaction, member: discord.User, re
         await interaction.response.send_message("❌ You cannot ban the Server Owner!", ephemeral=True)
         return
         
-    guild_member = interaction.guild.get_member(member.id)
     if guild_member:
         if guild_member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
             await interaction.response.send_message("❌ You cannot ban this member because they have a higher or equal role than you.", ephemeral=True)
@@ -12936,11 +13130,12 @@ async def ban_command(interaction: discord.Interaction, member: discord.User, re
             await interaction.response.send_message("❌ I cannot ban this member because they have a higher or equal role than me.", ephemeral=True)
             return
             
+    clean_reason = discord.utils.escape_mentions(reason[:500])
     try:
         seconds = delete_message_days * 86400
-        await interaction.guild.ban(member, reason=reason, delete_message_seconds=seconds)
-        await interaction.response.send_message(f"✅ **{member.display_name}** has been banned from the server. (Reason: {reason})")
-        await log_mod_action(interaction.guild, interaction.user, member, "Ban", reason, f"Deleted messages history: {delete_message_days} days")
+        await interaction.guild.ban(member, reason=clean_reason, delete_message_seconds=seconds)
+        await interaction.response.send_message(f"✅ **{member.display_name}** has been banned from the server. (Reason: {clean_reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Ban", clean_reason, f"Deleted messages history: {delete_message_days} days")
     except Exception as e:
         logger.error(f"Ban command failed: {e}", exc_info=True)
         await interaction.response.send_message("❌ Failed to ban user due to an internal error.", ephemeral=True)
@@ -12952,12 +13147,15 @@ async def ban_command(interaction: discord.Interaction, member: discord.User, re
 @app_commands.guild_only()
 @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def unban_command(interaction: discord.Interaction, user_id: str, reason: str = "No reason provided"):
+    if not interaction.guild.me.guild_permissions.ban_members:
+        return await interaction.response.send_message("❌ I lack the `Ban Members` permission to unban users in this server.", ephemeral=True)
+    clean_reason = discord.utils.escape_mentions(reason[:500])
     try:
         uid = int(user_id)
         user = await bot.fetch_user(uid)
-        await interaction.guild.unban(user, reason=reason)
-        await interaction.response.send_message(f"✅ **{user.display_name}** (ID: {user_id}) has been unbanned. (Reason: {reason})")
-        await log_mod_action(interaction.guild, interaction.user, user, "Unban", reason)
+        await interaction.guild.unban(user, reason=clean_reason)
+        await interaction.response.send_message(f"✅ **{user.display_name}** (ID: {user_id}) has been unbanned. (Reason: {clean_reason})")
+        await log_mod_action(interaction.guild, interaction.user, user, "Unban", clean_reason)
     except ValueError:
         await interaction.response.send_message("❌ Please provide a valid numerical User ID.", ephemeral=True)
     except discord.NotFound:
@@ -12977,7 +13175,8 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
     - 3 Strikes: 7-Day Server Timeout (Appeal in <#1549080000328896583>)
     - 6 Strikes: Permanent Server Ban
     """
-    await db.add_warning(guild.id, member.id, moderator.id, reason)
+    clean_reason = discord.utils.escape_mentions(reason[:500])
+    await db.add_warning(guild.id, member.id, moderator.id, clean_reason)
     
     # Get total warnings count
     warnings = await db.get_warnings(guild.id, member.id)
@@ -12989,7 +13188,7 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
         try:
             if not is_protected(member):
                 # 1. Native Discord Timeout (7 Days)
-                await member.timeout(datetime.timedelta(days=7), reason=f"Auto-Escalation: 3 Strikes Reached ({reason})")
+                await member.timeout(datetime.timedelta(days=7), reason=f"Auto-Escalation: 3 Strikes Reached ({clean_reason})")
                 
                 # 2. Role-Based Mute Fallback (with ticket channel access overrides)
                 muted_role = await ensure_muted_role(guild)
@@ -13013,7 +13212,7 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
     elif total_warns >= 6:
         try:
             if not is_protected(member):
-                await member.ban(reason=f"Auto-Escalation: 6 Strikes Reached - Permanent Server Ban ({reason})", delete_message_days=0)
+                await member.ban(reason=f"Auto-Escalation: 6 Strikes Reached - Permanent Server Ban ({clean_reason})", delete_message_days=0)
             escalation_action = (
                 "\n\n⛔ **Auto-Escalation: Permanent Ban Applied**\n"
                 "• **Penalty:** **Permanently banned** from the server (Accumulated 6 Strikes)."
@@ -13035,7 +13234,7 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
             description=f"You have been formally issued a strike by **{moderator.display_name}**.",
             color=dm_color
         )
-        dm_embed.add_field(name="Reason", value=reason, inline=False)
+        dm_embed.add_field(name="Reason", value=clean_reason, inline=False)
         dm_embed.add_field(name="Total Strikes on Record", value=f"`{total_warns}` / 6 strikes", inline=True)
         
         if total_warns == 3:
@@ -13103,7 +13302,7 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
         pass
 
     # Log to moderation channel
-    await log_mod_action(guild, moderator, member, "Warning Issued", reason, f"Total Strikes: {total_warns}{escalation_action}")
+    await log_mod_action(guild, moderator, member, "Warning Issued", clean_reason, f"Total Strikes: {total_warns}{escalation_action}")
     return total_warns, escalation_action
 
 
@@ -13114,6 +13313,11 @@ async def issue_warning_logic(guild: discord.Guild, member: discord.Member, mode
 @app_commands.guild_only()
 @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def warn_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member is None:
+        return await interaction.response.send_message("❌ That member is not in this server or has already left.", ephemeral=True)
+    if not interaction.guild.me.guild_permissions.moderate_members:
+        return await interaction.response.send_message("❌ I lack the `Moderate Members (Timeout)` permission in this server.", ephemeral=True)
+
     if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be warned.", ephemeral=True)
         return
@@ -13125,7 +13329,8 @@ async def warn_command(interaction: discord.Interaction, member: discord.Member,
         return
 
     await interaction.response.defer()
-    total_warns, escalation = await issue_warning_logic(interaction.guild, member, interaction.user, reason)
+    clean_reason = discord.utils.escape_mentions(reason[:500])
+    total_warns, escalation = await issue_warning_logic(interaction.guild, member, interaction.user, clean_reason)
     
     embed = discord.Embed(
         title="⚠️ Member Formally Warned",
@@ -13135,7 +13340,7 @@ async def warn_command(interaction: discord.Interaction, member: discord.Member,
     embed.add_field(name="User", value=f"{member.name} (`{member.id}`)", inline=True)
     embed.add_field(name="Moderator", value=interaction.user.mention, inline=True)
     embed.add_field(name="Total Warnings", value=f"`{total_warns}`", inline=True)
-    embed.add_field(name="Reason", value=reason, inline=False)
+    embed.add_field(name="Reason", value=clean_reason, inline=False)
     await interaction.followup.send(embed=embed)
 
 
@@ -14360,6 +14565,11 @@ async def createchannel_prefix_cmd(ctx: commands.Context, name: str, category_na
 @app_commands.guild_only()
 @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def mute_command(interaction: discord.Interaction, member: discord.Member, duration_minutes: int, reason: str = "No reason provided"):
+    if member is None:
+        return await interaction.response.send_message("❌ That member is not in this server or has already left.", ephemeral=True)
+    if not interaction.guild.me.guild_permissions.moderate_members:
+        return await interaction.response.send_message("❌ I lack the `Moderate Members (Timeout)` permission in this server.", ephemeral=True)
+
     if is_protected(member):
         await interaction.response.send_message("❌ This member is staff/immune and cannot be muted.", ephemeral=True)
         return
@@ -14375,10 +14585,11 @@ async def mute_command(interaction: discord.Interaction, member: discord.Member,
         return
         
     duration = datetime.timedelta(minutes=duration_minutes)
+    clean_reason = discord.utils.escape_mentions(reason[:500])
     try:
-        await member.timeout(duration, reason=reason)
-        await interaction.response.send_message(f"✅ **{member.display_name}** has been timed out for `{duration_minutes}` minutes. (Reason: {reason})")
-        await log_mod_action(interaction.guild, interaction.user, member, "Timeout (Mute)", reason, f"Duration: {duration_minutes} minutes")
+        await member.timeout(duration, reason=clean_reason)
+        await interaction.response.send_message(f"✅ **{member.display_name}** has been timed out for `{duration_minutes}` minutes. (Reason: {clean_reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Timeout (Mute)", clean_reason, f"Duration: {duration_minutes} minutes")
     except Exception as e:
         logger.error(f"Mute command failed: {e}", exc_info=True)
         await interaction.response.send_message("❌ Failed to mute member due to an internal error.", ephemeral=True)
@@ -14390,6 +14601,11 @@ async def mute_command(interaction: discord.Interaction, member: discord.Member,
 @app_commands.guild_only()
 @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 async def unmute_command(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member is None:
+        return await interaction.response.send_message("❌ That member is not in this server or has already left.", ephemeral=True)
+    if not interaction.guild.me.guild_permissions.moderate_members:
+        return await interaction.response.send_message("❌ I lack the `Moderate Members (Timeout)` permission in this server.", ephemeral=True)
+
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ You cannot unmute this member because they have a higher or equal role than you.", ephemeral=True)
         return
@@ -14406,17 +14622,18 @@ async def unmute_command(interaction: discord.Interaction, member: discord.Membe
         await interaction.response.send_message(f"ℹ️ **{member.display_name}** is not timed out or muted.", ephemeral=True)
         return
         
+    clean_reason = discord.utils.escape_mentions(reason[:500])
     try:
         if has_timeout:
-            await member.timeout(None, reason=reason)
+            await member.timeout(None, reason=clean_reason)
         if has_role:
             try:
-                await member.remove_roles(muted_role, reason=reason)
+                await member.remove_roles(muted_role, reason=clean_reason)
             except Exception:
                 pass
         await db.remove_active_mute(interaction.guild.id, member.id)
-        await interaction.response.send_message(f"✅ **{member.display_name}** is no longer timed out or muted. (Reason: {reason})")
-        await log_mod_action(interaction.guild, interaction.user, member, "Unmute", reason)
+        await interaction.response.send_message(f"✅ **{member.display_name}** is no longer timed out or muted. (Reason: {clean_reason})")
+        await log_mod_action(interaction.guild, interaction.user, member, "Unmute", clean_reason)
     except Exception as e:
         logger.error(f"Unmute command failed: {e}", exc_info=True)
         await interaction.response.send_message("❌ Failed to unmute member due to an internal error.", ephemeral=True)
@@ -14608,6 +14825,9 @@ async def removerole_command(interaction: discord.Interaction, member: discord.M
 @app_commands.guild_only()
 @app_commands.checks.cooldown(1, 30.0, key=lambda i: (i.guild_id, i.user.id))
 async def roleall_command(interaction: discord.Interaction, role: discord.Role):
+    if not interaction.guild.me.guild_permissions.manage_roles:
+        return await interaction.response.send_message("❌ I lack the `Manage Roles` permission in this server.", ephemeral=True)
+
     if role.managed:
         await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually assigned.", ephemeral=True)
         return
@@ -14628,7 +14848,13 @@ async def roleall_command(interaction: discord.Interaction, role: discord.Role):
         await interaction.response.send_message("❌ I cannot assign this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
         return
 
-    # 3. 5-Minute Rate Limit Per Server
+    # 3. Race Condition Lock & Cooldown
+    if interaction.guild.id in _roleall_active_locks:
+        return await interaction.response.send_message(
+            "⚠️ A mass role operation is already in progress on this server. Please wait for it to finish.",
+            ephemeral=True
+        )
+
     now = time.time()
     last_run = _roleall_cooldowns.get(interaction.guild.id, 0)
     if now - last_run < 300:
@@ -14638,26 +14864,30 @@ async def roleall_command(interaction: discord.Interaction, role: discord.Role):
             ephemeral=True
         )
     _roleall_cooldowns[interaction.guild.id] = now
+    _roleall_active_locks.add(interaction.guild.id)
 
     await interaction.response.defer(thinking=True)
     success = 0
     fail = 0
     
-    for member in interaction.guild.members:
-        if member.bot:
-            continue
-        if role in member.roles:
-            continue
-            
-        try:
-            await member.add_roles(role, reason=f"Bulk assignment by {interaction.user.display_name}")
-            success += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            fail += 1
-            
-    await interaction.followup.send(f"✅ **Bulk Role Assignment Complete!**\nAdded **{role.name}** to `{success}` members. (Failed: `{fail}`)")
-    await log_mod_action(interaction.guild, interaction.user, interaction.guild.me, "Bulk Role Assignment", f"Role: @{role.name}", f"🔧 /roleall executed by {interaction.user.mention}: assigned @{role.name} to {success} members at <t:{int(time.time())}:F>")
+    try:
+        for member in interaction.guild.members:
+            if member.bot:
+                continue
+            if role in member.roles:
+                continue
+                
+            try:
+                await member.add_roles(role, reason=f"Bulk assignment by {interaction.user.display_name}")
+                success += 1
+                await asyncio.sleep(0.05)
+            except Exception:
+                fail += 1
+                
+        await interaction.followup.send(f"✅ **Bulk Role Assignment Complete!**\nAdded **{role.name}** to `{success}` members. (Failed: `{fail}`)")
+        await log_mod_action(interaction.guild, interaction.user, interaction.guild.me, "Bulk Role Assignment", f"Role: @{role.name}", f"🔧 /roleall executed by {interaction.user.mention}: assigned @{role.name} to {success} members at <t:{int(time.time())}:F>")
+    finally:
+        _roleall_active_locks.discard(interaction.guild.id)
 
 
 @bot.tree.command(name="roleallremove", description="Remove a role from every member in the server")
@@ -14666,6 +14896,9 @@ async def roleall_command(interaction: discord.Interaction, role: discord.Role):
 @app_commands.checks.cooldown(1, 30.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def roleallremove_command(interaction: discord.Interaction, role: discord.Role):
+    if not interaction.guild.me.guild_permissions.manage_roles:
+        return await interaction.response.send_message("❌ I lack the `Manage Roles` permission in this server.", ephemeral=True)
+
     if role.managed:
         await interaction.response.send_message("❌ This is a managed/integration role and cannot be manually removed.", ephemeral=True)
         return
@@ -14677,7 +14910,13 @@ async def roleallremove_command(interaction: discord.Interaction, role: discord.
         await interaction.response.send_message("❌ I cannot remove this role because it is higher than my bot role. Please drag my bot role higher in server settings.", ephemeral=True)
         return
 
-    # 5-Minute Rate Limit Per Server
+    # Race Condition Lock & Cooldown
+    if interaction.guild.id in _roleall_active_locks:
+        return await interaction.response.send_message(
+            "⚠️ A mass role operation is already in progress on this server. Please wait for it to finish.",
+            ephemeral=True
+        )
+
     now = time.time()
     last_run = _roleall_cooldowns.get(interaction.guild.id, 0)
     if now - last_run < 300:
@@ -14687,26 +14926,30 @@ async def roleallremove_command(interaction: discord.Interaction, role: discord.
             ephemeral=True
         )
     _roleall_cooldowns[interaction.guild.id] = now
+    _roleall_active_locks.add(interaction.guild.id)
 
     await interaction.response.defer(thinking=True)
     success = 0
     fail = 0
     
-    for member in interaction.guild.members:
-        if member.bot:
-            continue
-        if role not in member.roles:
-            continue
-            
-        try:
-            await member.remove_roles(role, reason=f"Bulk removal by {interaction.user.display_name}")
-            success += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            fail += 1
-            
-    await interaction.followup.send(f"✅ **Bulk Role Removal Complete!**\nRemoved **{role.name}** from `{success}` members. (Failed: `{fail}`)")
-    await log_mod_action(interaction.guild, interaction.user, interaction.guild.me, "Bulk Role Removal", f"Role: @{role.name}", f"🔧 /roleallremove executed by {interaction.user.mention}: removed @{role.name} from {success} members at <t:{int(time.time())}:F>")
+    try:
+        for member in interaction.guild.members:
+            if member.bot:
+                continue
+            if role not in member.roles:
+                continue
+                
+            try:
+                await member.remove_roles(role, reason=f"Bulk removal by {interaction.user.display_name}")
+                success += 1
+                await asyncio.sleep(0.05)
+            except Exception:
+                fail += 1
+                
+        await interaction.followup.send(f"✅ **Bulk Role Removal Complete!**\nRemoved **{role.name}** from `{success}` members. (Failed: `{fail}`)")
+        await log_mod_action(interaction.guild, interaction.user, interaction.guild.me, "Bulk Role Removal", f"Role: @{role.name}", f"🔧 /roleallremove executed by {interaction.user.mention}: removed @{role.name} from {success} members at <t:{int(time.time())}:F>")
+    finally:
+        _roleall_active_locks.discard(interaction.guild.id)
 
 
 # ── User Profile & Comprehensive Server Audit (/whois & /userinfo) ──────────
@@ -15484,6 +15727,50 @@ async def on_guild_role_delete(role):
         logger.info(f"Cleaned up manually deleted role {role.name} ({role.id}) from database.")
     except Exception as e:
         logger.error(f"Error cleaning up deleted role {role.id}: {e}")
+
+@bot.event
+async def on_guild_join(guild: discord.Guild):
+    """Enforce guild whitelist if configured, record guild in database, and log join."""
+    if ALLOWED_GUILDS and guild.id not in ALLOWED_GUILDS:
+        logger.warning(f"🚫 Guild Whitelist Block: Leaving unauthorized guild '{guild.name}' (ID: {guild.id})")
+        try:
+            if guild.system_channel and guild.system_channel.permissions_for(guild.me).send_messages:
+                await guild.system_channel.send("❌ This bot is private and only available to authorized servers. Leaving now...")
+        except Exception:
+            pass
+        await guild.leave()
+        return
+
+    logger.info(f"Joined new guild: {guild.name} ({guild.id}) with {guild.member_count} members.")
+    try:
+        await db.upsert_guild(
+            guild_id=guild.id,
+            name=guild.name,
+            icon=guild.icon.url if guild.icon else None,
+            owner_id=guild.owner_id,
+            member_count=guild.member_count or 0
+        )
+    except Exception as dbe:
+        logger.error(f"Error registering new guild in DB: {dbe}")
+
+@bot.event
+async def on_guild_remove(guild: discord.Guild):
+    """Clean up memory caches, rate limit counters, and temporary locks when removed from a guild."""
+    logger.info(f"Bot removed from guild: {guild.name} ({guild.id})")
+    
+    # 1. Clean up in-memory snipe caches for channels in this guild
+    for channel in getattr(guild, "channels", []):
+        _snipe_cache.pop(channel.id, None)
+        _editsnipe_cache.pop(channel.id, None)
+
+    # 2. Clean up anti-raid, locks, cooldowns, and server trackers
+    _guild_join_history.pop(guild.id, None)
+    _guild_raid_mode_active.pop(guild.id, None)
+    _server_ai_call_count.pop(guild.id, None)
+    _server_ai_call_reset.pop(guild.id, None)
+    _image_render_timestamps.pop(guild.id, None)
+    _roleall_cooldowns.pop(guild.id, None)
+    _roleall_active_locks.discard(guild.id)
 
 
 
