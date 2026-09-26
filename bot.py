@@ -11891,13 +11891,13 @@ async def purge_command(interaction: discord.Interaction, amount: int):
 @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def snipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, index: Optional[int] = 1):
-    everyone_role = interaction.guild.default_role
-    if not interaction.channel.permissions_for(everyone_role).view_channel:
-        return await interaction.response.send_message("❌ Snipe is disabled in restricted channels.", ephemeral=True)
-
     target_channel = channel or interaction.channel
-    if not target_channel.permissions_for(everyone_role).view_channel:
-        return await interaction.response.send_message("❌ That message originated from a restricted channel and cannot be sniped.", ephemeral=True)
+    
+    # Permission check: Caller must have View Channel permission on target channel (Staff/Admins always bypass)
+    if not is_protected(interaction.user):
+        user_perms = target_channel.permissions_for(interaction.user)
+        if not user_perms.view_channel or not user_perms.read_message_history:
+            return await interaction.response.send_message("❌ You do not have permission to view messages in that channel.", ephemeral=True)
 
     embed, err_msg = create_snipe_embed(target_channel, index=index or 1)
     if err_msg:
@@ -11914,13 +11914,13 @@ async def snipe_slash_cmd(interaction: discord.Interaction, channel: Optional[di
 @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
 @app_commands.guild_only()
 async def editsnipe_slash_cmd(interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None, index: Optional[int] = 1):
-    everyone_role = interaction.guild.default_role
-    if not interaction.channel.permissions_for(everyone_role).view_channel:
-        return await interaction.response.send_message("❌ Snipe is disabled in restricted channels.", ephemeral=True)
-
     target_channel = channel or interaction.channel
-    if not target_channel.permissions_for(everyone_role).view_channel:
-        return await interaction.response.send_message("❌ That message originated from a restricted channel and cannot be sniped.", ephemeral=True)
+    
+    # Permission check: Caller must have View Channel permission on target channel (Staff/Admins always bypass)
+    if not is_protected(interaction.user):
+        user_perms = target_channel.permissions_for(interaction.user)
+        if not user_perms.view_channel or not user_perms.read_message_history:
+            return await interaction.response.send_message("❌ You do not have permission to view messages in that channel.", ephemeral=True)
 
     embed, err_msg = create_editsnipe_embed(target_channel, index=index or 1)
     if err_msg:
@@ -11978,10 +11978,6 @@ async def usersnipe_slash_cmd(
     days: Optional[int] = 30,
     filter_type: Optional[str] = "all"
 ):
-    everyone_role = interaction.guild.default_role
-    if not interaction.channel.permissions_for(everyone_role).view_channel:
-        return await interaction.response.send_message("❌ Snipe is disabled in restricted channels.", ephemeral=True)
-
     await interaction.response.defer()
     days_val = min(30, max(1, days or 30))
     f_type = filter_type or "all"
@@ -11989,14 +11985,17 @@ async def usersnipe_slash_cmd(
     records = await db.get_user_snipe_history(interaction.guild.id, user.id, days=days_val)
     stats = await db.get_user_snipe_stats(interaction.guild.id, user.id, days=days_val)
     
-    # Filter out records originating from restricted channels
+    # Filter out records originating from channels caller cannot view
     filtered_records = []
+    is_caller_staff = is_protected(interaction.user)
     for rec in records:
         cid = rec.get("channel_id") if isinstance(rec, dict) else rec[3]
-        if cid:
+        if cid and not is_caller_staff:
             src_chan = interaction.guild.get_channel(int(cid))
-            if src_chan and not src_chan.permissions_for(everyone_role).view_channel:
-                continue
+            if src_chan:
+                u_perms = src_chan.permissions_for(interaction.user)
+                if not u_perms.view_channel or not u_perms.read_message_history:
+                    continue
         filtered_records.append(rec)
 
     view = UserSnipePaginationView(
