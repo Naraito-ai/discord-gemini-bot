@@ -158,12 +158,12 @@ class ConfigUpdate(BaseModel):
 
 # ── REST API Router Endpoints ──────────────────────────────────────────────
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD", "POST", "OPTIONS"])
 async def health_check():
     """Render and UptimeRobot health check ping route."""
     return {"status": "ok", "message": "✅ Discord Gemini Bot is alive and running!"}
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD", "POST", "OPTIONS"])
 async def health():
     """Detailed health check endpoint for monitoring Discord Gateway and bot status."""
     bot = getattr(app.state, "bot", None)
