@@ -575,18 +575,18 @@ class DatabaseManager:
             return
 
         try:
-            today_str = datetime.now().date().isoformat()
+            today_val = datetime.now().date() if self.is_postgres else datetime.now().date().isoformat()
             rows = await self.fetch(
                 "SELECT id FROM analytics WHERE guild_id = ? AND date = ?",
                 str(guild_id),
-                today_str
+                today_val
             )
             if rows:
                 query = f"UPDATE analytics SET {column_name} = {column_name} + ? WHERE guild_id = ? AND date = ?"
-                await self.execute(query, amount, str(guild_id), today_str)
+                await self.execute(query, amount, str(guild_id), today_val)
             else:
                 query = f"INSERT INTO analytics (guild_id, date, {column_name}) VALUES (?, ?, ?)"
-                await self.execute(query, str(guild_id), today_str, amount)
+                await self.execute(query, str(guild_id), today_val, amount)
         except Exception as e:
             logger.error(f"Failed to increment analytics: {e}")
 
