@@ -106,22 +106,39 @@ logger = logging.getLogger("GeminiBot")
 
 # ── Keep-alive background self-pinger for 24/7 cloud uptime (Render / Railway) ────────
 async def start_self_pinger():
-    """Pings the external URL every 3 minutes so free cloud hosting never sleeps."""
-    await asyncio.sleep(30)
-    url = os.getenv("RENDER_EXTERNAL_URL")
-    if not url and os.getenv("RENDER_SERVICE_NAME"):
-        url = f"https://{os.getenv('RENDER_SERVICE_NAME')}.onrender.com"
-    if not url:
-        return
-    logger.info(f"Self-pinger active. Keeping {url} awake 24/7...")
+    """Pings both the internal health port and external URL so cloud hosting never sleeps."""
+    await asyncio.sleep(15)
+    port = int(os.getenv("PORT", 8080))
+    local_url = f"http://127.0.0.1:{port}/health"
+    
+    ext_url = os.getenv("RENDER_EXTERNAL_URL")
+    if not ext_url and os.getenv("RENDER_SERVICE_NAME"):
+        ext_url = f"https://{os.getenv('RENDER_SERVICE_NAME')}.onrender.com"
+
+    if ext_url:
+        logger.info(f"🌐 Cloud 24/7 Self-Pinger active for external URL: {ext_url}")
+    else:
+        logger.info(f"ℹ️ Set RENDER_EXTERNAL_URL in environment to enable external 24/7 keep-alive pings.")
+
     while True:
+        # 1. Local event-loop & FastAPI health ping
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers={"User-Agent": "RenderKeepAlive/1.0"}, timeout=15) as resp:
+                async with session.get(local_url, timeout=5) as resp:
                     pass
         except Exception:
             pass
-        await asyncio.sleep(180)
+
+        # 2. External Cloud keep-alive ping (keeps free containers from idling)
+        if ext_url:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(ext_url, headers={"User-Agent": "RenderKeepAlive/2.0"}, timeout=15) as resp:
+                        pass
+            except Exception:
+                pass
+
+        await asyncio.sleep(120)
 
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -1432,12 +1449,25 @@ async def delete_after_delay(msg, delay):
         pass
 
 async def log_mod_action(guild: discord.Guild, moderator: discord.User, target: discord.User, action: str, reason: str, details: str = None):
-    """Sends a detailed moderation action log embed to the configured logs channel."""
+    """Sends a detailed moderation action log embed to the configured logs channel and stores in database."""
+    # 1. Persist in database audit_logs
+    try:
+        mod_id = getattr(moderator, "id", str(moderator))
+        target_name = getattr(target, "name", str(target))
+        target_id = getattr(target, "id", str(target))
+        audit_text = f"Target: {target_name} ({target_id}) | Reason: {reason}"
+        if details:
+            audit_text += f" | Details: {details}"
+        await db.log_audit(guild.id, mod_id, action, audit_text)
+    except Exception as db_err:
+        logger.debug(f"Failed to record audit log to DB: {db_err}")
+
+    # 2. Dispatch Live Embed to configured mod log channel (e.g., 1523742925266358272)
     mod_log = await get_mod_log_channel(guild)
     if mod_log:
         embed = discord.Embed(title=f"🛡️ Mod Action: {action}", color=discord.Color.orange())
-        embed.add_field(name="Moderator", value=f"{moderator} ({moderator.id})", inline=True)
-        embed.add_field(name="Target User", value=f"{target} ({target.id})", inline=True)
+        embed.add_field(name="Moderator", value=f"{moderator} ({getattr(moderator, 'id', 'N/A')})", inline=True)
+        embed.add_field(name="Target User", value=f"{target} ({getattr(target, 'id', 'N/A')})", inline=True)
         embed.add_field(name="Reason", value=reason, inline=False)
         if details:
             embed.add_field(name="Details", value=details, inline=False)
@@ -1445,7 +1475,7 @@ async def log_mod_action(guild: discord.Guild, moderator: discord.User, target: 
         try:
             await mod_log.send(embed=embed)
         except Exception as e:
-            logger.error(f"Failed to send mod action log: {e}")
+            logger.error(f"Failed to send mod action log to channel: {e}")
 
 # ── Snipe & Edit-Snipe History Buffers & Helpers ───────────────────────────
 MAX_SNIPE_HISTORY = 10
@@ -9520,6 +9550,16 @@ class GeminiBot(commands.Bot):
             logger.info(f"✅ Loaded {len(self.temp_voice_channel_ids)} temp voice channels")
         except Exception as e:
             logger.error(f"❌ Cache load failed: {e}")
+
+        # Step 3b: Load blacklisted user IDs into in-memory fast cache
+        try:
+            bl_records = await db.get_blacklisted_users()
+            for r in bl_records:
+                uid = int(r["user_id"] if isinstance(r, dict) and "user_id" in r else r[0])
+                _blacklisted_user_ids.add(uid)
+            logger.info(f"✅ Loaded {len(_blacklisted_user_ids)} blacklisted user IDs into cache")
+        except Exception as bl_err:
+            logger.error(f"❌ Blacklist cache load failed: {bl_err}")
         
         # Step 4: Clean Guild Duplicates & Global Slash Command Sync
         try:
@@ -9638,11 +9678,13 @@ async def log_error_to_channel(command_name: str, error: Exception, guild: Optio
         logger.debug(f"Could not dispatch error to Discord channel: {log_err}")
 
 # ── Global User Blacklist Guards ───────────────────────────────────────────
+_blacklisted_user_ids: set[int] = set()
+
 @bot.check
 async def globally_block_blacklisted_users_prefix(ctx: commands.Context) -> bool:
     """Global check that blocks blacklisted users from running prefix commands."""
     try:
-        if await db.is_user_blacklisted(ctx.author.id):
+        if ctx.author.id in _blacklisted_user_ids:
             try:
                 await ctx.reply("🚫 **Access Denied:** Your account has been globally blacklisted from using Sweety.", mention_author=False)
             except Exception:
@@ -9655,7 +9697,7 @@ async def globally_block_blacklisted_users_prefix(ctx: commands.Context) -> bool
 async def globally_block_blacklisted_users_interaction(interaction: discord.Interaction) -> bool:
     """Global interaction check that blocks blacklisted users from running slash commands or UI components."""
     try:
-        if await db.is_user_blacklisted(interaction.user.id):
+        if interaction.user.id in _blacklisted_user_ids:
             msg = "🚫 **Access Denied:** Your account has been globally blacklisted from using Sweety."
             try:
                 if interaction.response.is_done():
@@ -9753,6 +9795,7 @@ async def blacklist_add_cmd(interaction: discord.Interaction, user: discord.User
     clean_reason = discord.utils.escape_mentions(reason[:500])
     success = await db.add_blacklist_user(user.id, reason=clean_reason, blacklisted_by=interaction.user.id)
     if success:
+        _blacklisted_user_ids.add(user.id)
         embed = discord.Embed(
             title="🚫 User Blacklisted Globally",
             description=f"**{user.mention}** (`{user.id}`) has been added to the global blacklist.\nThey can no longer invoke any Sweety commands.",
@@ -9774,6 +9817,7 @@ async def blacklist_remove_cmd(interaction: discord.Interaction, user: discord.U
     await interaction.response.defer(ephemeral=True)
     success = await db.remove_blacklist_user(user.id)
     if success:
+        _blacklisted_user_ids.discard(user.id)
         await interaction.followup.send(f"✅ **{user.mention}** (`{user.id}`) has been removed from the global blacklist.", ephemeral=True)
     else:
         await interaction.followup.send("❌ Failed to remove user from blacklist database.", ephemeral=True)
