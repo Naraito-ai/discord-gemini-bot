@@ -8915,6 +8915,65 @@ class DMAppealLauncherView(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+async def get_or_recover_appeal_ticket(interaction: discord.Interaction) -> Optional[Dict[str, Any]]:
+    """
+    Robustly retrieves the appeal ticket from the database.
+    If the database record is missing (e.g. created during transient DB disconnection or sequence lag),
+    it automatically recovers target user_id and details from the channel topic, channel overwrites,
+    or channel name, and reconstructs the open ticket in the database on-the-fly!
+    """
+    try:
+        ticket = await db.get_appeal_ticket_by_channel(interaction.channel_id)
+        if ticket:
+            return ticket
+    except Exception as e:
+        logger.warning(f"Error querying appeal ticket by channel {interaction.channel_id}: {e}")
+
+    channel = interaction.channel
+    guild = interaction.guild
+    if not channel or not guild:
+        return None
+
+    target_uid = None
+
+    # Attempt 1: Extract from channel topic: "Strike Appeal Ticket for username (user_id)"
+    if getattr(channel, "topic", None):
+        match = re.search(r'\((\d{17,20})\)', channel.topic)
+        if match:
+            target_uid = int(match.group(1))
+
+    # Attempt 2: Search channel overwrites for non-staff human members
+    if not target_uid and hasattr(channel, "overwrites"):
+        for target, ow in channel.overwrites.items():
+            if isinstance(target, (discord.Member, discord.User)) and not getattr(target, "bot", False):
+                if target.id != interaction.client.user.id and not is_protected(target):
+                    target_uid = target.id
+                    break
+
+    # Attempt 3: Match from channel name "appeal-username"
+    if not target_uid and getattr(channel, "name", "").startswith("appeal-"):
+        username_part = channel.name[len("appeal-"):].replace("-", "").lower()
+        for m in guild.members:
+            clean_m_name = re.sub(r'[^a-zA-Z0-9]', '', m.name.lower())
+            if clean_m_name and (clean_m_name in username_part or username_part in clean_m_name):
+                target_uid = m.id
+                break
+
+    if target_uid:
+        logger.info(f"🔄 Auto-recovered missing appeal ticket for user {target_uid} in channel {channel.id}")
+        await db.create_appeal_ticket(guild.id, target_uid, channel.id, "Auto-recovered appeal ticket", "Recovered by Sweety Auto-Recovery Engine")
+        return await db.get_appeal_ticket_by_channel(channel.id) or {
+            "guild_id": str(guild.id),
+            "user_id": str(target_uid),
+            "channel_id": str(channel.id),
+            "status": "open",
+            "reason": "Auto-recovered appeal ticket",
+            "additional_info": ""
+        }
+
+    return None
+
+
 class AppealReviewView(discord.ui.View):
     """Persistent view attached to staff appeal tickets with Accept, Deny, and Close buttons."""
     def __init__(self):
@@ -8929,17 +8988,24 @@ class AppealReviewView(discord.ui.View):
     @discord.ui.button(label="Accept Appeal", style=discord.ButtonStyle.success, emoji="✅", custom_id="btn_appeal_accept")
     async def accept_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        ticket = await db.get_appeal_ticket_by_channel(interaction.channel_id)
+        ticket = await get_or_recover_appeal_ticket(interaction)
         if not ticket:
-            await interaction.followup.send("⚠️ Could not find ticket record in database.", ephemeral=True)
+            await interaction.followup.send("⚠️ Could not find or recover ticket record for this channel.", ephemeral=True)
             return
-        if ticket.get("status") != "open":
+        if ticket.get("status") not in ("open", None):
             await interaction.followup.send(f"ℹ️ This appeal ticket has already been marked as **{ticket.get('status')}**.", ephemeral=True)
             return
 
         guild = interaction.guild
         target_uid = int(ticket["user_id"])
-        member = guild.get_member(target_uid) if guild else None
+        member = None
+        if guild:
+            member = guild.get_member(target_uid)
+            if not member:
+                try:
+                    member = await guild.fetch_member(target_uid)
+                except Exception:
+                    member = None
 
         # Unmute member if muted: remove native timeout + @Muted role
         if member:
@@ -8975,13 +9041,20 @@ class AppealReviewView(discord.ui.View):
 
         # Update DB: remove active mute and clear 1 recent warning
         if guild:
-            await db.remove_active_mute(guild.id, target_uid)
-            await db.clear_warnings(guild.id, target_uid, amount=1)
-        await db.resolve_appeal_ticket(interaction.channel_id, "accepted", interaction.user.id)
+            try:
+                await db.remove_active_mute(guild.id, target_uid)
+                await db.clear_warnings(guild.id, target_uid, amount=1)
+            except Exception as dbe:
+                logger.error(f"Error clearing warnings/mutes for user {target_uid}: {dbe}")
+
+        try:
+            await db.resolve_appeal_ticket(interaction.channel_id, "accepted", interaction.user.id)
+        except Exception as res_err:
+            logger.error(f"Error resolving appeal ticket in DB: {res_err}")
 
         # Update review buttons
         for item in self.children:
-            if item.custom_id in ("btn_appeal_accept", "btn_appeal_deny"):
+            if getattr(item, "custom_id", "") in ("btn_appeal_accept", "btn_appeal_deny"):
                 item.disabled = True
         
         status_embed = discord.Embed(
@@ -8994,25 +9067,38 @@ class AppealReviewView(discord.ui.View):
             ),
             color=discord.Color.green()
         )
-        await interaction.message.edit(view=self)
+        try:
+            if interaction.message:
+                await interaction.message.edit(view=self)
+        except Exception as edit_err:
+            logger.debug(f"Could not edit appeal message buttons: {edit_err}")
+
         await interaction.channel.send(embed=status_embed)
         if guild:
-            await log_mod_action(guild, interaction.user, member or target_uid, "Strike Appeal Accepted", f"Accepted appeal for user ID {target_uid} (1 strike cleared)")
+            asyncio.create_task(log_mod_action(guild, interaction.user, member or target_uid, "Strike Appeal Accepted", f"Accepted appeal for user ID {target_uid} (1 strike cleared)"))
 
     @discord.ui.button(label="Deny Appeal", style=discord.ButtonStyle.danger, emoji="❌", custom_id="btn_appeal_deny")
     async def deny_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        ticket = await db.get_appeal_ticket_by_channel(interaction.channel_id)
+        ticket = await get_or_recover_appeal_ticket(interaction)
         if not ticket:
-            await interaction.followup.send("⚠️ Could not find ticket record in database.", ephemeral=True)
+            await interaction.followup.send("⚠️ Could not find or recover ticket record for this channel.", ephemeral=True)
             return
-        if ticket.get("status") != "open":
+        if ticket.get("status") not in ("open", None):
             await interaction.followup.send(f"ℹ️ This appeal ticket has already been marked as **{ticket.get('status')}**.", ephemeral=True)
             return
 
         guild = interaction.guild
         target_uid = int(ticket["user_id"])
-        member = guild.get_member(target_uid) if guild else None
+        member = None
+        if guild:
+            member = guild.get_member(target_uid)
+            if not member:
+                try:
+                    member = await guild.fetch_member(target_uid)
+                except Exception:
+                    member = None
+
         now = time.time()
         
         # Check strike count & active mute status
@@ -9028,7 +9114,7 @@ class AppealReviewView(discord.ui.View):
             if unmute_at > now and strike_count >= 3:
                 has_valid_mute = True
             else:
-                # Stale or invalid active mute entry (e.g. user had < 3 strikes or mute passed)
+                # Stale or invalid active mute entry
                 if guild:
                     await db.remove_active_mute(guild.id, target_uid)
                 active_mute = None
@@ -9049,8 +9135,8 @@ class AppealReviewView(discord.ui.View):
 
         # Send DM to user
         try:
-            user = interaction.client.get_user(target_uid) or await interaction.client.fetch_user(target_uid)
-            if user:
+            target_user = interaction.client.get_user(target_uid) or await interaction.client.fetch_user(target_uid)
+            if target_user:
                 if has_valid_mute and unmute_at:
                     dm_desc = (
                         f"Your appeal in **{guild.name if guild else 'the server'}** was reviewed and **denied** by the moderation team.\n\n"
@@ -9068,7 +9154,7 @@ class AppealReviewView(discord.ui.View):
                     timestamp=datetime.datetime.utcnow()
                 )
                 deny_embed.set_footer(text="Your appeal was reviewed and denied.")
-                await user.send(content="Your appeal was reviewed and denied.", embed=deny_embed)
+                await target_user.send(content="Your appeal was reviewed and denied.", embed=deny_embed)
         except Exception as dme:
             logger.debug(f"Could not DM user {target_uid} on appeal denial: {dme}")
 
@@ -9084,11 +9170,14 @@ class AppealReviewView(discord.ui.View):
                 logger.warning(f"Could not re-apply timeout for {target_uid} on appeal denial: {te}")
 
         # Update DB
-        await db.resolve_appeal_ticket(interaction.channel_id, "denied", interaction.user.id)
+        try:
+            await db.resolve_appeal_ticket(interaction.channel_id, "denied", interaction.user.id)
+        except Exception as res_err:
+            logger.error(f"Error resolving appeal ticket in DB: {res_err}")
 
         # Update review buttons
         for item in self.children:
-            if item.custom_id in ("btn_appeal_accept", "btn_appeal_deny"):
+            if getattr(item, "custom_id", "") in ("btn_appeal_accept", "btn_appeal_deny"):
                 item.disabled = True
 
         status_action = (
@@ -9106,10 +9195,15 @@ class AppealReviewView(discord.ui.View):
             ),
             color=discord.Color.red()
         )
-        await interaction.message.edit(view=self)
+        try:
+            if interaction.message:
+                await interaction.message.edit(view=self)
+        except Exception as edit_err:
+            logger.debug(f"Could not edit appeal message buttons: {edit_err}")
+
         await interaction.channel.send(embed=status_embed)
         if guild:
-            await log_mod_action(guild, interaction.user, target_uid, "Strike Appeal Denied", f"Denied strike appeal for user ID {target_uid}")
+            asyncio.create_task(log_mod_action(guild, interaction.user, target_uid, "Strike Appeal Denied", f"Denied strike appeal for user ID {target_uid}"))
 
     @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.secondary, emoji="🔒", custom_id="btn_appeal_close")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
